@@ -36,7 +36,8 @@ async function sincronizarVentas() {
     const pendientes = await posDb.ventas.where('synced').equals(0).toArray();
     if (!pendientes.length) return { ok: true, synced: 0 };
 
-    const res = await fetch('/api/ventas_mostrador/sync', {
+    const apiBase = (window.CRM_CONFIG && window.CRM_CONFIG.apiBase) || '';
+    const res = await fetch(`${apiBase}/api/ventas_mostrador/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

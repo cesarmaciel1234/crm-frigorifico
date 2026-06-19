@@ -1,40 +1,40 @@
-# MASTER TOTAL — Guía rápida
+# CRM Frigorífico — Master Total
 
-## 3 pasos para ejecutar
+Panel financiero y POS offline para distribuidoras de carne.
 
-### 1. Abrir terminal en la carpeta del proyecto
-```powershell
-cd "C:\Users\cesar\Desktop\deudas pro"
-```
+## URLs
 
-### 2. Instalar Flask
+| Entorno | URL | Qué es |
+|---------|-----|--------|
+| **GitHub Pages (PWA iPhone)** | https://cesarmaciel1234.github.io/crm-frigorifico/ | POS offline, sin servidor |
+| **CRM completo (Flask)** | Render / local | Dashboard, deudas, remitos, clientes |
+
+> GitHub Pages **no ejecuta Flask**. Ahí corre solo el **POS offline** (IndexedDB + PWA).
+> El panel CRM completo va en **Render** (`render.yaml`) o `python start_produccion.py` en tu PC.
+
+## Local
+
 ```powershell
 pip install -r requirements.txt
+python run.py              # desarrollo
+python start_produccion.py # producción
+python -m pytest tests -v  # tests
 ```
 
-### 3. Iniciar el sistema
-```powershell
-python app.py
+## iPhone — instalar PWA
+
+1. Abrí en **Safari**: https://cesarmaciel1234.github.io/crm-frigorifico/
+2. Compartir → **Agregar a inicio**
+3. Usá con o sin internet (ventas se guardan en el teléfono)
+
+## Sincronizar ventas al CRM
+
+En `docs/config.js` configurá la URL de tu servidor Render:
+
+```javascript
+apiBase: 'https://tu-app.onrender.com',
 ```
-Abrí **http://127.0.0.1:5000** en el navegador.
 
----
+## Repositorio
 
-## Controles (solo teclado)
-
-| Tecla | Acción |
-|-------|--------|
-| ↑ ↓ | Navegar lista de enemigos |
-| Enter | Seleccionar / ver detalle |
-| Delete | Eliminar enemigo seleccionado |
-| Tab | Cambiar panel Detalle ↔ Carga |
-| 1 / 2 | Ir a Detalle / Carga |
-| F5 | Refrescar datos |
-| Ctrl+Enter | Guardar remito (en panel Carga) |
-| Enter en Meses | Guardar deuda |
-
-## Archivos principales
-
-- `schema.sql` — Tablas SQLite
-- `app.py` — Backend + lógica de negocio + API
-- `templates/terminal.html` — Dashboard estilo terminal
+https://github.com/cesarmaciel1234/crm-frigorifico
