@@ -1,5 +1,5 @@
-# Deploy en Render.com (HTTPS gratis — requerido para PWA en iPhone)
-# Conectar repo: https://github.com/cesarmaciel1234/crm-frigorifico
+# Deploy en Render.com — ESTE es el programa real (dashboard Flask)
+# https://github.com/cesarmaciel1234/crm-frigorifico
 services:
   - type: web
     name: crm-frigorifico
@@ -7,6 +7,7 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt && python scripts/generate_icons.py
     startCommand: python start_produccion.py
+    healthCheckPath: /
     envVars:
       - key: MT_HOST
         value: 0.0.0.0
