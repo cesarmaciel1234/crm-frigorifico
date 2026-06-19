@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Total — Terminal de Guerra Financiera</title>
+    <style>
+        :root {
+            --bg-base: #020406;
+            --bg-surface: rgba(10, 16, 26, 0.75);
+            --bg-surface-2: rgba(20, 30, 45, 0.9);
+            --primary: #00ff66;
+            --primary-glow: rgba(0, 255, 102, 0.2);
+            --text-primary: #ffffff;
+            --text-secondary: #a0aec0;
+            --text-muted: #4a5568;
+            --border: rgba(0, 255, 102, 0.25);
+            --border-active: rgba(0, 255, 102, 0.6);
+            --danger: #ff3333;
+            --danger-glow: rgba(255, 51, 51, 0.15);
+            --warning: #ffcc00;
+            --warning-glow: rgba(255, 204, 0, 0.15);
+            --success: #00ff66;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --font-mono: 'Courier New', Courier, monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            background-color: var(--bg-base);
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(0, 255, 102, 0.08), transparent 60%),
+                linear-gradient(rgba(18, 24, 38, 0.4) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(18, 24, 38, 0.4) 1px, transparent 1px);
+            background-size: 100% 100%, 20px 20px, 20px 20px;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            line-height: 1.5;
+            min-height: 100vh;
+            overflow-x: hidden;
+            padding-bottom: 50px; /* footer offset */
+        }
+
+        /* ─── Top Alert Banner ─── */
+        .alerts-container {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .alert-banner {
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid;
+            font-weight: bold;
+            text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .alert-banner.critico {
+            background: rgba(255, 51, 51, 0.9);
+            color: #ffffff;
+            border-color: #ff0000;
+            animation: pulse-red 2s infinite;
+        }
+        .alert-banner.advertencia {
+            background: rgba(255, 204, 0, 0.95);
+            color: #000000;
+            border-color: #d4af37;
+        }
+        .alert-banner.notificacion {
+            background: rgba(0, 255, 102, 0.95);
+            color: #000000;
+            border-color: #00cc52;
+        }
+        .alert-banner button {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: bold;
+            color: inherit;
+            padding: 0 5px;
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(255, 51, 51, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 51, 51, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 51, 51, 0); }
+        }
+
+        /* ─── Layout ─── */
+        .app-container {
+            display: flex;
+            min-height: calc(100vh - 50px);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            border-right: 1px solid var(--border);
+            background: rgba(5, 8, 12, 0.9);
+            padding: 20px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            flex-shrink: 0;
+        }
+        .brand {
+            padding: 10px;
+            border-bottom: 2px double var(--primary);
+            text-align: center;
+        }
+        .brand h1 {
+            color: var(--primary);
+            font-size: 18px;
+            text-shadow: 0 0 10px var(--primary-glow);
+            letter-spacing: 1px;
+        }
+        .brand p {
+            font-size: 10px;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+
+        .nav-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .nav-item {
+            width: 100%;
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-secondary);
+            padding: 12px;
+            text-align: left;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: var(--radius-md);
+        }
+        .nav-item:hover {
+            background: rgba(0, 255, 102, 0.05);
+            color: var(--primary);
+            border-color: var(--border);
+        }
+        .nav-item.active {
+            background: rgba(0, 255, 102, 0.12);
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            box-shadow: 0 0 8px var(--primary-glow);
+            font-weight: bold;
+        }
+        .nav-shortcut {
+            float: right;
+            opacity: 0.5;
+            font-size: 10px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex-grow: 1;
+            padding: 20px 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .view-header {
+            margin-bottom: 20px;
+            border-bottom: 1px dashed var(--border);
+            padding-bottom: 10px;
+        }
+        .view-header h2 {
+            color: var(--primary);
+            font-size: 20px;
+            text-transform: uppercase;
+        }
+
+        .view {
+            display: none;
+        }
+        .view.active {
+            display: block;
+        }
+
+        /* ─── UI Components ─── */
+        .card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .card-title {
+            color: var(--primary);
+            font-size: 14px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            border-left: 3px solid var(--primary);
+            padding-left: 10px;
+        }
+
+        /* Forms */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .form-field label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+        .form-field input, .form-field select {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            font-family: inherit;
+            font-size: 13px;
+            border-radius: var(--radius-md);
+            outline: none;
+            transition: all 0.2s;
+        }
+        .form-field input:focus, .form-field select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 5px var(--primary-glow);
+        }
+
+        .btn {
+            background: rgba(0, 255, 102, 0.08);
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: var(--radius-md);
+            text-transform: uppercase;
+            transition: all 0.2s;
+            outline: none;
+        }
+        .btn:hover {
+            background: var(--primary);
+            color: #000000;
+            box-shadow: 0 0 10px var(--primary-glow);
+        }
+        .btn-danger {
+            border-color: var(--danger);
+            color: var(--danger);
+            background: rgba(255, 51, 51, 0.05);
+        }
+        .btn-danger:hover {
+            background: var(--danger);
+            color: #ffffff;
+            box-shadow: 0 0 10px var(--danger-glow);
+        }
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 10px;
+        }
+
+        /* Tables */
+        .table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            background: rgba(0, 0, 0, 0.4);
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        .data-table th, .data-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(0, 255, 102, 0.15);
+        }
+        .data-table th {
+            background: rgba(0, 255, 102, 0.05);
+            color: var(--primary);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .data-table tr.clickable {
+            cursor: pointer;
+        }
+        .data-table tr.clickable:hover {
+            background: rgba(0, 255, 102, 0.04);
+        }
+        .data-table tr.selected {
+            background: rgba(0, 255, 102, 0.15) !important;
+            outline: 1.5px solid var(--primary);
+        }
+
+        .cell-money {
+            text-align: right;
+            font-weight: bold;
+        }
+        .cell-center {
+            text-align: center;
+        }
+
+        /* KPI Grid */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .kpi-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 15px;
+            text-align: center;
+        }
+        .kpi-label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+        .kpi-val {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary);
+        }
+        .kpi-card.warn .kpi-val { color: var(--warning); }
+        .kpi-card.crit .kpi-val { color: var(--danger); }
+
+        /* Dynamic Balance styling */
+        .balance-box {
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .balance-item {
+            flex: 1;
+            min-width: 150px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px dashed var(--border);
+            padding: 15px;
+            border-radius: var(--radius-md);
+        }
+        .balance-item .lbl {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+        .balance-item .val {
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        /* Drawer Overlay */
+        .drawer-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            display: none;
+            justify-content: flex-end;
+            backdrop-filter: blur(5px);
+        }
+        .drawer-overlay.open { display: flex; }
+        .drawer {
+            width: 600px;
+            max-width: 95vw;
+            background: var(--bg-surface-2);
+            border-left: 2px solid var(--primary);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+            animation: slideIn 0.25s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+        .drawer-head {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .drawer-head h3 {
+            color: var(--primary);
+            text-transform: uppercase;
+        }
+        .drawer-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        .drawer-foot {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .drawer-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px dashed rgba(255,255,255,0.05);
+        }
+        .drawer-row .lbl { color: var(--text-secondary); }
+        .drawer-row .val { font-weight: bold; }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            width: 450px;
+            max-width: 90vw;
+            background: var(--bg-surface-2);
+            border: 2px solid var(--primary);
+            border-radius: var(--radius-lg);
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+        }
+        .modal h3 {
+            color: var(--primary);
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            border-bottom: 1px dashed var(--border);
+            padding-bottom: 8px;
+        }
+        .modal-sub {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 15px;
+        }
+
+        /* ─── Footer ─── */
+        .terminal-footer {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            height: 40px;
+            background: #000000;
+            border-top: 2px solid var(--primary);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            font-size: 11px;
+            z-index: 999;
+            padding: 0 10px;
+        }
+        .footer-segment {
+            display: flex;
+            gap: 5px;
+        }
+        .footer-segment .lbl { color: var(--text-secondary); }
+        .footer-segment .val { color: var(--primary); font-weight: bold; }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .badge-success { background: rgba(0, 255, 102, 0.15); color: var(--primary); border: 1px solid var(--primary); }
+        .badge-danger { background: rgba(255, 51, 51, 0.15); color: var(--danger); border: 1px solid var(--danger); }
+        .badge-neutral { background: rgba(255, 255, 255, 0.1); color: var(--text-primary); border: 1px solid var(--text-secondary); }
+    </style>
+</head>
+<body>
+
+    <!-- Alarm Banner Area -->
+    <div class="alerts-container" id="alertsContainer"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="brand">
+                <h1>MASTER TOTAL</h1>
+                <p>Command v3.5 - Carnes</p>
+            </div>
+            <nav class="nav-menu">
+                <button type="button" class="nav-item active" data-view="dashboard">
+                    Dashboard <span class="nav-shortcut">[1]</span>
+                </button>
+                <button type="button" class="nav-item" data-view="clientes">
+                    Clientes (CRM) <span class="nav-shortcut">[2]</span>
+                </button>
+                <button type="button" class="nav-item" data-view="remitos">
+                    Remitos (Wholesale) <span class="nav-shortcut">[3]</span>
+                </button>
+                <button type="button" class="nav-item" data-view="ventas">
+                    Ventas Mostrador <span class="nav-shortcut">[4]</span>
+                </button>
+                <button type="button" class="nav-item" data-view="finanzas">
+                    Finanzas <span class="nav-shortcut">[5]</span>
+                </button>
+            </nav>
+            <div style="margin-top: auto; padding: 10px; text-align: center; border-top: 1px dashed var(--border);">
+                <p style="font-size: 9px; color: var(--text-secondary)">Modo Terminal</p>
+                <p style="font-size: 8px; color: var(--text-muted); margin-top: 4px">Use 1-5 / ↑↓ / ENTER / ESC</p>
+            </div>
+        </aside>
+
+        <!-- Main Window -->
+        <main class="main-content">
+            
+            <!-- ─── VIEW 1: DASHBOARD ─── -->
+            <div class="view active" id="view-dashboard">
+                <div class="view-header">
+                    <h2>Dashboard General</h2>
+                </div>
+                
+                <div class="card" style="text-align: center; background: rgba(0, 255, 102, 0.02);">
+                    <div class="card-title">Operaciones Rápidas</div>
+                    <button type="button" class="btn" id="btnFiadoExpress" style="font-size: 14px; padding: 12px 24px; box-shadow: 0 0 10px var(--primary-glow);">
+                        ⚡ MODO FIADO EXPRESS (DNI)
+                    </button>
+                </div>
+
+                <!-- KPI Cards (Restricted to Dashboard ONLY) -->
+                <div class="kpi-grid" id="kpiGrid">
+                    <div class="kpi-card" id="kpiCardSangria">
+                        <div class="kpi-label">Sangría Diaria (Intereses / 30)</div>
+                        <div class="kpi-val" id="dashSangria">$0,00</div>
+                    </div>
+                    <div class="kpi-card" id="kpiCardStock">
+                        <div class="kpi-label">Stock de Carne Disponible</div>
+                        <div class="kpi-val" id="dashStock">0.00 kg</div>
+                    </div>
+                    <div class="kpi-card" id="kpiCardCaja">
+                        <div class="kpi-label">Caja Real</div>
+                        <div class="kpi-val" id="dashCaja">$0,00</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Ranking de Deudas Financieras (Enemigos)</div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Obligación / Contraparte</th>
+                                    <th class="cell-money">Monto</th>
+                                    <th>Vencimiento</th>
+                                    <th class="cell-money">Intereses Totales</th>
+                                    <th class="cell-money">Costo Diario (Sangría)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblEnemies"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── VIEW 2: CLIENTES (CRM) ─── -->
+            <div class="view" id="view-clientes">
+                <div class="view-header">
+                    <h2>Clientes y CRM de Cuentas Corrientes</h2>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">Registrar Cliente Nuevo</div>
+                    <form id="formCliente">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>DNI / Cédula (Mandatorio)</label>
+                                <input type="text" id="cliDni" placeholder="Ej: 12345678" required>
+                            </div>
+                            <div class="form-field">
+                                <label>Nombre Completo</label>
+                                <input type="text" id="cliNombre" placeholder="Ej: Juan Pérez" required>
+                            </div>
+                            <div class="form-field">
+                                <label>Scoring de Crédito</label>
+                                <select id="cliScoring">
+                                    <option value="A">A (Excelente)</option>
+                                    <option value="B">B (Riesgo Medio)</option>
+                                    <option value="C">C (Bloqueado/Incobrable)</option>
+                                </select>
+                            </div>
+                            <div class="form-field">
+                                <label>Techo de Deuda ($)</label>
+                                <input type="number" id="cliTecho" value="500000" min="0" step="1000">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">Guardar Cliente</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Clientes Registrados</div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>DNI</th>
+                                    <th>Nombre del Cliente</th>
+                                    <th class="cell-center">Scoring</th>
+                                    <th class="cell-money">Techo de Deuda</th>
+                                    <th class="cell-money">Saldo de Deuda Actual</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblClientes"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Cuentas Pérdidas por Incobrables (Costo de Oportunidad)</div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>DNI</th>
+                                    <th>Cliente</th>
+                                    <th class="cell-money">Pérdida Nominal</th>
+                                    <th>Plazo Real</th>
+                                    <th class="cell-money">Interés Oportunidad (30% compuesto)</th>
+                                    <th class="cell-money">Pérdida Total Real</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblLosses"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── VIEW 3: REMITOS (WHOLESALE) ─── -->
+            <div class="view" id="view-remitos">
+                <div class="view-header">
+                    <h2>Gestión de Remitos de Venta al por Mayor</h2>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">Cargar Remito de Venta (FIFO Lotes)</div>
+                    <form id="formRemito">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>Seleccionar Lote de Compra</label>
+                                <select id="remLote" required></select>
+                            </div>
+                            <div class="form-field">
+                                <label>Seleccionar Cliente</label>
+                                <select id="remCliente" required></select>
+                            </div>
+                            <div class="form-field">
+                                <label>Kilogramos a Despachar</label>
+                                <input type="number" id="remKg" min="0.01" step="0.01" required>
+                            </div>
+                            <div class="form-field">
+                                <label>Precio Venta Total ($)</label>
+                                <input type="number" id="remPrecio" min="0.01" step="1" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">Registrar Despacho / Remito</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Inventario Lotes de Compra Bulk</div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID Lote</th>
+                                    <th>Fecha Compra</th>
+                                    <th>Costo Lote</th>
+                                    <th>Kg Totales</th>
+                                    <th>Stock Remanente</th>
+                                    <th>Costo/kg</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblLotes"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Historial de Remitos Emitidos</div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Fecha</th>
+                                    <th>Lote Origen</th>
+                                    <th>Contraparte</th>
+                                    <th>Kg</th>
+                                    <th class="cell-money">Monto Venta</th>
+                                    <th>Costo Materia Prima</th>
+                                    <th>Margen Bruto</th>
+                                    <th>Estado</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblRemitos"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── VIEW 4: VENTAS MOSTRADOR ─── -->
+            <div class="view" id="view-ventas">
+                <div class="view-header">
+                    <h2>Ventas Mostrador - Carnicería Minorista</h2>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">Nueva Venta Minorista</div>
+                    <form id="formVenta">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>Tipo de Pago</label>
+                                <select id="vtaTipo" required>
+                                    <option value="CONTADO">CONTADO (Efectivo/Transferencia)</option>
+                                    <option value="FIADO">FIADO (Cargado a cuenta corriente)</option>
+                                </select>
+                            </div>
+                            <div class="form-field" id="fldVtaDni" style="display: none;">
+                                <label>DNI del Cliente (Mandatorio para Fiados)</label>
+                                <input type="text" id="vtaDni" placeholder="Ej: 99887766">
+                            </div>
+                            <div class="form-field">
+                                <label>Monto de la Venta ($)</label>
+                                <input type="number" id="vtaMonto" min="0.01" step="0.01" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">Registrar Venta</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Libro de Ventas Minoristas</div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID Venta</th>
+                                    <th>Fecha</th>
+                                    <th>Cliente</th>
+                                    <th>DNI</th>
+                                    <th>Forma Pago</th>
+                                    <th class="cell-money">Monto Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblVentas"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── VIEW 5: FINANZAS ─── -->
+            <div class="view" id="view-finanzas">
+                <div class="view-header">
+                    <h2>Finanzas & Balance de Partida Doble</h2>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Balance Dinámico General (Estado Patrimonial)</div>
+                    <div class="balance-box">
+                        <div class="balance-item" style="border-color: var(--primary);">
+                            <div class="lbl">Activos Totales</div>
+                            <div class="val" id="balActivos" style="color: var(--primary);">$0,00</div>
+                            <div style="font-size: 8px; color: var(--text-secondary); margin-top: 10px;">
+                                Caja (<span id="balSubCaja">$0</span>) + Cobros (<span id="balSubCobros">$0</span>) + Stock (<span id="balSubStock">$0</span>)
+                            </div>
+                        </div>
+                        <div class="balance-item" style="border-color: var(--danger);">
+                            <div class="lbl">Pasivos Totales</div>
+                            <div class="val" id="balPasivos" style="color: var(--danger);">$0,00</div>
+                            <div style="font-size: 8px; color: var(--text-secondary); margin-top: 10px;">
+                                Obligaciones financieras y comerciales
+                            </div>
+                        </div>
+                        <div class="balance-item" style="border-color: #0088ff;">
+                            <div class="lbl">Patrimonio Neto</div>
+                            <div class="val" id="balPatrimonio" style="color: #0088ff;">$0,00</div>
+                            <div style="font-size: 8px; color: var(--text-secondary); margin-top: 10px;">
+                                Capital Neto del Negocio
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">Cargar Nueva Compra Bulk (Abastecimiento Lotes)</div>
+                    <form id="formBulk">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>Kilos Totales del Lote</label>
+                                <input type="number" id="blkKg" min="0.01" step="0.01" required>
+                            </div>
+                            <div class="form-field">
+                                <label>Costo Total Compra ($)</label>
+                                <input type="number" id="blkCosto" min="0.01" step="1" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">Registrar Lote Bulk</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Registrar Instrumento / Obligación Financiera</div>
+                    <form id="formInstrumento">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>Tipo de Obligación</label>
+                                <select id="finTipo" required>
+                                    <option value="PRESTAMO">Préstamo Bancario</option>
+                                    <option value="TARJETA">Tarjeta Corporativa</option>
+                                    <option value="CHEQUE">Cheque de Pago Diferido</option>
+                                    <option value="PROVEEDOR">Deuda Comercial Proveedor</option>
+                                </select>
+                            </div>
+                            <div class="form-field">
+                                <label>Monto Nominal ($)</label>
+                                <input type="number" id="finMonto" min="0.01" step="0.01" required>
+                            </div>
+                            <div class="form-field">
+                                <label>Interés Cargado ($)</label>
+                                <input type="number" id="finInteres" min="0" step="0.01" value="0">
+                            </div>
+                            <div class="form-field">
+                                <label>Fecha Vencimiento</label>
+                                <input type="date" id="finVencimiento" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">Registrar Obligación</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Obligaciones Financieras Registradas</div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Tipo</th>
+                                    <th class="cell-money">Monto Principal</th>
+                                    <th class="cell-money">Interés</th>
+                                    <th>Vencimiento</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblInstrumentos"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+        </main>
+    </div>
+
+    <!-- Client Detail Drawer -->
+    <div class="drawer-overlay" id="drawerClientOverlay">
+        <div class="drawer">
+            <div class="drawer-head">
+                <h3 id="drawerClientTitle">Detalle de Cliente</h3>
+                <button type="button" class="btn btn-ghost" id="btnDrawerClientClose">✕</button>
+            </div>
+            <div class="drawer-body">
+                <form id="formEditCliente">
+                    <input type="hidden" id="editCliId">
+                    <div class="form-field" style="margin-bottom: 10px;">
+                        <label>DNI</label>
+                        <input type="text" id="editCliDni" required>
+                    </div>
+                    <div class="form-field" style="margin-bottom: 10px;">
+                        <label>Nombre del Cliente</label>
+                        <input type="text" id="editCliNombre" required>
+                    </div>
+                    <div class="form-field" style="margin-bottom: 10px;">
+                        <label>Scoring de Crédito</label>
+                        <select id="editCliScoring">
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                        </select>
+                    </div>
+                    <div class="form-field" style="margin-bottom: 15px;">
+                        <label>Techo de Deuda ($)</label>
+                        <input type="number" id="editCliTecho" required>
+                    </div>
+                    <button type="submit" class="btn btn-sm">Actualizar Perfil</button>
+                </form>
+
+                <div style="margin-top: 25px; padding-top: 15px; border-top: 1px dashed var(--border);">
+                    <div class="drawer-row"><span class="lbl">Saldo de Deuda Actual:</span><span class="val" id="drawCliSaldo" style="color: var(--primary)">$0,00</span></div>
+                </div>
+
+                <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                    <div class="form-field" style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: var(--radius-md);">
+                        <label>Registrar Recibo / Cobro Parcial de Crédito</label>
+                        <div style="display:flex; gap:10px; margin-top:5px;">
+                            <input type="number" id="cobroMonto" placeholder="Monto $" min="0.01" step="0.01">
+                            <button type="button" class="btn btn-sm" id="btnCobrarCliente">Registrar Cobro</button>
+                        </div>
+                    </div>
+                    
+                    <button type="button" class="btn btn-ghost" id="btnPrintStatement" style="width: 100%; border: 1px solid var(--primary); color: var(--primary); margin-bottom: 5px;">
+                        🖨️ IMPRIMIR ESTADO DE CUENTA
+                    </button>
+                    
+                    <button type="button" class="btn btn-danger" id="btnMarcarIncobrable" style="width: 100%;">
+                        ⚠️ DECLARAR CLIENTE COMO INCOBRABLE
+                    </button>
+                </div>
+
+                <div style="margin-top: 25px;">
+                    <h4 style="color:var(--primary); margin-bottom:10px; text-transform:uppercase;">Historial Reciente Remitos</h4>
+                    <div class="table-wrap">
+                        <table class="data-table" style="font-size: 11px;">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Monto</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblDrawCliRemitos"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fiado Express Modal -->
+    <div class="modal-overlay" id="modalFiadoExpress">
+        <div class="modal">
+            <h3>⚡ Fiado Express Mostrador</h3>
+            <p class="modal-sub">Permite registrar una venta fiada rápidamente indicando el DNI del cliente. Si no existe, se creará un perfil genérico.</p>
+            <form id="formFiadoExpress">
+                <div class="form-field" style="margin-bottom: 12px;">
+                    <label>DNI del Cliente (Mandatorio)</label>
+                    <input type="text" id="expressDni" placeholder="Ej: 12345678" required>
+                </div>
+                <div class="form-field" style="margin-bottom: 20px;">
+                    <label>Monto de la Venta ($)</label>
+                    <input type="number" id="expressMonto" min="0.01" step="0.01" placeholder="Monto $" required>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-danger btn-sm" id="btnCancelExpress">Cancelar</button>
+                    <button type="submit" class="btn btn-sm">Confirmar Fiado</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sticky Bottom Console Footer -->
+    <footer class="terminal-footer">
+        <div class="footer-segment">
+            <span class="lbl">[SANGRE DIARIA]</span>
+            <span class="val" id="footSangria" style="color: var(--danger)">$0,00</span>
+        </div>
+        <div class="footer-segment">
+            <span class="lbl">[STOCK DISPONIBLE]</span>
+            <span class="val" id="footStock" style="color: var(--success)">0.00 kg</span>
+        </div>
+        <div class="footer-segment">
+            <span class="lbl">[CAJA REAL]</span>
+            <span class="val" id="footCaja" style="color: #00c3ff">$0,00</span>
+        </div>
+    </footer>
+
+    <!-- JavaScript logic -->
+    <script>
+        const $ = id => document.getElementById(id);
+
+        let data = {
+            kpis: {},
+            enemies: [],
+            clientes: [],
+            losses: [],
+            lotes: [],
+            remitos: [],
+            ventas: [],
+            instrumentos: []
+        };
+        let activeRowIndex = -1;
+        let selectedClientId = null;
+        let currentClientData = null;
+
+        async function api(url, options = {}) {
+            if (options.body && typeof options.body === 'object') {
+                options.body = JSON.stringify(options.body);
+                options.headers = { ...options.headers, 'Content-Type': 'application/json' };
+            }
+            const res = await fetch(url, options);
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Error del servidor');
+            return d;
+        }
+
+        function switchView(viewName) {
+            activeRowIndex = -1;
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+            
+            const tgtView = $('view-' + viewName);
+            const tgtBtn = document.querySelector(`.nav-item[data-view="${viewName}"]`);
+            if (tgtView) tgtView.classList.add('active');
+            if (tgtBtn) tgtBtn.classList.add('active');
+
+            window.scrollTo(0,0);
+        }
+
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                switchView(btn.dataset.view);
+            });
+        });
+
+        function fmt(n) {
+            return Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function renderAlerts(alerts) {
+            const container = $('alertsContainer');
+            container.innerHTML = '';
+            (alerts || []).forEach(a => {
+                const banner = document.createElement('div');
+                const lvlClass = a.nivel.toLowerCase().replace('í', 'i');
+                banner.className = `alert-banner ${lvlClass}`;
+                banner.innerHTML = `
+                    <span>[${a.nivel}] ${a.mensaje}</span>
+                    <button type="button" onclick="this.parentElement.remove()">✕</button>
+                `;
+                container.appendChild(banner);
+
+                if (a.nivel === 'NOTIFICACIÓN') {
+                    setTimeout(() => {
+                        banner.remove();
+                    }, 4000);
+                }
+            });
+        }
+
+        function renderKpis(k) {
+            $('dashSangria').textContent = '$' + fmt(k.sangria_diaria || 0);
+            $('dashStock').textContent = fmt(k.stock_kg || 0) + ' kg';
+            $('dashCaja').textContent = '$' + fmt(k.caja_real || 0);
+
+            $('footSangria').textContent = '$' + fmt(k.sangria_diaria || 0);
+            $('footStock').textContent = fmt(k.stock_kg || 0) + ' kg';
+            $('footCaja').textContent = '$' + fmt(k.caja_real || 0);
+
+            $('balActivos').textContent = '$' + fmt(k.activos_totales || 0);
+            $('balSubCaja').textContent = '$' + fmt(k.caja_real || 0);
+            $('balSubCobros').textContent = '$' + fmt(k.cuentas_cobrar || 0);
+            $('balSubStock').textContent = '$' + fmt(k.stock_valorizado || 0);
+
+            $('balPasivos').textContent = '$' + fmt(k.pasivos_totales || 0);
+            $('balPatrimonio').textContent = '$' + fmt(k.patrimonio_neto || 0);
+        }
+
+        function renderEnemies(enemies) {
+            const tbody = $('tblEnemies');
+            tbody.innerHTML = (enemies || []).length ? enemies.map(e => `
+                <tr>
+                    <td>#${e.id}</td>
+                    <td><strong>${e.tipo}</strong></td>
+                    <td class="cell-money">$${fmt(e.monto)}</td>
+                    <td>${e.fecha_vencimiento}</td>
+                    <td class="cell-money" style="color:var(--danger)">$${fmt(e.interes_cargado)}</td>
+                    <td class="cell-money" style="color:var(--danger)">$${fmt(e.costo_diario)}</td>
+                </tr>
+            `).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">Sin deudas activas</td></tr>';
+        }
+
+        function renderClientesList(list) {
+            const tbody = $('tblClientes');
+            tbody.innerHTML = (list || []).length ? list.map(c => {
+                const superado = c.saldo_actual > c.techo_deuda;
+                const statusBadge = superado 
+                    ? '<span class="badge badge-danger">EXCEDIDO</span>'
+                    : '<span class="badge badge-success">OK</span>';
+                const style = superado ? 'color: var(--danger)' : '';
+                return `
+                    <tr class="clickable" data-id="${c.id}" style="${style}">
+                        <td>${c.dni}</td>
+                        <td class="cell-primary"><strong>${c.nombre}</strong></td>
+                        <td class="cell-center"><span class="badge badge-neutral">${c.scoring}</span></td>
+                        <td class="cell-money">$${fmt(c.techo_deuda)}</td>
+                        <td class="cell-money"><strong>$${fmt(c.saldo_actual)}</strong></td>
+                        <td>${statusBadge}</td>
+                    </tr>
+                `;
+            }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">Sin clientes registrados</td></tr>';
+
+            tbody.querySelectorAll('tr.clickable').forEach(tr => {
+                tr.addEventListener('click', () => {
+                    openClientDrawer(tr.dataset.id);
+                });
+            });
+        }
+
+        function renderLosses(losses) {
+            const tbody = $('tblLosses');
+            tbody.innerHTML = (losses || []).length ? losses.map(l => `
+                <tr class="clickable">
+                    <td>${l.fecha_perdida}</td>
+                    <td>${l.cliente_dni}</td>
+                    <td style="color:var(--danger)"><strong>${l.cliente_nombre}</strong></td>
+                    <td class="cell-money">$${fmt(l.monto_nominal)}</td>
+                    <td>${l.dias_transcurridos} días</td>
+                    <td class="cell-money" style="color:var(--danger)">+$${fmt(l.costo_oportunidad_interes)}</td>
+                    <td class="cell-money" style="color:var(--danger);font-weight:bold">$${fmt(l.monto_total)}</td>
+                </tr>
+            `).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);">Sin pérdidas declaradas</td></tr>';
+        }
+
+        function renderLotesList(list) {
+            const tbody = $('tblLotes');
+            const select = $('remLote');
+            
+            tbody.innerHTML = (list || []).length ? list.map(l => {
+                const cpx = l.kg_totales > 0 ? l.costo_total_bulk / l.kg_totales : 0;
+                return `
+                    <tr>
+                        <td>#${l.id}</td>
+                        <td>${l.fecha}</td>
+                        <td class="cell-money">$${fmt(l.costo_total_bulk)}</td>
+                        <td>${fmt(l.kg_totales)} kg</td>
+                        <td style="color:${l.kg_remanentes > 0 ? 'var(--primary)' : 'var(--text-secondary)'}"><strong>${fmt(l.kg_remanentes)} kg</strong></td>
+                        <td class="cell-money">$${fmt(cpx)}</td>
+                    </tr>
+                `;
+            }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">Sin lotes registrados</td></tr>';
+
+            select.innerHTML = '<option value="">-- SELECCIONE LOTE --</option>' + 
+                (list || []).filter(l => l.kg_remanentes > 0).map(l => `
+                    <option value="${l.id}">Lote #${l.id} (${fmt(l.kg_remanentes)} kg disp. @ $${fmt(l.costo_total_bulk / l.kg_totales)}/kg)</option>
+                `).join('');
+        }
+
+        function renderRemitosList(list) {
+            const tbody = $('tblRemitos');
+            tbody.innerHTML = (list || []).length ? list.map(r => {
+                const mp_cost = r.kg * r.costo_por_kg;
+                const margin = r.precio_total - mp_cost;
+                const marginColor = margin >= 0 ? 'var(--primary)' : 'var(--danger)';
+                
+                let badge = '<span class="badge badge-danger">PENDIENTE</span>';
+                let action = `<button type="button" class="btn btn-ghost btn-sm btn-cobrar-remito" data-rid="${r.id}" style="color:var(--primary);border:1px solid var(--primary);">Cobrar</button>`;
+                
+                if (r.pagado === 1) {
+                    badge = '<span class="badge badge-success">COBRADO</span>';
+                    action = '—';
+                } else if (r.pagado === 2) {
+                    badge = '<span class="badge badge-neutral" style="color:var(--danger)">INCOBRABLE</span>';
+                    action = '—';
+                }
+                
+                return `
+                    <tr class="clickable">
+                        <td>#${r.id}</td>
+                        <td>${r.fecha}</td>
+                        <td>#${r.lote_id}</td>
+                        <td class="cell-primary"><strong>${r.cliente_nombre}</strong></td>
+                        <td>${fmt(r.kg)} kg</td>
+                        <td class="cell-money"><strong>$${fmt(r.precio_total)}</strong></td>
+                        <td class="cell-money">$${fmt(mp_cost)}</td>
+                        <td class="cell-money" style="color:${marginColor}">$${fmt(margin)}</td>
+                        <td class="cell-center">${badge}</td>
+                        <td class="cell-center">${action}</td>
+                    </tr>
+                `;
+            }).join('') : '<tr><td colspan="10" style="text-align:center;color:var(--text-secondary);">Sin remitos registrados</td></tr>';
+
+            tbody.querySelectorAll('.btn-cobrar-remito').forEach(btn => {
+                btn.addEventListener('click', async ev => {
+                    ev.stopPropagation();
+                    if (!confirm(`¿Confirmar cobro del remito #${btn.dataset.rid}?`)) return;
+                    try {
+                        await api(`/api/remitos/${btn.dataset.rid}/cobrar`, { method: 'POST' });
+                        await loadAll();
+                    } catch(e) { alert(e.message); }
+                });
+            });
+        }
+
+        function renderVentasList(list) {
+            const tbody = $('tblVentas');
+            tbody.innerHTML = (list || []).length ? list.map(v => `
+                <tr>
+                    <td>#${v.id}</td>
+                    <td>${v.fecha}</td>
+                    <td>${v.cliente_nombre || 'Mostrador'}</td>
+                    <td>${v.cliente_dni || '—'}</td>
+                    <td><span class="badge ${v.tipo_pago === 'CONTADO' ? 'badge-success' : 'badge-danger'}">${v.tipo_pago}</span></td>
+                    <td class="cell-money">$${fmt(v.monto)}</td>
+                </tr>
+            `).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">Sin ventas registradas</td></tr>';
+        }
+
+        function renderInstrumentosList(list) {
+            const tbody = $('tblInstrumentos');
+            tbody.innerHTML = (list || []).length ? list.map(i => {
+                const status = i.pagado === 1 
+                    ? '<span class="badge badge-success">SALDADO</span>'
+                    : '<span class="badge badge-danger">PENDIENTE</span>';
+                const action = i.pagado === 1
+                    ? '—'
+                    : `<button type="button" class="btn btn-ghost btn-sm btn-pagar-instrumento" data-iid="${i.id}" style="color:var(--danger);border-color:var(--danger)">Saldar</button>`;
+                return `
+                    <tr class="clickable">
+                        <td>#${i.id}</td>
+                        <td><strong>${i.tipo}</strong></td>
+                        <td class="cell-money">$${fmt(i.monto)}</td>
+                        <td class="cell-money" style="color:var(--danger)">$${fmt(i.interes_cargado)}</td>
+                        <td>${i.fecha_vencimiento}</td>
+                        <td class="cell-center">${status}</td>
+                        <td class="cell-center">${action}</td>
+                    </tr>
+                `;
+            }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);">Sin obligaciones registradas</td></tr>';
+
+            tbody.querySelectorAll('.btn-pagar-instrumento').forEach(btn => {
+                btn.addEventListener('click', async ev => {
+                    ev.stopPropagation();
+                    if (!confirm('¿Confirmar pago de esta obligación? Se registrará la correspondiente salida de efectivo.')) return;
+                    try {
+                        await api(`/api/instrumentos_financieros/${btn.dataset.iid}/pagar`, { method: 'POST' });
+                        await loadAll();
+                    } catch(e) { alert(e.message); }
+                });
+            });
+        }
+
+        async function openClientDrawer(clientId) {
+            selectedClientId = clientId;
+            $('drawerClientOverlay').classList.add('open');
+            
+            try {
+                const c = await api('/api/clientes/' + clientId);
+                $('editCliId').value = c.id;
+                $('editCliDni').value = c.dni;
+                $('editCliNombre').value = c.nombre;
+                $('editCliScoring').value = c.scoring;
+                $('editCliTecho').value = c.techo_deuda;
+                
+                $('drawCliSaldo').textContent = '$' + fmt(c.saldo_actual);
+                currentClientData = c;
+                
+                if (c.saldo_actual > 0) {
+                    $('btnMarcarIncobrable').style.display = 'block';
+                } else {
+                    $('btnMarcarIncobrable').style.display = 'none';
+                }
+                
+                const remTbody = $('tblDrawCliRemitos');
+                
+                const allActs = [...(c.remitos || []).map(r => ({ fecha: r.fecha, monto: r.precio_total, pagado: r.pagado, tipo: 'Wholesale' })),
+                                  ...(c.ventas || []).map(v => ({ fecha: v.fecha, monto: v.monto, pagado: v.tipo_pago === 'CONTADO' ? 1 : 0, tipo: 'Retail' }))];
+                
+                remTbody.innerHTML = allActs.length ? allActs.map(a => {
+                    let badge = '<span class="badge badge-danger">Pendiente</span>';
+                    if (a.pagado === 1) badge = '<span class="badge badge-success">Cobrado</span>';
+                    else if (a.pagado === 2) badge = '<span class="badge badge-neutral">Anulado</span>';
+                    
+                    return `
+                        <tr>
+                            <td>${a.fecha}</td>
+                            <td>$${fmt(a.monto)} (${a.tipo})</td>
+                            <td>${badge}</td>
+                        </tr>
+                    `;
+                }).join('') : '<tr><td colspan="3" style="text-align:center">Sin movimientos</td></tr>';
+                
+            } catch(e) {
+                alert("Error al cargar detalles del cliente: " + e.message);
+                closeClientDrawer();
+            }
+        }
+
+        function closeClientDrawer() {
+            $('drawerClientOverlay').classList.remove('open');
+            selectedClientId = null;
+        }
+
+        $('btnDrawerClientClose').addEventListener('click', closeClientDrawer);
+        
+        $('btnPrintStatement').addEventListener('click', () => {
+            if (currentClientData) {
+                printClientStatement(currentClientData);
+            }
+        });
+
+        function printClientStatement(c) {
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            const allActs = [
+                ...(c.remitos || []).map(r => ({ fecha: r.fecha, desc: `Remito #${r.id} - Lote #${r.lote_id} - ${fmt(r.kg)} kg`, monto: r.precio_total, pagado: r.pagado, tipo: 'Wholesale' })),
+                ...(c.ventas || []).map(v => ({ fecha: v.fecha, desc: `Venta Mostrador ${v.tipo_pago}`, monto: v.monto, pagado: v.tipo_pago === 'CONTADO' ? 1 : 0, tipo: 'Retail' }))
+            ];
+            
+            let statusText = c.saldo_actual > c.techo_deuda ? 'EXCEDIDO' : 'AL DÍA';
+            if (c.scoring === 'D') statusText = 'INCOBRABLE';
+
+            const rowsHtml = allActs.length ? allActs.map(a => {
+                let state = 'Pendiente';
+                if (a.pagado === 1) state = 'Cobrado';
+                else if (a.pagado === 2) state = 'Incobrable';
+                return `
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #333;">${a.fecha}</td>
+                        <td style="padding:8px; border-bottom:1px solid #333;">${a.desc}</td>
+                        <td style="padding:8px; border-bottom:1px solid #333; text-align:right;">$${fmt(a.monto)}</td>
+                        <td style="padding:8px; border-bottom:1px solid #333; text-align:center;">${state}</td>
+                    </tr>
+                `;
+            }).join('') : '<tr><td colspan="4" style="text-align:center; padding:20px;">Sin movimientos</td></tr>';
+
+            const html = `
+                <html>
+                <head>
+                    <title>Estado de Cuenta - ${c.nombre}</title>
+                    <style>
+                        body {
+                            background-color: #ffffff;
+                            color: #000000;
+                            font-family: 'Courier New', Courier, monospace;
+                            font-size: 12px;
+                            padding: 20px;
+                        }
+                        .header {
+                            text-align: center;
+                            border-bottom: 2px double #000;
+                            padding-bottom: 10px;
+                            margin-bottom: 20px;
+                        }
+                        .info-table {
+                            width: 100%;
+                            margin-bottom: 20px;
+                        }
+                        .info-table td {
+                            padding: 4px;
+                        }
+                        .data-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-bottom: 30px;
+                        }
+                        .data-table th {
+                            border-bottom: 2px solid #000;
+                            padding: 8px;
+                            text-align: left;
+                        }
+                        .footer {
+                            text-align: center;
+                            border-top: 1px dashed #000;
+                            padding-top: 10px;
+                            font-size: 10px;
+                        }
+                        @media print {
+                            body { padding: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>DISTRIBUIDORA MASTER TOTAL</h2>
+                        <p>SISTEMA DE CONTROL DE DEUDAS Y LOGÍSTICA</p>
+                        <p>Fecha de Emisión: ${new Date().toLocaleDateString()}</p>
+                    </div>
+                    <table class="info-table">
+                        <tr>
+                            <td><strong>Cliente:</strong> ${c.nombre}</td>
+                            <td><strong>DNI:</strong> ${c.dni}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Calificación de Riesgo:</strong> ${c.scoring}</td>
+                            <td><strong>Estado Financiero:</strong> ${statusText}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Límite de Crédito:</strong> $${fmt(c.techo_deuda)}</td>
+                            <td><strong>SALDO DEUDOR ACTUAL:</strong> <span style="font-size:14px; font-weight:bold;">$${fmt(c.saldo_actual)}</span></td>
+                        </tr>
+                    </table>
+                    
+                    <h3>HISTORIAL DE MOVIMIENTOS</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Concepto</th>
+                                <th style="text-align:right;">Monto</th>
+                                <th style="text-align:center;">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                    
+                    <div class="footer">
+                        <p>Documento interno de uso exclusivo para conciliación de cuentas - Master Total v3.5</p>
+                    </div>
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                            window.close();
+                        };
+                    <\/script>
+                </body>
+                </html>
+            `;
+            printWindow.document.write(html);
+            printWindow.document.close();
+        }
+
+        $('formEditCliente').addEventListener('submit', async ev => {
+            ev.preventDefault();
+            const cid = $('editCliId').value;
+            const payload = {
+                dni: $('editCliDni').value,
+                nombre: $('editCliNombre').value,
+                scoring: $('editCliScoring').value,
+                techo_deuda: parseFloat($('editCliTecho').value)
+            };
+            try {
+                await api(`/api/clientes/${cid}/editar`, { method: 'POST', body: payload });
+                closeClientDrawer();
+                await loadAll();
+            } catch(e) { alert(e.message); }
+        });
+
+        $('btnCobrarCliente').addEventListener('click', async () => {
+            if (!selectedClientId) return;
+            const monto = parseFloat($('cobroMonto').value);
+            if (isNaN(monto) || monto <= 0) {
+                alert("Monto inválido");
+                return;
+            }
+            if (!confirm(`¿Confirmar cobro parcial de $${monto}?`)) return;
+            try {
+                await api(`/api/clientes/${selectedClientId}/cobrar`, { method: 'POST', body: { monto } });
+                $('cobroMonto').value = '';
+                await openClientDrawer(selectedClientId);
+                await loadAll();
+            } catch(e) { alert(e.message); }
+        });
+
+        $('btnMarcarIncobrable').addEventListener('click', async () => {
+            if (!selectedClientId) return;
+            if (!confirm('⚠️ ¿ESTÁ SEGURO DE DECLARAR ESTE CLIENTE COMO INCOBRABLE?\nSu deuda pendiente se pasará a pérdidas y el crédito se bloqueará a $0 para siempre.')) return;
+            try {
+                await api(`/api/clientes/${selectedClientId}/incobrable`, { method: 'POST' });
+                closeClientDrawer();
+                await loadAll();
+            } catch(e) { alert(e.message); }
+        });
+
+        $('formCliente').addEventListener('submit', async ev => {
+            ev.preventDefault();
+            const payload = {
+                dni: $('cliDni').value,
+                nombre: $('cliNombre').value,
+                scoring: $('cliScoring').value,
+                techo_deuda: parseFloat($('cliTecho').value)
+            };
+            try {
+                await api('/api/clientes', { method: 'POST', body: payload });
+                $('formCliente').reset();
+                await loadAll();
+            } catch(e) { alert(e.message); }
+        });
+
+        $('formBulk').addEventListener('submit', async ev => {
+            ev.preventDefault();
+            const payload = {
+                kg_totales: parseFloat($('blkKg').value),
+                costo_total_bulk: parseFloat($('blkCosto').value)
+            };
+            try {
+                await api('/api/compras_bulk', { method: 'POST', body: payload });
+                $('formBulk').reset();
+                await loadAll();
+            } catch(e) { alert(e.message); }
+        });
+
+        $('formRemito').addEventListener('submit', async ev => {
+            ev.preventDefault();
+            const payload = {
+                lote_id: parseInt($('remLote').value, 10),
+                cliente_id: parseInt($('remCliente').value, 10),
+                kg: parseFloat($('remKg').value),
+                precio_total: parseFloat($('remPrecio').value)
+            };
+            try {
+                await api('/api/remitos', { method: 'POST', body: payload });
+                $('formRemito').reset();
+                await loadAll();
+            } catch(e) { alert(e.message); }
+        });
+
+        $('vtaTipo').addEventListener('change', () => {
+            const isFiado = $('vtaTipo').value === 'FIADO';
+            $('fldVtaDni').style.display = isFiado ? 'block' : 'none';
+            if (isFiado) $('vtaDni').setAttribute('required', 'true');
+            else $('vtaDni').removeAttribute('required');
+        });
+
+        $('formVenta').addEventListener('submit', async ev => {
+            ev.preventDefault();
+            const payload = {
+                monto: parseFloat($('vtaMonto').value),
+                tipo_pago: $('vtaTipo').value,
+                dni: $('vtaDni').value
+            };
+            try {
+                await api('/api/ventas_mostrador', { method: 'POST', body: payload });
+                $('formVenta').reset();
+                $('fldVtaDni').style.display = 'none';
+                await loadAll();
+            } catch(e) { alert(e.message); }
+        });
+
+        $('formInstrumento').addEventListener('submit', async ev => {
+            ev.preventDefault();
+            const payload = {
+                tipo: $('finTipo').value,
+                monto: parseFloat($('finMonto').value),
+                interes_cargado: parseFloat($('finInteres').value),
+                fecha_vencimiento: $('finVencimiento').value
+            };
+            try {
+                await api('/api/instrumentos_financieros', { method: 'POST', body: payload });
+                $('formInstrumento').reset();
+                await loadAll();
+            } catch(e) { alert(e.message); }
+        });
+
+        $('btnFiadoExpress').addEventListener('click', () => {
+            $('modalFiadoExpress').classList.add('open');
+            $('expressDni').focus();
+        });
+        $('btnCancelExpress').addEventListener('click', () => {
+            $('modalFiadoExpress').classList.remove('open');
+            $('formFiadoExpress').reset();
+        });
+        $('formFiadoExpress').addEventListener('submit', async ev => {
+            ev.preventDefault();
+            const payload = {
+                monto: parseFloat($('expressMonto').value),
+                tipo_pago: 'FIADO',
+                dni: $('expressDni').value
+            };
+            try {
+                await api('/api/ventas_mostrador', { method: 'POST', body: payload });
+                $('modalFiadoExpress').classList.remove('open');
+                $('formFiadoExpress').reset();
+                await loadAll();
+            } catch(e) { alert(e.message); }
+        });
+
+        async function loadAll() {
+            try {
+                const [dash, clients, losses, lotes, remitos, retail, finance] = await Promise.all([
+                    api('/api/dashboard'),
+                    api('/api/clientes'),
+                    api('/api/perdidas'),
+                    api('/api/compras_bulk'),
+                    api('/api/remitos'),
+                    api('/api/ventas_mostrador'),
+                    api('/api/instrumentos_financieros')
+                ]);
+
+                data = {
+                    kpis: dash.kpis,
+                    enemies: dash.enemies,
+                    clientes: clients,
+                    losses: losses,
+                    lotes: lotes,
+                    remitos: remitos,
+                    ventas: retail,
+                    instrumentos: finance
+                };
+
+                renderAlerts(dash.alerts);
+                renderKpis(dash.kpis);
+                renderEnemies(dash.enemies);
+                renderClientesList(clients);
+                renderLosses(losses);
+                renderLotesList(lotes);
+                renderRemitosList(remitos);
+                renderVentasList(retail);
+                renderInstrumentosList(finance);
+
+                const remCliSelect = $('remCliente');
+                remCliSelect.innerHTML = '<option value="">-- SELECCIONE CLIENTE --</option>' +
+                    clients.map(c => `<option value="${c.id}">${c.nombre} (DNI: ${c.dni} - scoring ${c.scoring})</option>`).join('');
+
+            } catch(e) {
+                console.error("Error cargando el panel: ", e);
+            }
+        }
+
+        function updateSelectedRow(rows) {
+            rows.forEach((r, idx) => {
+                r.classList.toggle('selected', idx === activeRowIndex);
+                if (idx === activeRowIndex) {
+                    r.scrollIntoView({ block: 'nearest' });
+                }
+            });
+        }
+
+        window.addEventListener('keydown', ev => {
+            if (['1', '2', '3', '4', '5'].includes(ev.key) && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'SELECT') {
+                ev.preventDefault();
+                const viewsMap = { '1': 'dashboard', '2': 'clientes', '3': 'remitos', '4': 'ventas', '5': 'finanzas' };
+                switchView(viewsMap[ev.key]);
+                return;
+            }
+
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                closeClientDrawer();
+                $('modalFiadoExpress').classList.remove('open');
+                $('formFiadoExpress').reset();
+                return;
+            }
+
+            const activeView = document.querySelector('.view.active');
+            if (!activeView) return;
+
+            const rows = Array.from(activeView.querySelectorAll('tbody tr.clickable'));
+            if (!rows.length) return;
+
+            if (ev.key === 'ArrowDown') {
+                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') return;
+                ev.preventDefault();
+                activeRowIndex = Math.min(rows.length - 1, activeRowIndex + 1);
+                updateSelectedRow(rows);
+            } else if (ev.key === 'ArrowUp') {
+                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') return;
+                ev.preventDefault();
+                activeRowIndex = Math.max(0, activeRowIndex - 1);
+                updateSelectedRow(rows);
+            } else if (ev.key === 'Enter') {
+                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') return;
+                if (activeRowIndex >= 0 && activeRowIndex < rows.length) {
+                    ev.preventDefault();
+                    const btn = rows[activeRowIndex].querySelector('button');
+                    if (btn) {
+                        btn.click();
+                    } else {
+                        rows[activeRowIndex].click();
+                    }
+                }
+            }
+        });
+
+        document.addEventListener('click', ev => {
+            const tr = ev.target.closest('tr.clickable');
+            if (tr) {
+                const activeView = document.querySelector('.view.active');
+                if (activeView && activeView.contains(tr)) {
+                    const rows = Array.from(activeView.querySelectorAll('tbody tr.clickable'));
+                    activeRowIndex = rows.indexOf(tr);
+                    updateSelectedRow(rows);
+                }
+            }
+        });
+
+        window.addEventListener('load', () => {
+            loadAll();
+            setInterval(loadAll, 10000);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+master_total.db
+carniceria_master.db
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+.pytest_cache/
+*.db-journal
+app.py.bak
