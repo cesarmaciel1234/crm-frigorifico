@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Master Total — CRM Frigorífico</title>
-    <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="docs/icons/icon-180.png">
     <meta name="theme-color" content="#2563eb">
     <style>
         :root { --brand: #2563eb; --bg: #f0f4f8; --card: #fff; --text: #0f172a; --muted: #64748b; }
@@ -18,7 +18,7 @@
         .card { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(15,23,42,.06); border: 1px solid #e2e8f0; }
         .card h2 { font-size: 1rem; margin-bottom: 8px; color: var(--brand); }
         .card p { color: var(--muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 12px; }
-        code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; }
+        code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; word-break: break-all; }
         .btn { display: block; text-align: center; padding: 14px; border-radius: 10px; text-decoration: none; font-weight: 600; margin-top: 10px; }
         .btn-primary { background: var(--brand); color: #fff; }
         .btn-ghost { background: #fff; color: var(--brand); border: 1px solid #cbd5e1; }
@@ -38,26 +38,25 @@
 
         <div class="card">
             <h2>Programa principal</h2>
-            <p>El dashboard ejecutivo (deudas, remitos, clientes, KPIs) es una app <strong>Flask + SQLite</strong>. Ese es el programa de la captura, no esta pagina estatica.</p>
+            <p>El <strong>dashboard ejecutivo</strong> (deudas, remitos, clientes, KPIs) corre con Flask en tu PC o en Render. No es esta pagina web.</p>
             <p><strong>En tu PC:</strong></p>
             <ul>
                 <li><code>pip install -r requirements.txt</code></li>
                 <li><code>python run.py</code></li>
-                <li>Abrí <code>http://127.0.0.1:5005</code></li>
+                <li><code>http://127.0.0.1:5005</code></li>
             </ul>
-            <div class="warn">GitHub Pages no puede correr Flask. Para el panel completo en iPhone necesitas <strong>Render</strong> (HTTPS).</div>
+            <div class="warn">Para el panel completo en iPhone: deploy en <strong>Render.com</strong> (HTTPS) y Agregar a inicio en Safari.</div>
         </div>
 
         <div class="card">
-            <h2>iPhone — panel completo (PWA)</h2>
-            <p>1. Deploy en <a href="https://render.com">Render.com</a> conectando el repo.<br>
-               2. Safari → URL de Render → Compartir → <strong>Agregar a inicio</strong>.</p>
-            <a class="btn btn-primary" href="https://github.com/cesarmaciel1234/crm-frigorifico">Ver repo en GitHub</a>
+            <h2>iPhone — panel completo</h2>
+            <p>Conecta el repo en Render.com. Luego Safari → URL de Render → Compartir → Agregar a inicio.</p>
+            <a class="btn btn-primary" href="https://github.com/cesarmaciel1234/crm-frigorifico">Repo GitHub</a>
         </div>
 
         <div class="card">
-            <h2>POS offline (sin servidor)</h2>
-            <p>Ventas en el telefono 100% offline. Opcional: sincroniza al CRM cuando tengas Render.</p>
+            <h2>POS offline</h2>
+            <p>Ventas en el telefono sin internet (modulo auxiliar).</p>
             <a class="btn btn-ghost" href="docs/pos.html">Abrir POS offline</a>
         </div>
     </div>
