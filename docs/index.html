@@ -4,20 +4,61 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CRM Frigorífico — Master Total</title>
-    <meta http-equiv="refresh" content="0;url=https://crm-frigorifico.onrender.com/">
-    <script>window.location.replace('https://crm-frigorifico.onrender.com/');</script>
     <style>
-        body { font-family: system-ui, sans-serif; background: #f0f4f8; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; text-align: center; }
-        a { color: #2563eb; font-weight: 600; }
-        .box { background: #fff; padding: 32px; border-radius: 16px; max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+        body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .box { background: #1e293b; padding: 28px; border-radius: 16px; max-width: 440px; box-shadow: 0 8px 32px rgba(0,0,0,.35); }
+        h1 { margin: 0 0 6px; font-size: 1.4rem; }
+        .sub { color: #94a3b8; font-size: 0.95rem; margin-bottom: 16px; }
+        .alert { background: #7f1d1d; color: #fecaca; padding: 12px; border-radius: 8px; font-size: 0.88rem; margin-bottom: 16px; line-height: 1.45; }
+        .info { background: #422006; color: #fdba74; padding: 12px; border-radius: 8px; font-size: 0.88rem; margin-bottom: 16px; line-height: 1.45; }
+        a.btn { display: block; margin-top: 10px; padding: 14px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 10px; text-align: center; font-weight: 600; }
+        a.btn.secondary { background: #334155; }
+        code { background: #334155; padding: 2px 6px; border-radius: 4px; }
+        ol { margin: 8px 0 0; padding-left: 20px; color: #cbd5e1; font-size: 0.85rem; }
+        li { margin: 6px 0; }
     </style>
 </head>
 <body>
     <div class="box">
         <h1>Master Total</h1>
-        <p>Redirigiendo al panel ejecutivo...</p>
-        <p><a href="https://crm-frigorifico.onrender.com/">Abrir CRM Frigorífico</a></p>
-        <p style="font-size:0.85rem;color:#64748b;margin-top:16px">En PC local: <code>python run.py</code> → 127.0.0.1:5005</p>
+        <p class="sub">Dashboard ejecutivo (deudas, remitos, CRM, caja)</p>
+
+        <div class="alert">
+            <strong>No es el POS de prueba.</strong> Si ves “POS Carnicería” con ventas pendientes, es una app vieja guardada en el iPhone. Borrala del inicio y limpiá datos de Safari.
+        </div>
+
+        <div class="info">
+            GitHub Pages <strong>no puede</strong> ejecutar Flask ni SQLite. El programa de <code>127.0.0.1:5005</code> solo corre en PC o en un servidor (Render).
+        </div>
+
+        <a class="btn" href="https://crm-frigorifico.onrender.com/">Abrir programa en internet (Render)</a>
+        <a class="btn secondary" href="http://127.0.0.1:5005">PC en red local (con <code>python run.py</code>)</a>
+
+        <p style="font-size:0.85rem;color:#94a3b8;margin-top:18px"><strong>iPhone — quitar versión de prueba:</strong></p>
+        <ol>
+            <li>Mantener ícono → <strong>Eliminar app</strong></li>
+            <li>Ajustes → Safari → Avanzado → Datos de sitios → buscar <code>github.io</code> → Eliminar</li>
+            <li>Desplegar en Render y agregar <em>esa</em> URL al inicio</li>
+        </ol>
     </div>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+                regs.forEach(function (r) { r.unregister(); });
+            });
+        }
+        if (window.caches) {
+            caches.keys().then(function (keys) {
+                keys.forEach(function (k) { caches.delete(k); });
+            });
+        }
+        try {
+            indexedDB.databases().then(function (dbs) {
+                dbs.forEach(function (db) {
+                    if (db.name) indexedDB.deleteDatabase(db.name);
+                });
+            });
+        } catch (e) {}
+    </script>
 </body>
 </html>
