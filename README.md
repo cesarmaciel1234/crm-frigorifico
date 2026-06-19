@@ -1,40 +1,41 @@
 # CRM Frigorífico — Master Total
 
-Panel financiero y POS offline para distribuidoras de carne.
+**Programa principal:** Dashboard ejecutivo (deudas, remitos, clientes, KPIs, balance).
 
-## URLs
+![Dashboard](https://img.shields.io/badge/Stack-Flask%20%2B%20SQLite-blue)
 
-| Entorno | URL | Qué es |
-|---------|-----|--------|
-| **GitHub Pages (PWA iPhone)** | https://cesarmaciel1234.github.io/crm-frigorifico/ | POS offline, sin servidor |
-| **CRM completo (Flask)** | Render / local | Dashboard, deudas, remitos, clientes |
-
-> GitHub Pages **no ejecuta Flask**. Ahí corre solo el **POS offline** (IndexedDB + PWA).
-> El panel CRM completo va en **Render** (`render.yaml`) o `python start_produccion.py` en tu PC.
-
-## Local
+## Correr en tu PC (el programa de la captura)
 
 ```powershell
+cd "C:\Users\cesar\Desktop\deudas pro"
 pip install -r requirements.txt
-python run.py              # desarrollo
-python start_produccion.py # producción
-python -m pytest tests -v  # tests
+python seed_demo.py          # datos de prueba (opcional)
+python run.py                # desarrollo → http://127.0.0.1:5005
 ```
 
-## iPhone — instalar PWA
+Producción local: `python start_produccion.py`
 
-1. Abrí en **Safari**: https://cesarmaciel1234.github.io/crm-frigorifico/
-2. Compartir → **Agregar a inicio**
-3. Usá con o sin internet (ventas se guardan en el teléfono)
+## Qué es cada URL
 
-## Sincronizar ventas al CRM
+| URL | Qué muestra |
+|-----|-------------|
+| **http://127.0.0.1:5005** | Dashboard ejecutivo (programa principal) |
+| **http://127.0.0.1:5005/pos** | POS offline (módulo auxiliar) |
+| **github.io/crm-frigorifico** | Solo landing + POS estático (no Flask) |
+| **Render (HTTPS)** | Dashboard completo en iPhone como PWA |
 
-En `docs/config.js` configurá la URL de tu servidor Render:
+## iPhone — instalar el panel completo
 
-```javascript
-apiBase: 'https://tu-app.onrender.com',
+1. Deploy en [Render.com](https://render.com) con el repo (usa `render.yaml`)
+2. Safari → URL `https://tu-app.onrender.com`
+3. Compartir → **Agregar a inicio**
+
+## Tests
+
+```powershell
+python -m pytest tests -v
 ```
 
-## Repositorio
+## Repo
 
 https://github.com/cesarmaciel1234/crm-frigorifico

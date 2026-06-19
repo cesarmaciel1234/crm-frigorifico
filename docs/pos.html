@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>POS Carnicería — Offline</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="POS Frigo">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+    <link rel="stylesheet" href="pos.css">
+</head>
+<body>
+    <div class="top">
+        <a href="index.html" class="back">← Inicio</a>
+        <span id="netBadge" class="badge on">En línea</span>
+    </div>
+    <div class="card">
+        <h1>POS Carnicería</h1>
+        <p class="sub">100% offline · sincroniza al CRM cuando hay servidor</p>
+        <div id="syncPill" class="sync-pill"></div>
+        <label>Producto</label>
+        <input type="text" id="producto" placeholder="Ej: Bife x 2 kg" autocomplete="off">
+        <label>Monto ($)</label>
+        <input type="number" id="monto" min="0.01" step="0.01" placeholder="0.00">
+        <label>Forma de pago</label>
+        <select id="tipo_pago"><option value="CONTADO">CONTADO</option><option value="FIADO">FIADO</option></select>
+        <button type="button" id="btnGuardar">Guardar venta (offline)</button>
+        <button type="button" class="secondary" id="btnSync">Sincronizar ahora</button>
+    </div>
+    <div class="card"><h1>Ventas locales</h1><ul id="listaVentas"></ul></div>
+    <script src="config.js"></script>
+    <script src="vendor/dexie.min.js"></script>
+    <script src="js/pos-offline.js"></script>
+    <script src="pos-app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+:root { --brand: #2563eb; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --muted: #94a3b8; --ok: #10b981; --warn: #f59e0b; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 16px; }
+.top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.badge { font-size: 0.75rem; padding: 4px 10px; border-radius: 99px; font-weight: 600; }
+.badge.on { background: rgba(16,185,129,.2); color: var(--ok); }
+.badge.off { background: rgba(245,158,11,.2); color: var(--warn); }
+.card { background: var(--card); border-radius: 14px; padding: 18px; margin-bottom: 14px; border: 1px solid rgba(255,255,255,.06); }
+h1 { font-size: 1.25rem; margin-bottom: 4px; }
+.sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
+label { display: block; font-size: 0.8rem; color: var(--muted); margin: 10px 0 4px; }
+input, select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: #0f172a; color: var(--text); }
+button { width: 100%; padding: 14px; margin-top: 14px; border: none; border-radius: 10px; background: var(--brand); color: #fff; font-weight: 600; cursor: pointer; }
+button.secondary { background: transparent; border: 1px solid rgba(255,255,255,.15); }
+ul { list-style: none; margin-top: 10px; }
+li { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06); display: flex; justify-content: space-between; font-size: 0.9rem; }
+li small { color: var(--muted); }
+.sync-pill { background: rgba(245,158,11,.15); color: var(--warn); padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; margin-top: 8px; display: none; }
+.back { color: var(--brand); text-decoration: none; font-size: 0.85rem; }

@@ -4,8 +4,11 @@ const CACHE_NAME = 'crm-frigorifico-pages-v1';
 const ASSETS = [
   BASE + '/',
   BASE + '/index.html',
+  BASE + '/pos.html',
   BASE + '/manifest.json',
   BASE + '/config.js',
+  BASE + '/pos.css',
+  BASE + '/pos-app.js',
   BASE + '/js/pos-offline.js',
   BASE + '/vendor/dexie.min.js',
   BASE + '/icons/icon-180.png',

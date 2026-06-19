@@ -2,144 +2,64 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>POS Carnicería — CRM Frigorífico</title>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#2563eb">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="POS Frigo">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Total — CRM Frigorífico</title>
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+    <meta name="theme-color" content="#2563eb">
     <style>
-        :root { --brand: #2563eb; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --muted: #94a3b8; --ok: #10b981; --warn: #f59e0b; }
+        :root { --brand: #2563eb; --bg: #f0f4f8; --card: #fff; --text: #0f172a; --muted: #64748b; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 16px; padding-bottom: 80px; }
-        .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-        .badge { font-size: 0.75rem; padding: 4px 10px; border-radius: 99px; font-weight: 600; }
-        .badge.on { background: rgba(16,185,129,.2); color: var(--ok); }
-        .badge.off { background: rgba(245,158,11,.2); color: var(--warn); }
-        .card { background: var(--card); border-radius: 14px; padding: 18px; margin-bottom: 14px; border: 1px solid rgba(255,255,255,.06); }
-        h1 { font-size: 1.25rem; margin-bottom: 4px; }
-        .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
-        label { display: block; font-size: 0.8rem; color: var(--muted); margin: 10px 0 4px; }
-        input, select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: #0f172a; color: var(--text); font-size: 1rem; }
-        button { width: 100%; padding: 14px; margin-top: 14px; border: none; border-radius: 10px; background: var(--brand); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }
-        button.secondary { background: transparent; border: 1px solid rgba(255,255,255,.15); margin-top: 8px; }
-        ul { list-style: none; margin-top: 10px; }
-        li { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06); display: flex; justify-content: space-between; gap: 8px; font-size: 0.9rem; }
-        li small { color: var(--muted); }
-        .sync-pill { background: rgba(245,158,11,.15); color: var(--warn); padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; margin-top: 8px; display: none; }
-        .hint { font-size: 0.75rem; color: var(--muted); margin-top: 12px; line-height: 1.4; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px 16px; }
+        .wrap { max-width: 520px; margin: 0 auto; }
+        .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+        .mark { width: 48px; height: 48px; background: var(--brand); color: #fff; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 800; }
+        h1 { font-size: 1.5rem; }
+        .tag { color: var(--muted); font-size: 0.85rem; }
+        .card { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(15,23,42,.06); border: 1px solid #e2e8f0; }
+        .card h2 { font-size: 1rem; margin-bottom: 8px; color: var(--brand); }
+        .card p { color: var(--muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 12px; }
+        code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; }
+        .btn { display: block; text-align: center; padding: 14px; border-radius: 10px; text-decoration: none; font-weight: 600; margin-top: 10px; }
+        .btn-primary { background: var(--brand); color: #fff; }
+        .btn-ghost { background: #fff; color: var(--brand); border: 1px solid #cbd5e1; }
+        ul { margin: 8px 0 0 18px; color: var(--muted); font-size: 0.88rem; line-height: 1.6; }
+        .warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 12px; border-radius: 10px; font-size: 0.85rem; margin-top: 8px; }
     </style>
 </head>
 <body>
-    <div class="top">
-        <strong style="font-size:0.9rem">CRM Frigorífico</strong>
-        <span id="netBadge" class="badge on">En línea</span>
+    <div class="wrap">
+        <div class="logo">
+            <div class="mark">MT</div>
+            <div>
+                <h1>Master Total</h1>
+                <div class="tag">Financial Command · Distribuidora de carne</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Programa principal</h2>
+            <p>El dashboard ejecutivo (deudas, remitos, clientes, KPIs) es una app <strong>Flask + SQLite</strong>. Ese es el programa de la captura, no esta pagina estatica.</p>
+            <p><strong>En tu PC:</strong></p>
+            <ul>
+                <li><code>pip install -r requirements.txt</code></li>
+                <li><code>python run.py</code></li>
+                <li>Abrí <code>http://127.0.0.1:5005</code></li>
+            </ul>
+            <div class="warn">GitHub Pages no puede correr Flask. Para el panel completo en iPhone necesitas <strong>Render</strong> (HTTPS).</div>
+        </div>
+
+        <div class="card">
+            <h2>iPhone — panel completo (PWA)</h2>
+            <p>1. Deploy en <a href="https://render.com">Render.com</a> conectando el repo.<br>
+               2. Safari → URL de Render → Compartir → <strong>Agregar a inicio</strong>.</p>
+            <a class="btn btn-primary" href="https://github.com/cesarmaciel1234/crm-frigorifico">Ver repo en GitHub</a>
+        </div>
+
+        <div class="card">
+            <h2>POS offline (sin servidor)</h2>
+            <p>Ventas en el telefono 100% offline. Opcional: sincroniza al CRM cuando tengas Render.</p>
+            <a class="btn btn-ghost" href="pos.html">Abrir POS offline</a>
+        </div>
     </div>
-
-    <div class="card">
-        <h1>POS Carnicería</h1>
-        <p class="sub">100% offline en el iPhone · sincroniza cuando hay servidor API</p>
-        <div id="syncPill" class="sync-pill"></div>
-
-        <label>Producto</label>
-        <input type="text" id="producto" placeholder="Ej: Bife de chorizo x 2 kg" autocomplete="off">
-
-        <label>Monto ($)</label>
-        <input type="number" id="monto" min="0.01" step="0.01" placeholder="0.00">
-
-        <label>Forma de pago</label>
-        <select id="tipo_pago">
-            <option value="CONTADO">CONTADO</option>
-            <option value="FIADO">FIADO</option>
-        </select>
-
-        <button type="button" id="btnGuardar">Guardar venta (offline)</button>
-        <button type="button" class="secondary" id="btnSync">Sincronizar ahora</button>
-        <p class="hint">iPhone: Safari → Compartir → Agregar a inicio. Abrí esta página una vez con internet para precargar.</p>
-    </div>
-
-    <div class="card">
-        <h1>Ventas locales</h1>
-        <ul id="listaVentas"></ul>
-    </div>
-
-    <script src="config.js"></script>
-    <script src="vendor/dexie.min.js"></script>
-    <script src="js/pos-offline.js"></script>
-    <script>
-        const $ = (id) => document.getElementById(id);
-        const fmt = (n) => Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 });
-        const BASE = (window.CRM_CONFIG && window.CRM_CONFIG.base) || '';
-
-        function setNetBadge() {
-            const on = navigator.onLine;
-            $('netBadge').textContent = on ? 'En línea' : 'Sin red';
-            $('netBadge').className = 'badge ' + (on ? 'on' : 'off');
-        }
-
-        async function renderVentas() {
-            const ventas = await PosOffline.listarVentasLocales();
-            const pend = await PosOffline.contarPendientesSync();
-            const pill = $('syncPill');
-            if (pend > 0) {
-                pill.style.display = 'block';
-                pill.textContent = pend + ' venta(s) pendiente(s) de subir al servidor';
-            } else {
-                pill.style.display = 'none';
-            }
-            $('listaVentas').innerHTML = ventas.length
-                ? ventas.map((v) => `
-                    <li>
-                        <span>${v.producto}<br><small>${v.tipo_pago} · ${v.synced ? 'sync' : 'local'}</small></span>
-                        <strong>$${fmt(v.monto)}</strong>
-                    </li>`).join('')
-                : '<li><small>Sin ventas guardadas</small></li>';
-        }
-
-        $('btnGuardar').addEventListener('click', async () => {
-            const producto = $('producto').value.trim();
-            const monto = $('monto').value;
-            if (!producto || !monto || Number(monto) <= 0) {
-                alert('Producto y monto obligatorios');
-                return;
-            }
-            await PosOffline.guardarVentaOffline({ producto, monto, tipo_pago: $('tipo_pago').value });
-            $('producto').value = '';
-            $('monto').value = '';
-            await renderVentas();
-        });
-
-        $('btnSync').addEventListener('click', async () => {
-            try {
-                const r = await PosOffline.sincronizarVentas();
-                if (r.reason === 'offline') {
-                    alert('Sin conexion. Las ventas quedan en el telefono.');
-                    return;
-                }
-                if (!(window.CRM_CONFIG && window.CRM_CONFIG.apiBase)) {
-                    alert('Configura apiBase en config.js (URL de Render) para sincronizar al CRM.');
-                    return;
-                }
-                alert('Sincronizado: ' + (r.synced || 0) + ' venta(s)');
-                await renderVentas();
-            } catch (e) {
-                alert(e.message || 'Error al sincronizar');
-            }
-        });
-
-        window.addEventListener('online', async () => {
-            setNetBadge();
-            try { await PosOffline.sincronizarVentas(); await renderVentas(); } catch (_) {}
-        });
-        window.addEventListener('offline', setNetBadge);
-        setNetBadge();
-        renderVentas();
-
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register(BASE + '/sw.js', { scope: BASE + '/' });
-        }
-    </script>
 </body>
 </html>
