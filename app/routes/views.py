@@ -7,6 +7,10 @@ views_bp = Blueprint('views', __name__)
 def index():
     return render_template("terminal.html")
 
+@views_bp.route("/pos")
+def pos():
+    return render_template("pos.html")
+
 @views_bp.route("/manifest.json")
 def serve_manifest():
     return send_from_directory(os.path.join(current_app.root_path, 'static'), 'manifest.json', mimetype='application/json')

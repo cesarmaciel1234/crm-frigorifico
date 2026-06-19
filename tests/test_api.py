@@ -104,3 +104,21 @@ class TestAPI:
     def test_manifest_y_sw(self, client):
         assert client.get("/manifest.json").status_code == 200
         assert client.get("/sw.js").status_code == 200
+
+    def test_pos_offline_page(self, client):
+        r = client.get("/pos")
+        assert r.status_code == 200
+        assert b"POS Carnicer" in r.data
+        assert b"dexie.min.js" in r.data
+
+    def test_ventas_mostrador_sync(self, client):
+        r = client.post(
+            "/api/ventas_mostrador/sync",
+            json={
+                "ventas": [
+                    {"offline_id": 1, "producto": "Bife", "monto": 15000, "tipo_pago": "CONTADO"}
+                ]
+            },
+        )
+        assert r.status_code == 201
+        assert r.get_json()["count"] == 1

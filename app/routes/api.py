@@ -15,6 +15,7 @@ from app.services.remitos import list_remitos, marcar_remito_pagado
 from app.services.bancos import list_bancos
 from app.services.bulk import registrar_lote_bulk, list_bulk_lots, fraccionar_lote_fifo
 from app.services.clientes import list_clientes, registrar_cliente, get_cliente_detalle, buscar_o_crear_cliente, recalcular_saldo_cliente, marcar_cliente_incobrable, list_perdidas_acumuladas
+from app.services.ventas_mostrador import list_ventas_mostrador, sync_ventas_offline
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -381,3 +382,19 @@ def api_cliente_incobrable_endpoint(cid: int):
 @api_bp.route("/perdidas", methods=["GET"])
 def api_perdidas_endpoint():
     return jsonify(list_perdidas_acumuladas())
+
+@api_bp.route("/ventas_mostrador", methods=["GET"])
+def api_ventas_mostrador_list():
+    return jsonify(list_ventas_mostrador())
+
+@api_bp.route("/ventas_mostrador/sync", methods=["POST"])
+def api_ventas_mostrador_sync():
+    d = request.get_json(silent=True) or {}
+    ventas = d.get("ventas")
+    if not isinstance(ventas, list) or not ventas:
+        return jsonify({"error": "ventas: lista requerida"}), 400
+    try:
+        synced_ids = sync_ventas_offline(ventas)
+        return jsonify({"ok": True, "synced_ids": synced_ids, "count": len(synced_ids)}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400

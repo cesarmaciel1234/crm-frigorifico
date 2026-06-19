@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>POS Carnicería — Offline</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="POS Frigo">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/icon-180.png">
+    <style>
+        :root { --brand: #2563eb; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --muted: #94a3b8; --ok: #10b981; --warn: #f59e0b; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 16px; padding-bottom: 80px; }
+        .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .badge { font-size: 0.75rem; padding: 4px 10px; border-radius: 99px; font-weight: 600; }
+        .badge.on { background: rgba(16,185,129,.2); color: var(--ok); }
+        .badge.off { background: rgba(245,158,11,.2); color: var(--warn); }
+        .card { background: var(--card); border-radius: 14px; padding: 18px; margin-bottom: 14px; border: 1px solid rgba(255,255,255,.06); }
+        h1 { font-size: 1.25rem; margin-bottom: 4px; }
+        .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 14px; }
+        label { display: block; font-size: 0.8rem; color: var(--muted); margin: 10px 0 4px; }
+        input, select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: #0f172a; color: var(--text); font-size: 1rem; }
+        button { width: 100%; padding: 14px; margin-top: 14px; border: none; border-radius: 10px; background: var(--brand); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }
+        button.secondary { background: transparent; border: 1px solid rgba(255,255,255,.15); margin-top: 8px; }
+        ul { list-style: none; margin-top: 10px; }
+        li { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06); display: flex; justify-content: space-between; gap: 8px; font-size: 0.9rem; }
+        li small { color: var(--muted); }
+        .sync-pill { background: rgba(245,158,11,.15); color: var(--warn); padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; margin-top: 8px; display: none; }
+        a.back { color: var(--brand); text-decoration: none; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="top">
+        <a class="back" href="/">← Panel CRM</a>
+        <span id="netBadge" class="badge on">En línea</span>
+    </div>
+
+    <div class="card">
+        <h1>POS Carnicería</h1>
+        <p class="sub">Venta local 100% offline · sincroniza al volver internet</p>
+        <div id="syncPill" class="sync-pill"></div>
+
+        <label>Producto</label>
+        <input type="text" id="producto" placeholder="Ej: Bife de chorizo x 2 kg" autocomplete="off">
+
+        <label>Monto ($)</label>
+        <input type="number" id="monto" min="0.01" step="0.01" placeholder="0.00">
+
+        <label>Forma de pago</label>
+        <select id="tipo_pago">
+            <option value="CONTADO">CONTADO</option>
+            <option value="FIADO">FIADO</option>
+        </select>
+
+        <button type="button" id="btnGuardar">Guardar venta (offline)</button>
+        <button type="button" class="secondary" id="btnSync">Sincronizar ahora</button>
+    </div>
+
+    <div class="card">
+        <h1>Ventas locales</h1>
+        <ul id="listaVentas"></ul>
+    </div>
+
+    <script src="/static/vendor/dexie.min.js"></script>
+    <script src="/static/js/pos-offline.js"></script>
+    <script>
+        const $ = (id) => document.getElementById(id);
+        const fmt = (n) => Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 });
+
+        function setNetBadge() {
+            const on = navigator.onLine;
+            $('netBadge').textContent = on ? 'En línea' : 'Sin red';
+            $('netBadge').className = 'badge ' + (on ? 'on' : 'off');
+        }
+
+        async function renderVentas() {
+            const ventas = await PosOffline.listarVentasLocales();
+            const pend = await PosOffline.contarPendientesSync();
+            const pill = $('syncPill');
+            if (pend > 0) {
+                pill.style.display = 'block';
+                pill.textContent = pend + ' venta(s) pendiente(s) de subir al servidor';
+            } else {
+                pill.style.display = 'none';
+            }
+            $('listaVentas').innerHTML = ventas.length
+                ? ventas.map((v) => `
+                    <li>
+                        <span>${v.producto}<br><small>${v.tipo_pago} · ${v.synced ? '✓ sync' : '⏳ local'}</small></span>
+                        <strong>$${fmt(v.monto)}</strong>
+                    </li>`).join('')
+                : '<li><small>Sin ventas guardadas</small></li>';
+        }
+
+        $('btnGuardar').addEventListener('click', async () => {
+            const producto = $('producto').value.trim();
+            const monto = $('monto').value;
+            if (!producto || !monto || Number(monto) <= 0) {
+                alert('Producto y monto obligatorios');
+                return;
+            }
+            await PosOffline.guardarVentaOffline({
+                producto,
+                monto,
+                tipo_pago: $('tipo_pago').value,
+            });
+            $('producto').value = '';
+            $('monto').value = '';
+            await renderVentas();
+        });
+
+        $('btnSync').addEventListener('click', async () => {
+            try {
+                const r = await PosOffline.sincronizarVentas();
+                if (r.reason === 'offline') {
+                    alert('Sin conexión. Las ventas quedan guardadas en el teléfono.');
+                    return;
+                }
+                alert('Sincronizado: ' + (r.synced || 0) + ' venta(s)');
+                await renderVentas();
+            } catch (e) {
+                alert(e.message || 'Error al sincronizar');
+            }
+        });
+
+        window.addEventListener('online', async () => {
+            setNetBadge();
+            try { await PosOffline.sincronizarVentas(); await renderVentas(); } catch (_) {}
+        });
+        window.addEventListener('offline', setNetBadge);
+        setNetBadge();
+        renderVentas();
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
+    </script>
+</body>
+</html>

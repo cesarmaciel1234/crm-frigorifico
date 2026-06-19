@@ -134,6 +134,26 @@ def _run_migrations(conn):
         """
     )
 
+    # Migración ventas mostrador (POS offline sync)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ventas_mostrador (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER,
+            producto TEXT NOT NULL DEFAULT '',
+            monto REAL NOT NULL CHECK(monto > 0),
+            tipo_pago TEXT NOT NULL CHECK(tipo_pago IN ('CONTADO', 'FIADO')) DEFAULT 'CONTADO',
+            fecha TEXT NOT NULL DEFAULT (date('now', 'localtime')),
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+        );
+        """
+    )
+    if _table_exists(conn, "ventas_mostrador"):
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(ventas_mostrador)")}
+        if "producto" not in cols:
+            conn.execute("ALTER TABLE ventas_mostrador ADD COLUMN producto TEXT NOT NULL DEFAULT ''")
+
 def _migrate_pagar_constraint(conn):
     """Permite pagar = recibido (cheques sin interés)."""
     row = conn.execute(
