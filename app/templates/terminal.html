@@ -51,40 +51,55 @@
         }
         .terminal-footer {
             position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 40px;
-            background: rgba(0, 0, 0, 0.95);
-            border-top: 1.5px solid var(--brand);
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 30px;
             display: flex;
-            justify-content: space-around;
+            justify-content: space-between;
             align-items: center;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 0.85rem;
+            font-family: 'Inter', sans-serif;
             z-index: 1000;
-            box-shadow: 0 -4px 15px rgba(37, 99, 235, 0.15);
-            padding: 0 20px;
-            color: var(--text-primary);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            padding: 8px 24px;
+            gap: 24px;
         }
         .footer-segment {
             display: flex;
-            gap: 8px;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
         }
         .footer-segment .lbl {
-            color: var(--text-muted);
-            font-weight: bold;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
         }
+        .footer-segment span[id] {
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .footer-segment .val-danger { color: var(--danger); }
+        .footer-segment .val-warning { color: var(--warning); }
+        .footer-segment .val-success { color: var(--success); }
         
         @media (max-width: 768px) {
             .terminal-footer {
-                padding: 0 5px;
-                font-size: 0.65rem;
-                justify-content: space-between;
+                bottom: 15px;
+                padding: 8px 16px;
+                gap: 16px;
+                width: 90%;
+                max-width: 400px;
             }
-            .footer-segment {
-                gap: 3px;
-                white-space: nowrap;
+            .footer-segment span[id] {
+                font-size: 1rem;
             }
         }
         .content {
@@ -2114,9 +2129,18 @@
         setInterval(loadAll, 60000);
     </script>
     <footer class="terminal-footer">
-        <div class="footer-segment"><span class="lbl">[SANGRE]</span> <span id="footSangria" style="color:var(--danger)">—</span></div>
-        <div class="footer-segment"><span class="lbl">[DEUDA]</span> <span id="footDeuda" style="color:var(--warning)">—</span></div>
-        <div class="footer-segment"><span class="lbl">[CAPITAL]</span> <span id="footCapital" style="color:var(--success)">—</span></div>
+        <div class="footer-segment">
+            <span id="footSangria" class="val-danger">—</span>
+            <span class="lbl">SANGRE</span>
+        </div>
+        <div class="footer-segment">
+            <span id="footDeuda" class="val-warning">—</span>
+            <span class="lbl">DEUDA</span>
+        </div>
+        <div class="footer-segment">
+            <span id="footCapital" class="val-success">—</span>
+            <span class="lbl">CAPITAL</span>
+        </div>
     </footer>
 </body>
 </html>
