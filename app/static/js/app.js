@@ -354,7 +354,7 @@ const $ = id => document.getElementById(id);
                 if ($('barSangriaSub')) $('barSangriaSub').textContent = `Int: $${fmt(mf.int_diario)}`;
                 
                 if ($('barDeudaValue')) $('barDeudaValue').textContent = '$' + fmt(mf.deuda);
-                if ($('barDeudaSub')) $('barDeudaSub').textContent = `Pasivo total`;
+                if ($('barDeudaSub')) $('barDeudaSub').textContent = `Int. $${fmt(data.totales?.intereses_totales || 0)}`;
                 
                 if ($('barCapitalValue')) $('barCapitalValue').textContent = '$' + fmt(mf.capital);
                 if ($('barCapitalTrend')) {
