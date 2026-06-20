@@ -607,6 +607,7 @@
         const $ = id => document.getElementById(id);
 
         // --- OFFLINE SYNC ENGINE (Dexie) ---
+        const MODO_PRUEBA = true; // Cambiar a false para enviar datos a la nube
         const db = new Dexie('CarniceriaContableDB');
         db.version(1).stores({
             transacciones: '++id, uuid, tipo, monto, fecha, status, updated_at'
@@ -639,12 +640,22 @@
             let syncCount = 0;
             for (const item of pendientes) {
                 try {
-                    const response = await fetch('/api/operaciones', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(item)
-                    });
-                    if (response.ok) {
+                    let responseOk = false;
+                    
+                    if (MODO_PRUEBA) {
+                        console.log("[MODO PRUEBA] Simulación de envío a la nube:", item.uuid);
+                        await new Promise(r => setTimeout(r, 300));
+                        responseOk = true;
+                    } else {
+                        const response = await fetch('/api/operaciones', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(item)
+                        });
+                        responseOk = response.ok;
+                    }
+
+                    if (responseOk) {
                         await db.transacciones.update(item.id, { status: 1 });
                         console.log("Sincronizado con éxito:", item.uuid);
                         syncCount++;
