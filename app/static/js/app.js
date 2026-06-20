@@ -356,9 +356,10 @@ const $ = id => document.getElementById(id);
                 if ($('barDeudaValue')) $('barDeudaValue').textContent = '$' + fmt(mf.deuda);
                 if ($('barDeudaSub')) $('barDeudaSub').textContent = `Int. $${fmt(data.totales?.intereses_totales || 0)}`;
                 
-                if ($('barCapitalValue')) $('barCapitalValue').textContent = '$' + fmt(mf.capital);
+                const capitalSign = mf.capital > 0 ? '+' : '';
+                if ($('barCapitalValue')) $('barCapitalValue').textContent = '$' + capitalSign + fmt(mf.capital);
                 if ($('barCapitalTrend')) {
-                    $('barCapitalTrend').textContent = mf.tendencia === 'up' ? '+' : '-';
+                    $('barCapitalTrend').textContent = mf.tendencia === 'up' ? '▲' : '▼';
                     $('barCapitalTrend').className = 'trend ' + mf.tendencia;
                 }
             }
