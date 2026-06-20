@@ -45,11 +45,6 @@ def api_dashboard():
     
     vencidos = [h for h in historial if h.get("vencido")]
     
-    # Lógica de cálculo solicitada por el usuario
-    capital_disponible = estrategia.get("activo", {}).get("capital_neto", 0)
-    cubre = estrategia.get("activo", {}).get("activo_pendiente", 0) >= estrategia.get("activo", {}).get("deuda_real", 0)
-    tendencia_capital = 'up' if cubre else 'down'
-    
     sangre_diaria = 0
     interes_diario = 0
     deuda_total = 0
@@ -65,6 +60,12 @@ def api_dashboard():
         interes_diario += interes / dias
         deuda_total += (monto + interes)
         interes_acumulado += interes
+
+    # Lógica de cálculo solicitada por el usuario
+    # Al capital neto (que restaba la deuda total) le devolvemos (descontamos) el interés acumulado para que sea puro capital
+    capital_disponible = estrategia.get("activo", {}).get("capital_neto", 0) + interes_acumulado
+    cubre = estrategia.get("activo", {}).get("activo_pendiente", 0) >= (estrategia.get("activo", {}).get("deuda_real", 0) - interes_acumulado)
+    tendencia_capital = 'up' if cubre else 'down'
     
     metricas_flotantes = {
         "sangre": sangre_diaria,
