@@ -23,9 +23,14 @@ class PostgresCursorWrapper:
             match = re.search(r"PRAGMA table_info\((.+?)\)", query)
             if match:
                 table = match.group(1).strip("'\"")
-                query = f"SELECT column_name as name FROM information_schema.columns WHERE table_name = '{table}'"
-        elif query.strip().upper().startswith("SELECT 1 FROM SQLITE_MASTER WHERE TYPE='TABLE'"):
-            query = "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=%s"
+                # PRAGMA format: (cid, name, type, notnull, dflt_value, pk)
+                query = f"SELECT ordinal_position as cid, column_name as name, data_type as type FROM information_schema.columns WHERE table_name = '{table}'"
+        elif "sqlite_master" in query.lower():
+            if "type='table' AND name=" in query:
+                query = "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=%s"
+            else:
+                # Mock sqlite_master check for _migrate_pagar_constraint to return safely
+                query = "SELECT '' as sql FROM information_schema.tables LIMIT 1"
 
         is_insert = query.strip().upper().startswith("INSERT")
         if is_insert and "RETURNING" not in query.upper():
@@ -43,6 +48,7 @@ class PostgresCursorWrapper:
         
     def fetchone(self): return self.cursor.fetchone()
     def fetchall(self): return self.cursor.fetchall()
+    def __iter__(self): return iter(self.cursor.fetchall())
     
     @property
     def lastrowid(self): return self._lastrowid
@@ -55,6 +61,7 @@ class PostgresConnWrapper:
         cur.execute(query, vars)
         return cur
     def executescript(self, sql):
+        sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
         sql = sql.replace("AUTOINCREMENT", "SERIAL")
         sql = sql.replace("datetime('now', 'localtime')", "CURRENT_TIMESTAMP")
         sql = sql.replace("date('now', 'localtime')", "CURRENT_DATE")
