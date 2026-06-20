@@ -88,8 +88,9 @@ const $ = id => document.getElementById(id);
             return { label: 'Pendiente', badgeClass: 'badge-danger', cobrable: true };
         }
 
-        let data = { enemigos: [], remitos: [], estrategia: {}, bancos: [], historial: [], historialPagos: [], bulk: [], clientes: [] };
+        let data = { enemigos: [], remitos: [], estrategia: {}, bancos: [], historial: [], historialPagos: [], bulk: [], clientes: [], auditoria: [] };
         let selectedDeuda = null;
+        let selectedAuditId = null;
         let histPagosFiltro = '';
         let activeRowIndex = -1;
 
@@ -99,7 +100,8 @@ const $ = id => document.getElementById(id);
             remitos: ['Remitos de venta', 'Historial de ventas y márgenes', 'Ventas'],
             clientes: ['CRM de Clientes', 'Gestión de cuentas corrientes y créditos', 'Clientes'],
             registro: ['Nuevo registro', 'Alta de deudas, remitos y entidades', 'Registro'],
-            'historial-pagos': ['Historial de pagos', 'Ledger de movimientos por cuota', 'Pagos']
+            'historial-pagos': ['Historial de pagos', 'Ledger de movimientos por cuota', 'Pagos'],
+            auditoria: ['Auditoría', 'Historial completo de acciones', 'Historial']
         };
 
         function setLoading(on) {
@@ -230,6 +232,7 @@ const $ = id => document.getElementById(id);
             const esTarjeta = tipo === 'tarjeta';
             const esCheque = tipo === 'cheque';
             const esProveedor = tipo === 'proveedor';
+            const esPrestamo = tipo === 'prestamo';
             const form = $('formDeuda');
 
             ['fldCierre', 'fldCuotas', 'hintTarjeta'].forEach(id => {
@@ -238,33 +241,36 @@ const $ = id => document.getElementById(id);
             ['fldMonto', 'hintCheque'].forEach(id => {
                 $(id).classList.toggle('field-hidden', !esCheque);
             });
-            ['fldKg', 'fldPrecioKg', 'fldPlazoDias', 'fldProvTotal', 'hintProveedor'].forEach(id => {
+            ['fldKg', 'fldPrecioKg', 'fldProvTotal', 'hintProveedor'].forEach(id => {
                 $(id).classList.toggle('field-hidden', !esProveedor);
             });
+            $('hintPrestamo').classList.toggle('field-hidden', !esPrestamo);
+            $('fldPlazoDias').classList.toggle('field-hidden', !(esProveedor || esPrestamo));
             $('fldVencimiento').classList.toggle('field-hidden', !(esTarjeta || esCheque));
-            $('fldRecibido').classList.toggle('field-hidden', esCheque || esProveedor);
-            $('fldPagar').classList.toggle('field-hidden', esCheque);
-            $('fldMeses').classList.toggle('field-hidden', esTarjeta || esCheque || esProveedor);
+            $('fldRecibido').classList.toggle('field-hidden', esCheque || esProveedor || esPrestamo);
+            $('fldPagar').classList.toggle('field-hidden', esCheque || esPrestamo);
+            $('fldMeses').classList.toggle('field-hidden', esTarjeta || esCheque || esProveedor || esPrestamo);
 
             if (!esCheque) {
                 $('lblRecibido').textContent = esTarjeta ? 'Resumen / consumo ($)' : 'Monto recibido ($)';
-                $('lblPagar').textContent = esTarjeta ? 'Total a pagar ($)' : (esProveedor ? 'Total a pagar ($) — opcional si hay interés' : 'Monto a pagar ($)');
+                $('lblPagar').textContent = esTarjeta ? 'Total a pagar ($)' : (esProveedor ? 'Total a pagar ($) — opcional si hay interés' : 'Monto a devolver ($)');
             }
 
             form.monto.required = esCheque;
-            form.recibido.required = !esCheque && !esProveedor;
-            form.pagar.required = !esCheque && !esTarjeta && !esProveedor;
+            form.recibido.required = !esCheque && !esProveedor && !esPrestamo;
+            form.pagar.required = !esCheque && !esTarjeta && !esProveedor && !esPrestamo;
             form.fecha_cierre.required = esTarjeta;
             form.fecha_vencimiento.required = esTarjeta || esCheque;
             form.cuotas.required = esTarjeta;
-            form.meses.required = !esTarjeta && !esCheque && !esProveedor;
+            form.meses.required = !esTarjeta && !esCheque && !esProveedor && !esPrestamo;
             if (form.kg) form.kg.required = esProveedor;
             if (form.precio_kg) form.precio_kg.required = esProveedor;
-            if (form.plazo_dias) form.plazo_dias.required = esProveedor;
+            if (form.plazo_dias) form.plazo_dias.required = esProveedor || esPrestamo;
 
             if (esTarjeta) form.meses.value = '';
             if (esCheque) { form.recibido.value = ''; form.pagar.value = ''; form.meses.value = ''; }
             if (esProveedor) { form.recibido.value = ''; form.meses.value = ''; updateProvTotal(); }
+            if (esPrestamo) { form.meses.value = ''; }
         }
 
         function updateProvTotal() {
@@ -341,39 +347,25 @@ const $ = id => document.getElementById(id);
             const s = data.estrategia.sangria || {};
             const a = data.estrategia.activo || data.estrategia.flujo || data.estrategia.respiracion || {};
             const p = data.estrategia.proyeccion || {};
-            $('kpiSangria').textContent = '$' + fmt(s.sangria_diaria || 0);
-            $('kpiSangriaSub').textContent =
-                `Financiero $${fmt(s.sangria_financiera_diaria || 0)} + Cheques $${fmt(s.sangria_cheques_diaria || 0)}`;
-            $('kpiDeuda').textContent = '$' + fmt(a.deuda_real ?? a.deuda_financiera ?? p.deuda_total ?? 0);
-            let deudaSub = `Capital $${fmt(a.deuda_neta ?? 0)} · Interés $${fmt(a.interes_neto ?? 0)}`;
-            if (a.deuda_comercial > 0) {
-                deudaSub += ` · Proveedor $${fmt(a.deuda_comercial)}`;
+            
+            if ($('barSangriaValue')) {
+                $('barSangriaValue').textContent = '$' + fmt(s.sangria_diaria || 0);
+                $('barSangriaSub').textContent = `Int: $${fmt((s.sangria_financiera_diaria || 0) * 30)}`; // aproximado o lo que aplique
             }
-            $('kpiDeudaSub').textContent = deudaSub;
-            const chipDeuda = $('kpiDeudaChip');
-            const chipActivo = $('kpiActivoChip');
+            if ($('barDeudaValue')) {
+                $('barDeudaValue').textContent = '$' + fmt(a.deuda_real ?? a.deuda_financiera ?? p.deuda_total ?? 0);
+                $('barDeudaSub').textContent = `Int: $${fmt(a.interes_neto ?? 0)}`;
+            }
             const costo = a.activo_costo ?? a.activo_clientes ?? 0;
-            if (a.estado === 'SIN DATOS') {
-                $('kpiActivo').textContent = 'Sin datos';
-                $('kpiActivo').style.color = 'var(--text-tertiary)';
-                $('kpiActivoSub').textContent = 'Costo · Ganancia';
-                if (chipActivo) { chipActivo.textContent = 'Sin ventas'; chipActivo.className = 'kpi-chip neutral'; }
-            } else {
-                $('kpiActivo').textContent = '$' + fmt(a.activo_pendiente || 0);
-                $('kpiActivo').style.color = a.estado === 'OK' ? 'var(--success)' : a.estado === 'PELIGRO' ? 'var(--danger)' : 'var(--text-primary)';
-                $('kpiActivoSub').textContent =
-                    `Costo $${fmt(costo)} · Ganancia $${fmt(a.ganancia_pendiente ?? a.ganancia_acumulada ?? 0)}`;
-                if (chipActivo) {
+
+            if (a.estado !== 'SIN DATOS') {
+                if ($('barCapitalValue')) {
                     const cubre = (a.activo_pendiente || 0) >= (a.deuda_real ?? a.deuda_financiera ?? 0);
-                    chipActivo.textContent = cubre ? 'Cubre deuda real' : 'No cubre deuda real';
-                    chipActivo.className = 'kpi-chip ' + (cubre ? 'ok' : 'bad');
+                    $('barCapitalValue').innerHTML = '$' + fmt(a.activo_pendiente || 0) + 
+                        ' <span class="trend ' + (cubre ? 'up' : 'down') + '">' + (cubre ? '▲' : '▼') + '</span>';
                 }
             }
-            if (chipDeuda && (a.deuda_real ?? a.deuda_financiera ?? 0) > 0) {
-                const cubre = (a.activo_pendiente || 0) >= (a.deuda_real ?? a.deuda_financiera ?? 0);
-                chipDeuda.textContent = cubre ? 'Ventas cubren pasivo real' : 'Pasivo real descubierto';
-                chipDeuda.className = 'kpi-chip ' + (cubre ? 'ok' : 'warn');
-            } else if (chipDeuda) { chipDeuda.textContent = a.deuda_comercial > 0 ? 'Sin deuda real' : ''; }
+
             $('kpiMeta').textContent = fmt(a.stock_kg || 0) + ' kg';
             $('kpiExcedente').textContent = '$' + fmt(a.caja_real || 0);
 
@@ -466,7 +458,9 @@ const $ = id => document.getElementById(id);
             
             document.querySelectorAll('#tblHome .clickable').forEach(tr => {
                 tr.addEventListener('click', () => {
-                    openDeudaModal(parseInt(tr.dataset.id));
+                    const id = parseInt(tr.dataset.id, 10);
+                    const e = data.enemigos.find(x => x.id === id);
+                    if (e) openDrawer(e);
                 });
             });
         }
@@ -591,6 +585,26 @@ const $ = id => document.getElementById(id);
             URL.revokeObjectURL(url);
             toast('CSV exportado');
         }
+
+        function renderAuditoria() {
+            const arr = data.auditoria || [];
+            $('auditoriaCount').textContent = arr.length + ' registros';
+            $('tblAuditoria').innerHTML = arr.length ? arr.map(a => `
+                <tr>
+                    <td>${fmtFecha(a.fecha, true)}</td>
+                    <td><strong>${escapeHTML(a.alias)}</strong><br><small style="color:var(--text-light)">Op ID: ${a.operacion_id}</small></td>
+                    <td><span class="badge ${a.accion === 'ELIMINADO' ? 'badge-danger' : 'badge-success'}">${a.accion}</span></td>
+                    <td class="money">$${fmt(a.monto)}</td>
+                    <td><button class="btn btn-ghost btn-sm" onclick="promptDeleteAuditoria(${a.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button></td>
+                </tr>
+            `).join('') : '<tr><td colspan="5" class="empty-state">No hay registros de auditoría</td></tr>';
+        }
+
+        window.promptDeleteAuditoria = (id) => {
+            selectedAuditId = id;
+            $('inpPasswordAuditoria').value = '';
+            $('modalPasswordAuditoria').classList.add('active');
+        };
 
         function renderHistorialPagos() {
             const rows = getHistorialPagosFiltrados();
@@ -927,13 +941,14 @@ const $ = id => document.getElementById(id);
                 }
 
                 // 2. SYNC: Actualizar desde el servidor en segundo plano
-                const [dash, pagos, bulk, clientes] = await Promise.all([
+                const [dash, pagos, bulk, clientes, auditoriaData] = await Promise.all([
                     api('/api/dashboard'),
                     api('/api/historial-pagos'),
                     api('/api/bulk'),
-                    api('/api/clientes')
+                    api('/api/clientes'),
+                    api('/api/auditoria')
                 ]);
-                const freshData = { ...dash, historialPagos: pagos, bulk: bulk, clientes: clientes };
+                const freshData = { ...dash, historialPagos: pagos, bulk: bulk, clientes: clientes, auditoria: auditoriaData };
                 
                 data = freshData;
                 await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
@@ -972,6 +987,7 @@ const $ = id => document.getElementById(id);
             if (name === 'remitos') renderRemitosFull();
             if (name === 'clientes') renderClientes();
             if (name === 'historial-pagos') renderHistorialPagos();
+            if (name === 'auditoria') renderAuditoria();
             if (name === 'registro') volverMenuRegistro();
             $('sidebar').classList.remove('open');
         }
@@ -985,6 +1001,7 @@ const $ = id => document.getElementById(id);
             const v = document.querySelector('.nav-item.active')?.dataset.view;
             if (v === 'remitos') await renderRemitosFull();
             if (v === 'historial-pagos') renderHistorialPagos();
+            if (v === 'auditoria') renderAuditoria();
             toast('Panel actualizado');
         });
 
@@ -1004,6 +1021,23 @@ const $ = id => document.getElementById(id);
             toast('Obligación eliminada');
             closeDrawer();
             await loadAll();
+        });
+
+        $('btnConfirmDeleteAuditoria')?.addEventListener('click', async () => {
+            const pwd = $('inpPasswordAuditoria').value;
+            if (!pwd) return;
+            try {
+                await api('/api/auditoria/' + selectedAuditId, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pwd })
+                });
+                toast('Registro eliminado permanentemente');
+                $('modalPasswordAuditoria').classList.remove('active');
+                await loadAll();
+            } catch (err) {
+                toast('Contraseña incorrecta o error', true);
+            }
         });
 
         $('btnCancelarPago').addEventListener('click', cerrarModalPago);
@@ -1048,6 +1082,14 @@ const $ = id => document.getElementById(id);
                 delete payload.cuotas;
                 delete payload.recibido;
                 if (!payload.pagar) delete payload.pagar;
+            } else if (payload.tipo === 'prestamo') {
+                delete payload.monto;
+                delete payload.meses;
+                delete payload.fecha_cierre;
+                delete payload.fecha_vencimiento;
+                delete payload.cuotas;
+                delete payload.kg;
+                delete payload.precio_kg;
             } else {
                 delete payload.monto;
                 delete payload.fecha_cierre;
@@ -1059,7 +1101,7 @@ const $ = id => document.getElementById(id);
             }
             const guardado = await registrarTransaccion(payload);
             if (guardado) {
-                toast(payload.tipo === 'proveedor' ? 'Proveedor guardado localmente (sincronizando...)' : 'Operación guardada localmente (sincronizando...)');
+                toast('Datos cargados, en unos instantes lo verás reflejado. Gracias.', false, 4000);
                 ev.target.reset();
                 toggleFormTipo();
                 switchView('home');

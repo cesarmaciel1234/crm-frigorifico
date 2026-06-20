@@ -259,6 +259,20 @@ def _run_migrations(conn):
         );
         """
     )
+    
+    # Migración de auditoria_operaciones
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS auditoria_operaciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operacion_id INTEGER,
+            alias TEXT NOT NULL,
+            accion TEXT NOT NULL CHECK(accion IN ('CREADO', 'PAGADO', 'ELIMINADO')),
+            monto REAL NOT NULL DEFAULT 0,
+            fecha TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+        """
+    )
 
     # Migración ventas mostrador (POS offline sync)
     conn.executescript(

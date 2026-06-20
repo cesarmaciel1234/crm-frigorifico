@@ -89,6 +89,15 @@ CREATE TABLE IF NOT EXISTS remitos_fracciones (
     UNIQUE(remito_id, lote_id)
 );
 
+CREATE TABLE IF NOT EXISTS auditoria_operaciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    operacion_id INTEGER,
+    alias TEXT NOT NULL,
+    accion TEXT NOT NULL CHECK(accion IN ('CREADO', 'PAGADO', 'ELIMINADO')),
+    monto REAL NOT NULL DEFAULT 0,
+    fecha TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_op_alias ON operaciones_financieras(alias);
 CREATE INDEX IF NOT EXISTS idx_op_cfr ON operaciones_financieras(recibido, pagar, meses);
 CREATE INDEX IF NOT EXISTS idx_remitos_fecha ON remitos_carga(fecha);

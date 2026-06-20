@@ -162,9 +162,33 @@ def api_create_op():
 @api_bp.route("/operaciones/<int:op_id>", methods=["DELETE"])
 def api_delete_op(op_id: int):
     with get_db() as conn:
-        n = conn.execute(
-            "DELETE FROM operaciones_financieras WHERE id = ?", (op_id,)
-        ).rowcount
+        row = conn.execute("SELECT alias, recibido FROM operaciones_financieras WHERE id = ?", (op_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "No encontrada"}), 404
+        # Guardar en la bóveda de auditoría
+        conn.execute(
+            "INSERT INTO auditoria_operaciones (operacion_id, alias, accion, monto) VALUES (?, ?, 'ELIMINADO', ?)",
+            (op_id, row["alias"], row["recibido"])
+        )
+        # Limpiar dependencias para no chocar con la base de datos
+        conn.execute("DELETE FROM pagos_cuotas WHERE operacion_id = ?", (op_id,))
+        # Eliminar finalmente
+        conn.execute("DELETE FROM operaciones_financieras WHERE id = ?", (op_id,))
+    return jsonify({"ok": True})
+
+@api_bp.route("/auditoria", methods=["GET"])
+def api_get_auditoria():
+    with get_db() as conn:
+        rows = conn.execute("SELECT id, operacion_id, alias, accion, monto, fecha FROM auditoria_operaciones ORDER BY id DESC").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@api_bp.route("/auditoria/<int:audit_id>", methods=["DELETE"])
+def api_delete_auditoria(audit_id: int):
+    d = request.get_json(silent=True) or {}
+    if d.get("password") != "2094":
+        return jsonify({"error": "Contraseña incorrecta"}), 403
+    with get_db() as conn:
+        n = conn.execute("DELETE FROM auditoria_operaciones WHERE id = ?", (audit_id,)).rowcount
     return jsonify({"ok": True}) if n else (jsonify({"error": "No encontrada"}), 404)
 
 @api_bp.route("/operaciones/<int:op_id>/plan-pago")
