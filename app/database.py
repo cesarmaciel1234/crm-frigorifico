@@ -9,15 +9,20 @@ try:
 except ImportError:
     psycopg2 = None
 
+def is_postgres():
+    return Config.DATABASE_URL and psycopg2
+
 class PostgresCursorWrapper:
     def __init__(self, cursor):
         self.cursor = cursor
         self._lastrowid = None
         
     def execute(self, query, vars=None):
-        query = query.replace("?", "%s")
-        query = query.replace("datetime('now', 'localtime')", "CURRENT_TIMESTAMP")
-        query = query.replace("date('now', 'localtime')", "CURRENT_DATE")
+        if is_postgres():
+            query = query.replace("?", "%s")
+            # En queries, cambiar sqlite datetime por CURRENT_TIMESTAMP (postgres)
+            query = query.replace("datetime('now', 'localtime')", "CURRENT_TIMESTAMP::varchar")
+            query = query.replace("date('now', 'localtime')", "CURRENT_DATE::varchar")
         
         if "PRAGMA table_info" in query:
             match = re.search(r"PRAGMA table_info\((.+?)\)", query)
@@ -67,8 +72,8 @@ class PostgresConnWrapper:
     def executescript(self, sql):
         sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
         sql = sql.replace("AUTOINCREMENT", "SERIAL")
-        sql = sql.replace("datetime('now', 'localtime')", "CURRENT_TIMESTAMP")
-        sql = sql.replace("date('now', 'localtime')", "CURRENT_DATE")
+        sql = sql.replace("datetime('now', 'localtime')", "CURRENT_TIMESTAMP::varchar")
+        sql = sql.replace("date('now', 'localtime')", "CURRENT_DATE::varchar")
         sql = sql.replace("REAL", "DOUBLE PRECISION")
         cur = self.conn.cursor()
         cur.execute(sql)
@@ -256,7 +261,7 @@ def _run_migrations(conn):
     )
 
     # Migración ventas mostrador (POS offline sync)
-    conn.execute(
+    conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS ventas_mostrador (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -271,12 +276,19 @@ def _run_migrations(conn):
         """
     )
     if _table_exists(conn, "ventas_mostrador"):
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(ventas_mostrador)")}
+        if is_pg:
+            cols = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'ventas_mostrador'")}
+        else:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(ventas_mostrador)")}
+            
         if "producto" not in cols:
             conn.execute("ALTER TABLE ventas_mostrador ADD COLUMN producto TEXT NOT NULL DEFAULT ''")
 
 def _migrate_pagar_constraint(conn):
     """Permite pagar = recibido (cheques sin interés)."""
+    if type(conn).__name__ == "PostgresConnWrapper":
+        return  # Schema.sql en Postgres ya tiene el CHECK(pagar >= recibido)
+        
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='operaciones_financieras'"
     ).fetchone()
