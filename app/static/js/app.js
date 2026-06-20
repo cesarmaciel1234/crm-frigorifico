@@ -350,18 +350,22 @@ const $ = id => document.getElementById(id);
             
             if ($('barSangriaValue')) {
                 $('barSangriaValue').textContent = '$' + fmt(s.sangria_diaria || 0);
-                $('barSangriaSub').textContent = `Int: $${fmt((s.sangria_financiera_diaria || 0) * 30)}`; // aproximado o lo que aplique
+                $('barSangriaSub').textContent = `Interés: $${fmt((s.sangria_financiera_diaria || 0) * 30)}`; // aproximado o lo que aplique
             }
             if ($('barDeudaValue')) {
                 $('barDeudaValue').textContent = '$' + fmt(a.deuda_real ?? a.deuda_financiera ?? p.deuda_total ?? 0);
-                $('barDeudaSub').textContent = `Int: $${fmt(a.interes_neto ?? 0)}`;
+                $('barDeudaSub').textContent = `Int. acumulado: $${fmt(a.interes_neto ?? 0)}`;
             }
             const costo = a.activo_costo ?? a.activo_clientes ?? 0;
 
             if ($('barCapitalValue')) {
                 const cubre = (a.activo_pendiente || 0) >= (a.deuda_real ?? a.deuda_financiera ?? 0);
-                $('barCapitalValue').innerHTML = '$' + fmt(a.deuda_neta ?? 0) + 
-                    ' <span class="trend ' + (cubre ? 'up' : 'down') + '" title="Ventas cubren pasivo">' + (cubre ? '▲' : '▼') + '</span>';
+                $('barCapitalValue').textContent = '$' + fmt(a.deuda_neta ?? 0);
+                if ($('barCapitalTrend')) {
+                    $('barCapitalTrend').textContent = cubre ? '▲' : '▼';
+                    $('barCapitalTrend').className = 'trend ' + (cubre ? 'up' : 'down');
+                    $('barCapitalTrend').title = 'Ventas cubren pasivo';
+                }
             }
 
             $('kpiMeta').textContent = fmt(a.stock_kg || 0) + ' kg';

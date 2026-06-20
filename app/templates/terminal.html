@@ -338,7 +338,7 @@
 
             <!-- VIEW: Dashboard -->
             <div class="view" id="view-dashboard">
-                <div class="dashboard-bar" style="margin-bottom: 20px;">
+                <div class="dashboard-bar">
                     <div class="kpi-item alerta-urgente">
                         <span class="label">SANGRE/DÍA</span>
                         <span class="value" id="barSangriaValue">$0</span>
@@ -346,49 +346,58 @@
                     </div>
                     
                     <div class="kpi-item">
-                        <span class="label">DEUDA TOT.</span>
+                        <span class="label">DEUDA TOTAL</span>
                         <span class="value" id="barDeudaValue">$0</span>
                         <span class="sub" id="barDeudaSub">Int: $0</span>
                     </div>
                     
                     <div class="kpi-item">
-                        <span class="label">CAPITAL</span>
-                        <span class="value" id="barCapitalValue">
-                            $0
+                        <span class="label">CAPITAL LIBRE</span>
+                        <div class="value-container">
+                            <span class="value" id="barCapitalValue">$0</span>
                             <span class="trend up" id="barCapitalTrend">▲</span>
-                        </span>
+                        </div>
+                        <span class="sub" id="barCapitalSub">Disponible hoy</span>
                     </div>
                 </div>
 
                 <style>
+                    /* Diseño Flotante tipo WhatsApp */
                     .dashboard-bar {
+                        position: fixed;
+                        bottom: 20px;
+                        left: 20px;
+                        right: 20px;
                         display: flex;
                         justify-content: space-between;
-                        align-items: center;
                         background: #121212;
-                        padding: 10px 15px;
-                        border-radius: 12px;
+                        padding: 12px 20px;
+                        border-radius: 16px;
                         color: white;
-                        font-family: sans-serif;
+                        font-family: 'Segoe UI', sans-serif;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                        border: 1px solid #333;
+                        z-index: 9999;
                     }
-                    .kpi-item { display: flex; flex-direction: column; align-items: center; }
-                    .dashboard-bar .label { font-size: 0.6em; color: #888; letter-spacing: 0.5px; }
-                    .dashboard-bar .value { font-size: 0.9em; font-weight: bold; margin: 2px 0; }
-                    .dashboard-bar .sub { font-size: 0.6em; color: #ff5555; } /* Intereses en rojo sutil */
+                    .kpi-item { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+                    .dashboard-bar .label { font-size: 0.65em; color: #888; letter-spacing: 0.5px; font-weight: bold; margin-bottom: 4px; }
+                    .dashboard-bar .value { font-size: 1em; font-weight: 700; }
+                    .value-container { display: flex; align-items: center; gap: 5px; }
+                    .dashboard-bar .sub { font-size: 0.6em; color: #666; margin-top: 2px; }
                     
                     /* Indicadores Trading */
-                    .trend.up { color: #00ff88; font-size: 0.8em; }
-                    .trend.down { color: #ff3333; font-size: 0.8em; }
+                    .trend { font-size: 0.7em; font-weight: bold; }
+                    .trend.up { color: #00ff88; }
+                    .trend.down { color: #ff3333; }
 
-                    /* Efecto "Asusta Mal" para Sangre */
+                    /* Alerta Sangre (Efecto Latido) */
                     .alerta-urgente .value {
-                        animation: latido 1.5s infinite;
                         color: #ff3333;
+                        animation: latido 1.2s infinite ease-in-out;
                     }
                     @keyframes latido {
-                        0% { transform: scale(1); opacity: 1; }
-                        50% { transform: scale(1.05); opacity: 0.7; }
-                        100% { transform: scale(1); opacity: 1; }
+                        0%, 100% { transform: scale(1); text-shadow: 0 0 0px #ff3333; }
+                        50% { transform: scale(1.05); text-shadow: 0 0 8px #ff3333; }
                     }
                 </style>
 
