@@ -18,7 +18,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/enterprise.css?v=1718854000">
+    <link rel="stylesheet" href="/static/enterprise.css?v=1718854001">
     <style>
         .balance-grid {
             display: grid;
@@ -449,8 +449,34 @@
 
             <!-- VIEW: Registro -->
             <div class="view" id="view-registro">
-                <div class="grid-2">
-                    <div class="card">
+                <!-- MENÚ DE TARJETAS -->
+                <div id="registroMenu" class="cards-menu-grid">
+                    <div class="menu-card" onclick="abrirFormularioRegistro('regDeuda')">
+                        <div class="menu-card-icon">💳</div>
+                        <h3>Deuda / Financiación</h3>
+                        <p>Tarjetas, cheques y pasivos comerciales</p>
+                    </div>
+                    <div class="menu-card" onclick="abrirFormularioRegistro('regRemito')">
+                        <div class="menu-card-icon">🥩</div>
+                        <h3>Remito de Venta</h3>
+                        <p>Registrar ventas a clientes (Activos)</p>
+                    </div>
+                    <div class="menu-card" onclick="abrirFormularioRegistro('regBulk')">
+                        <div class="menu-card-icon">📦</div>
+                        <h3>Compra Lote (Bulk)</h3>
+                        <p>Ingreso de medias reses y costos</p>
+                    </div>
+                    <div class="menu-card" onclick="abrirFormularioRegistro('regBanco')">
+                        <div class="menu-card-icon">🏦</div>
+                        <h3>Entidades Bancarias</h3>
+                        <p>Administrar bancos y tarjetas</p>
+                    </div>
+                </div>
+
+                <!-- SUBVIEW: Deuda -->
+                <div id="regDeuda" class="registro-subview field-hidden">
+                    <button class="btn btn-ghost btn-volver-menu" onclick="volverMenuRegistro()">← Volver a opciones</button>
+                    <div class="card" style="max-width: 600px; margin: 20px auto 0;">
                         <div class="card-head"><h2>Registrar deuda / financiación</h2></div>
                         <div class="card-body padded">
                             <form id="formDeuda">
@@ -477,61 +503,80 @@
 
                                     <div class="field" id="fldMeses"><label>Plazo (meses)</label><input name="meses" type="number" min="1"></div>
                                 </div>
-                                <div style="margin-top:20px"><button type="submit" class="btn btn-primary">Registrar deuda</button></div>
+                                <div style="margin-top:20px"><button type="submit" class="btn btn-primary" style="width:100%">Registrar deuda</button></div>
                             </form>
                         </div>
                     </div>
-                    <div class="card">
+                </div>
+
+                <!-- SUBVIEW: Remito -->
+                <div id="regRemito" class="registro-subview field-hidden">
+                    <button class="btn btn-ghost btn-volver-menu" onclick="volverMenuRegistro()">← Volver a opciones</button>
+                    <div class="card" style="max-width: 600px; margin: 20px auto 0;">
                         <div class="card-head"><h2>Registrar remito de venta</h2></div>
                         <div class="card-body padded">
                             <form id="formRemito">
                                 <div class="form-grid">
                                     <div class="field" style="grid-column:1/-1"><label>Cliente — nombre o código</label><input name="cliente" required maxlength="50" placeholder="Ej: Carnicería López · CLI-0042"></div>
-                                    <div class="tipo-hint" style="grid-column:1/-1">Venta: el <strong>activo</strong> = <strong>costo</strong> + <strong>ganancia</strong> (lo que te debe el cliente). La carne del proveedor es otro circuito: deuda comercial con activo espejo.</div>
+                                    <div class="tipo-hint" style="grid-column:1/-1">Venta: el <strong>activo</strong> = <strong>costo</strong> + <strong>ganancia</strong> (lo que te debe el cliente).</div>
                                     <div class="field"><label>Kilos</label><input name="kg" type="number" step="0.01" min="0.01" required></div>
                                     <div class="field"><label>Plazo cobro (días)</label><input name="plazo" type="number" min="0" value="30"></div>
                                     <div class="field"><label>Costo total logística ($)</label><input name="costo" type="number" step="0.01" min="0" required></div>
                                     <div class="field"><label>Precio venta total ($)</label><input name="venta" type="number" step="0.01" min="0" required></div>
                                 </div>
-                                <div style="margin-top:20px"><button type="submit" class="btn btn-primary">Registrar remito de venta</button></div>
+                                <div style="margin-top:20px"><button type="submit" class="btn btn-primary" style="width:100%">Registrar remito de venta</button></div>
                             </form>
                         </div>
                     </div>
                 </div>
-                <div class="card" style="margin-top:20px">
-                    <div class="card-head"><h2>Entidades bancarias</h2></div>
-                    <div class="card-body padded">
-                        <form id="formBanco" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-                            <div class="field" style="flex:1;min-width:180px"><label>Nombre</label><input name="nombre" required placeholder="Banco / tarjeta"></div>
-                            <div class="field" style="width:160px"><label>Límite ($)</label><input name="limite" type="number" step="0.01" min="0" required></div>
-                            <button type="submit" class="btn btn-ghost">Agregar entidad</button>
-                        </form>
-                        <div class="table-wrap" style="margin-top:20px"><table class="data-table home-table"><thead><tr><th>Entidad</th><th>Límite</th></tr></thead><tbody id="tblBancos"></tbody></table></div>
+
+                <!-- SUBVIEW: Bulk -->
+                <div id="regBulk" class="registro-subview field-hidden">
+                    <button class="btn btn-ghost btn-volver-menu" onclick="volverMenuRegistro()">← Volver a opciones</button>
+                    <div class="card" style="max-width: 800px; margin: 20px auto 0;">
+                        <div class="card-head"><h2>Registrar lote de compra (Bulk)</h2></div>
+                        <div class="card-body padded">
+                            <form id="formBulk" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                                <div class="field" style="width:150px"><label>Fecha</label><input name="fecha" type="date" required id="inpBulkFecha"></div>
+                                <div class="field" style="flex:1;min-width:150px"><label>Kilos totales</label><input name="kg_totales" type="number" step="0.01" min="0.01" required placeholder="Ej: 1000"></div>
+                                <div class="field" style="flex:1;min-width:150px"><label>Costo total bulk ($)</label><input name="costo_total_bulk" type="number" step="0.01" min="0.01" required placeholder="Ej: 850000"></div>
+                                <button type="submit" class="btn btn-primary">Registrar Lote Bulk</button>
+                            </form>
+                            <div class="table-wrap" style="margin-top:20px">
+                                <table class="data-table home-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Lote</th>
+                                            <th>Fecha</th>
+                                            <th>Kilos (Rem.)</th>
+                                            <th>Costo ($)</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tblBulkLots"></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="card" style="margin-top:20px">
-                    <div class="card-head"><h2>Registrar lote de compra (Bulk)</h2></div>
-                    <div class="card-body padded">
-                        <form id="formBulk" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-                            <div class="field" style="width:150px"><label>Fecha</label><input name="fecha" type="date" required id="inpBulkFecha"></div>
-                            <div class="field" style="flex:1;min-width:150px"><label>Kilos totales</label><input name="kg_totales" type="number" step="0.01" min="0.01" required placeholder="Ej: 1000"></div>
-                            <div class="field" style="flex:1;min-width:150px"><label>Costo total bulk ($)</label><input name="costo_total_bulk" type="number" step="0.01" min="0.01" required placeholder="Ej: 850000"></div>
-                            <button type="submit" class="btn btn-ghost">Registrar Lote Bulk</button>
-                        </form>
-                        <div class="table-wrap" style="margin-top:20px">
-                            <table class="data-table home-table">
-                                <thead>
-                                    <tr>
-                                        <th>Lote</th>
-                                        <th>Fecha</th>
-                                        <th>Kilos (Rem.)</th>
-                                        <th>Costo ($)</th>
-                                        <th>Estado</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tblBulkLots"></tbody>
-                            </table>
+                <!-- SUBVIEW: Bancos -->
+                <div id="regBanco" class="registro-subview field-hidden">
+                    <button class="btn btn-ghost btn-volver-menu" onclick="volverMenuRegistro()">← Volver a opciones</button>
+                    <div class="card" style="max-width: 800px; margin: 20px auto 0;">
+                        <div class="card-head"><h2>Entidades bancarias</h2></div>
+                        <div class="card-body padded">
+                            <form id="formBanco" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                                <div class="field" style="flex:1;min-width:180px"><label>Nombre</label><input name="nombre" required placeholder="Banco / tarjeta"></div>
+                                <div class="field" style="width:160px"><label>Límite ($)</label><input name="limite" type="number" step="0.01" min="0" required></div>
+                                <button type="submit" class="btn btn-primary">Agregar entidad</button>
+                            </form>
+                            <div class="table-wrap" style="margin-top:20px">
+                                <table class="data-table home-table">
+                                    <thead><tr><th>Entidad</th><th>Límite</th></tr></thead>
+                                    <tbody id="tblBancos"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1551,6 +1596,22 @@
             }
         }
 
+        function abrirFormularioRegistro(id) {
+            $('registroMenu').classList.add('field-hidden');
+            document.querySelectorAll('.registro-subview').forEach(el => el.classList.add('field-hidden'));
+            $(id).classList.remove('field-hidden');
+            // Small animation via CSS class
+            $(id).classList.add('fade-in');
+            setTimeout(() => $(id).classList.remove('fade-in'), 300);
+        }
+
+        function volverMenuRegistro() {
+            document.querySelectorAll('.registro-subview').forEach(el => el.classList.add('field-hidden'));
+            $('registroMenu').classList.remove('field-hidden');
+            $('registroMenu').classList.add('fade-in');
+            setTimeout(() => $('registroMenu').classList.remove('fade-in'), 300);
+        }
+
         function switchView(name) {
             activeRowIndex = -1;
             document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
@@ -1562,6 +1623,7 @@
             if (name === 'remitos') renderRemitosFull();
             if (name === 'clientes') renderClientes();
             if (name === 'historial-pagos') renderHistorialPagos();
+            if (name === 'registro') volverMenuRegistro();
             $('sidebar').classList.remove('open');
         }
 
