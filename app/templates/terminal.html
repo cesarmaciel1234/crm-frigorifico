@@ -528,10 +528,25 @@
             <div class="view" id="view-registro">
                 <!-- MENÚ DE TARJETAS -->
                 <div id="registroMenu" class="cards-menu-grid">
-                    <div class="menu-card" onclick="abrirFormularioRegistro('regDeuda')">
+                    <div class="menu-card" onclick="abrirFormularioRegistro('regDeuda', 'tarjeta')">
                         <div class="menu-card-icon">💳</div>
-                        <h3>Deuda / Financiación</h3>
-                        <p>Tarjetas, cheques y pasivos comerciales</p>
+                        <h3>Tarjetas de Crédito</h3>
+                        <p>Financiación y saldos pendientes en tarjetas</p>
+                    </div>
+                    <div class="menu-card" onclick="abrirFormularioRegistro('regDeuda', 'cheque')">
+                        <div class="menu-card-icon">🧾</div>
+                        <h3>Cheques</h3>
+                        <p>Cheques emitidos y diferidos a pagar</p>
+                    </div>
+                    <div class="menu-card" onclick="abrirFormularioRegistro('regDeuda', 'prestamo')">
+                        <div class="menu-card-icon">🦈</div>
+                        <h3>Prestamista / Usurero</h3>
+                        <p>Préstamos informales, financieras y acuerdos</p>
+                    </div>
+                    <div class="menu-card" onclick="abrirFormularioRegistro('regDeuda', 'proveedor')">
+                        <div class="menu-card-icon">🏭</div>
+                        <h3>Proveedores</h3>
+                        <p>Cuentas corrientes y pasivos comerciales</p>
                     </div>
                     <div class="menu-card" onclick="abrirFormularioRegistro('regRemito')">
                         <div class="menu-card-icon">🥩</div>
@@ -743,7 +758,7 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/app.js?v=1.6"></script>
+    <script src="/static/js/app.js?v=1.7"></script>
 
 
     <div class="dashboard-bar">

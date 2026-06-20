@@ -971,10 +971,14 @@ const $ = id => document.getElementById(id);
             }
         }
 
-        function abrirFormularioRegistro(id) {
+        function abrirFormularioRegistro(id, tipo = null) {
             $('registroMenu').classList.add('field-hidden');
             document.querySelectorAll('.registro-subview').forEach(el => el.classList.add('field-hidden'));
             $(id).classList.remove('field-hidden');
+            if (tipo) {
+                const selectTipo = $(id).querySelector('select[name="tipo"]');
+                if (selectTipo) selectTipo.value = tipo;
+            }
             // Small animation via CSS class
             $(id).classList.add('fade-in');
             setTimeout(() => $(id).classList.remove('fade-in'), 300);
