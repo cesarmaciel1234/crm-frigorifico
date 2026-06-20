@@ -372,7 +372,7 @@ const $ = id => document.getElementById(id);
                 const signStr = isPos ? '+' : '-';
                 const signClass = isPos ? 'sign-pos' : 'sign-neg';
                 const signSpan = `<span class="${signClass}">${signStr}</span>`;
-                if ($('barCapitalValue')) $('barCapitalValue').innerHTML = '$' + signSpan + fmt(absCapital);
+                if ($('barCapitalValue')) $('barCapitalValue').innerHTML = signSpan + '$' + fmt(absCapital);
                 if ($('barCapitalTrend')) {
                     $('barCapitalTrend').textContent = mf.tendencia === 'up' ? '▲' : '▼';
                     $('barCapitalTrend').className = 'trend ' + mf.tendencia;

@@ -743,7 +743,7 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/app.js?v=1.5"></script>
+    <script src="/static/js/app.js?v=1.6"></script>
 
 
     <div class="dashboard-bar">
@@ -786,6 +786,11 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             border: 1px solid #333;
             z-index: 90;
+        }
+        @media (min-width: 1025px) {
+            .dashboard-bar {
+                left: calc(var(--sidebar-w, 272px) + 20px);
+            }
         }
         .kpi-item { display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .dashboard-bar .label { font-size: 0.65em; color: #888; letter-spacing: 0.5px; font-weight: bold; margin-bottom: 4px; }
