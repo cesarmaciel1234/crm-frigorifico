@@ -797,13 +797,13 @@
         #barCapitalValue { color: #10b981; } /* Verde */
 
         /* Indicadores Trading */
-        .trend { font-size: 1.1em; font-weight: bold; animation: blink-trend 1s infinite; }
-        .trend.up { color: #00ff88; }
-        .trend.down { color: #ff3333; }
+        .trend { font-size: 1.8em; font-weight: 900; animation: blink-trend 1s infinite; line-height: 0.5; margin-left: 2px; }
+        .trend.up { color: #00ff88; text-shadow: 0 0 10px #00ff88, 0 0 20px #00ff88; }
+        .trend.down { color: #ff3333; text-shadow: 0 0 10px #ff3333, 0 0 20px #ff3333; }
 
         @keyframes blink-trend {
-            0%, 100% { opacity: 1; text-shadow: 0 0 8px currentColor; }
-            50% { opacity: 0.4; text-shadow: none; }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.3; transform: scale(1.1); }
         }
 
         /* Alerta Sangre (Efecto Latido) */

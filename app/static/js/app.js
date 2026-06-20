@@ -348,23 +348,18 @@ const $ = id => document.getElementById(id);
             const a = data.estrategia.activo || data.estrategia.flujo || data.estrategia.respiracion || {};
             const p = data.estrategia.proyeccion || {};
             
-            if ($('barSangriaValue')) {
-                $('barSangriaValue').textContent = '$' + fmt(s.sangria_diaria || 0);
-                $('barSangriaSub').textContent = `Interés: $${fmt((s.sangria_financiera_diaria || 0) * 30)}`; // aproximado o lo que aplique
-            }
-            if ($('barDeudaValue')) {
-                $('barDeudaValue').textContent = '$' + fmt(a.deuda_real ?? a.deuda_financiera ?? p.deuda_total ?? 0);
-                $('barDeudaSub').textContent = `Int. acumulado: $${fmt(a.interes_neto ?? 0)}`;
-            }
-            const costo = a.activo_costo ?? a.activo_clientes ?? 0;
-
-            if ($('barCapitalValue')) {
-                const cubre = (a.activo_pendiente || 0) >= (a.deuda_real ?? a.deuda_financiera ?? 0);
-                $('barCapitalValue').textContent = '$' + fmt(a.deuda_neta ?? 0);
+            const mf = data.metricas_flotantes;
+            if (mf) {
+                if ($('barSangriaValue')) $('barSangriaValue').textContent = '$' + fmt(mf.sangre);
+                if ($('barSangriaSub')) $('barSangriaSub').textContent = `Int: $${fmt(mf.int_diario)}`;
+                
+                if ($('barDeudaValue')) $('barDeudaValue').textContent = '$' + fmt(mf.deuda);
+                if ($('barDeudaSub')) $('barDeudaSub').textContent = `Pasivo total`;
+                
+                if ($('barCapitalValue')) $('barCapitalValue').textContent = '$' + fmt(mf.capital);
                 if ($('barCapitalTrend')) {
-                    $('barCapitalTrend').textContent = cubre ? '▲' : '▼';
-                    $('barCapitalTrend').className = 'trend ' + (cubre ? 'up' : 'down');
-                    $('barCapitalTrend').title = 'Ventas cubren pasivo';
+                    $('barCapitalTrend').textContent = mf.tendencia === 'up' ? '+' : '-';
+                    $('barCapitalTrend').className = 'trend ' + mf.tendencia;
                 }
             }
 
