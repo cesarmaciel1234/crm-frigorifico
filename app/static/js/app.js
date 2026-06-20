@@ -592,7 +592,7 @@ const $ = id => document.getElementById(id);
             $('tblAuditoria').innerHTML = arr.length ? arr.map(a => `
                 <tr>
                     <td>${fmtFecha(a.fecha, true)}</td>
-                    <td><strong>${escapeHTML(a.alias)}</strong><br><small style="color:var(--text-light)">Op ID: ${a.operacion_id}</small></td>
+                    <td><strong>${a.alias || 'Registro'}</strong><br><small style="color:var(--text-light)">Op ID: ${a.operacion_id}</small></td>
                     <td><span class="badge ${a.accion === 'ELIMINADO' ? 'badge-danger' : 'badge-success'}">${a.accion}</span></td>
                     <td class="money">$${fmt(a.monto)}</td>
                     <td><button class="btn btn-ghost btn-sm" onclick="promptDeleteAuditoria(${a.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button></td>
