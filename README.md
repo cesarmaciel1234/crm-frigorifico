@@ -29,6 +29,21 @@ python run.py          # http://127.0.0.1:5005
 | `/` | Dashboard ejecutivo |
 | `/pos` | POS offline (integrado, sincroniza al mismo servidor) |
 
+## Seguridad (producción)
+
+Copiá `.env.example` a `.env` y definí:
+
+| Variable | Uso |
+|----------|-----|
+| `SECRET_KEY` | Sesiones Flask (obligatoria en producción) |
+| `MT_API_KEY` | Clave de acceso al panel y API |
+| `AUDIT_DELETE_PASSWORD` | Clave para borrar registros de auditoría |
+| `DATABASE_URL` | PostgreSQL (Render lo genera automáticamente) |
+
+En Render, `render.yaml` provisiona PostgreSQL y genera las claves. Recuperá `MT_API_KEY` desde el dashboard de Render → Environment.
+
+Acceso: visitá `/login` e ingresá la clave. La sesión se mantiene 7 días.
+
 ## Tests
 
 ```powershell

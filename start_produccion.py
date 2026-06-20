@@ -5,20 +5,30 @@ Sin auto-reload ni debugger. Usa Waitress (servidor WSGI estable en Windows).
 Uso:
   python start_produccion.py
 
+Variables obligatorias en producción:
+  SECRET_KEY          clave de sesión Flask
+  MT_API_KEY          clave de acceso a la API / panel
+
 Variables opcionales:
-  MT_HOST=0.0.0.0   escuchar en la red local (default: 127.0.0.1)
-  MT_PORT=5005      puerto (default: 5005)
+  MT_HOST=0.0.0.0     escuchar en la red local
+  MT_PORT=5005        puerto (default: 5005)
+  DATABASE_URL        PostgreSQL (recomendado en Render)
 """
-import os
 import sys
 
-from app import create_app
 from app.config import Config
-
-app = create_app()
 
 
 def main():
+    if not Config.SECRET_KEY:
+        print("ERROR: SECRET_KEY obligatoria en produccion (ver .env.example)", file=sys.stderr)
+        sys.exit(1)
+    if not Config.MT_API_KEY:
+        print("AVISO: MT_API_KEY no definida — configure antes de exponer a internet", file=sys.stderr)
+
+    from app import create_app
+
+    app = create_app()
     host = Config.HOST
     port = Config.PORT
     url = f"http://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"

@@ -1,9 +1,9 @@
-from app.database import get_db
+from app.database import get_db, is_postgres, table_exists
 
 
 def list_ventas_mostrador(limit: int = 100) -> list[dict]:
     with get_db() as conn:
-        if not _table_exists(conn, "ventas_mostrador"):
+        if not table_exists(conn, "ventas_mostrador"):
             return []
         rows = conn.execute(
             """
@@ -19,13 +19,22 @@ def list_ventas_mostrador(limit: int = 100) -> list[dict]:
 
 
 def sync_ventas_offline(ventas: list[dict]) -> list[int]:
-    """Inserta ventas desde cola offline. Retorna offline_ids sincronizados."""
+    """Inserta ventas desde cola offline. Retorna offline_ids sincronizados (idempotente)."""
     synced_ids = []
     with get_db() as conn:
-        if not _table_exists(conn, "ventas_mostrador"):
+        if not table_exists(conn, "ventas_mostrador"):
             _ensure_table(conn)
         for v in ventas:
             offline_id = v.get("offline_id")
+            if offline_id is not None:
+                existing = conn.execute(
+                    "SELECT id FROM ventas_mostrador WHERE offline_id = ?",
+                    (int(offline_id),),
+                ).fetchone()
+                if existing:
+                    synced_ids.append(int(offline_id))
+                    continue
+
             producto = str(v.get("producto") or "").strip()
             monto = float(v.get("monto") or 0)
             tipo_pago = str(v.get("tipo_pago") or "CONTADO").upper()
@@ -34,33 +43,24 @@ def sync_ventas_offline(ventas: list[dict]) -> list[int]:
                 continue
             if tipo_pago not in ("CONTADO", "FIADO"):
                 tipo_pago = "CONTADO"
+
+            cols = ["cliente_id", "producto", "monto", "tipo_pago"]
+            vals = [None, producto, monto, tipo_pago]
+            if offline_id is not None:
+                cols.append("offline_id")
+                vals.append(int(offline_id))
             if fecha:
-                conn.execute(
-                    """
-                    INSERT INTO ventas_mostrador (cliente_id, producto, monto, tipo_pago, fecha)
-                    VALUES (NULL, ?, ?, ?, ?)
-                    """,
-                    (producto, monto, tipo_pago, fecha),
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO ventas_mostrador (cliente_id, producto, monto, tipo_pago)
-                    VALUES (NULL, ?, ?, ?)
-                    """,
-                    (producto, monto, tipo_pago),
-                )
+                cols.append("fecha")
+                vals.append(fecha)
+
+            conn.execute(
+                f"INSERT INTO ventas_mostrador ({', '.join(cols)}) "
+                f"VALUES ({', '.join('?' for _ in vals)})",
+                vals,
+            )
             if offline_id is not None:
                 synced_ids.append(int(offline_id))
     return synced_ids
-
-
-def _table_exists(conn, name: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
-        (name,),
-    ).fetchone()
-    return row is not None
 
 
 def _ensure_table(conn):
@@ -74,6 +74,7 @@ def _ensure_table(conn):
             tipo_pago TEXT NOT NULL CHECK(tipo_pago IN ('CONTADO', 'FIADO')) DEFAULT 'CONTADO',
             fecha TEXT NOT NULL DEFAULT (date('now', 'localtime')),
             created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            offline_id INTEGER UNIQUE,
             FOREIGN KEY (cliente_id) REFERENCES clientes(id)
         );
         """

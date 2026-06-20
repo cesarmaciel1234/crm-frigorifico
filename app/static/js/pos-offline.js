@@ -37,9 +37,10 @@ async function sincronizarVentas() {
     if (!pendientes.length) return { ok: true, synced: 0 };
 
     const apiBase = (window.CRM_CONFIG && window.CRM_CONFIG.apiBase) || '';
-    const res = await fetch(`${apiBase}/api/ventas_mostrador/sync`, {
+    const res = await (window.CrmSafe?.apiFetch || fetch)(`${apiBase}/api/ventas_mostrador/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({
             ventas: pendientes.map((v) => ({
                 offline_id: v.id,

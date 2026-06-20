@@ -1,5 +1,12 @@
-# Deploy en Render.com — ESTE es el programa real (dashboard Flask)
+# Deploy en Render.com — Master Total (Flask + PostgreSQL)
 # https://github.com/cesarmaciel1234/crm-frigorifico
+
+databases:
+  - name: crm-db
+    plan: free
+    databaseName: crm_frigorifico
+    user: crm_user
+
 services:
   - type: web
     name: crm-frigorifico
@@ -7,9 +14,23 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt && python scripts/generate_icons.py
     startCommand: python start_produccion.py
-    healthCheckPath: /
+    healthCheckPath: /health
     envVars:
       - key: MT_HOST
         value: 0.0.0.0
       - key: PYTHON_VERSION
         value: 3.12.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crm-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: MT_API_KEY
+        generateValue: true
+      - key: AUDIT_DELETE_PASSWORD
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "1"
+      - key: RENDER
+        value: "true"

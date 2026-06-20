@@ -12,6 +12,19 @@ except ImportError:
 def is_postgres():
     return Config.DATABASE_URL and psycopg2
 
+def table_exists(conn, name: str) -> bool:
+    if type(conn).__name__ == "PostgresConnWrapper":
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = %s",
+            (name,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (name,),
+        ).fetchone()
+    return row is not None
+
 class PostgresCursorWrapper:
     def __init__(self, cursor):
         self.cursor = cursor
@@ -122,17 +135,7 @@ def init_db():
         _run_migrations(conn)
 
 def _table_exists(conn, name: str) -> bool:
-    if type(conn).__name__ == "PostgresConnWrapper":
-        row = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = %s",
-            (name,),
-        ).fetchone()
-    else:
-        row = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
-            (name,),
-        ).fetchone()
-    return row is not None
+    return table_exists(conn, name)
 
 
 def _run_migrations(conn):
@@ -297,6 +300,12 @@ def _run_migrations(conn):
             
         if "producto" not in cols:
             conn.execute("ALTER TABLE ventas_mostrador ADD COLUMN producto TEXT NOT NULL DEFAULT ''")
+        if "offline_id" not in cols:
+            conn.execute("ALTER TABLE ventas_mostrador ADD COLUMN offline_id INTEGER")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_ventas_offline_id "
+                "ON ventas_mostrador(offline_id) WHERE offline_id IS NOT NULL"
+            )
 
 def _migrate_pagar_constraint(conn):
     """Permite pagar = recibido (cheques sin interés)."""

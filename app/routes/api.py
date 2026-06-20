@@ -16,6 +16,7 @@ from app.services.bancos import list_bancos
 from app.services.bulk import registrar_lote_bulk, list_bulk_lots, fraccionar_lote_fifo
 from app.services.clientes import list_clientes, registrar_cliente, get_cliente_detalle, buscar_o_crear_cliente, recalcular_saldo_cliente, marcar_cliente_incobrable, list_perdidas_acumuladas
 from app.services.ventas_mostrador import list_ventas_mostrador, sync_ventas_offline
+from app.security import verify_audit_password
 
 # ==============================================================================
 # 🤵 EL MOZO DEL RESTAURANTE (api_bp)
@@ -216,7 +217,7 @@ def api_get_auditoria():
 @api_bp.route("/auditoria/<int:audit_id>", methods=["DELETE"])
 def api_delete_auditoria(audit_id: int):
     d = request.get_json(silent=True) or {}
-    if d.get("password") != "2094":
+    if not verify_audit_password(d.get("password")):
         return jsonify({"error": "Contraseña incorrecta"}), 403
     with get_db() as conn:
         n = conn.execute("DELETE FROM auditoria_operaciones WHERE id = ?", (audit_id,)).rowcount

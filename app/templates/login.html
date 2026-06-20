@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso — Master Total</title>
+    <link rel="stylesheet" href="/static/enterprise.css">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: var(--bg-base, #0f172a); }
+        .login-card { width: min(400px, 92vw); padding: 32px; background: var(--bg-surface, #1e293b); border-radius: 16px; border: 1px solid var(--border-subtle, rgba(255,255,255,.08)); }
+        h1 { font-size: 1.25rem; margin: 0 0 8px; color: var(--text-primary, #f8fafc); }
+        p { color: var(--text-muted, #94a3b8); font-size: 0.875rem; margin: 0 0 24px; }
+        label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; }
+        input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: #0f172a; color: #f8fafc; font-size: 1rem; box-sizing: border-box; }
+        button { width: 100%; margin-top: 20px; padding: 14px; border: none; border-radius: 10px; background: #2563eb; color: #fff; font-weight: 600; font-size: 1rem; cursor: pointer; }
+        .error { color: #f87171; font-size: 0.85rem; margin-top: 12px; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>Master Total</h1>
+        <p>Ingresá la clave de acceso para continuar.</p>
+        <form method="post" action="/login{% if next %}?next={{ next | urlencode }}{% endif %}">
+            <label for="api_key">Clave de acceso</label>
+            <input type="password" id="api_key" name="api_key" autocomplete="current-password" required autofocus>
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+            <button type="submit">Entrar</button>
+        </form>
+    </div>
+</body>
+</html>

@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests
+        run: python -m pytest tests -v --tb=short
+      - name: Security smoke (auth enabled)
+        env:
+          MT_API_KEY: ci-test-key-not-for-production
+          SECRET_KEY: ci-secret-key
+          AUDIT_DELETE_PASSWORD: ci-audit-pw
+        run: python -m pytest tests/test_security.py -v --tb=short

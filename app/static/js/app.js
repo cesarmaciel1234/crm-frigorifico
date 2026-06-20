@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+        const esc = s => (window.CrmSafe && window.CrmSafe.esc(s)) || String(s ?? '');
 
         // --- OFFLINE SYNC ENGINE (Dexie) ---
         const MODO_PRUEBA = false; // Cambiar a false para enviar datos a la nube
@@ -42,9 +43,10 @@ const $ = id => document.getElementById(id);
                         await new Promise(r => setTimeout(r, 300));
                         responseOk = true;
                     } else {
-                        const response = await fetch('/api/operaciones', {
+                        const response = await (window.CrmSafe?.apiFetch || fetch)('/api/operaciones', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
                             body: JSON.stringify(item)
                         });
                         responseOk = response.ok;
@@ -123,7 +125,10 @@ const $ = id => document.getElementById(id);
         }
 
         async function api(url, opts) {
-            const r = await fetch(url, opts);
+            opts = opts || {};
+            opts.credentials = 'same-origin';
+            opts.headers = Object.assign({ Accept: 'application/json' }, opts.headers || {});
+            const r = await (window.CrmSafe?.apiFetch || fetch)(url, opts);
             const d = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(d.error || 'Error en la operación');
             return d;
@@ -324,11 +329,11 @@ const $ = id => document.getElementById(id);
                     : `Total: $${fmt(e.total_pagar)} · Cuota ${e.cuotas_pagadas || 0}/${e.cuotas_total || '—'}`;
                 return `<div class="${cls}" data-id="${e.id}">
                     <div class="hist-top">
-                        <span class="hist-alias">${e.alias}</span>
+                        <span class="hist-alias">${esc(e.alias)}</span>
                         ${badgeVencimiento(e)}
                     </div>
                     <div class="hist-pagar">${sub}</div>
-                    <div class="hist-msg ${histMsgClass(e)}">${e.mensaje_vencimiento || ''} · vto ${e.fecha_vencimiento}</div>
+                    <div class="hist-msg ${histMsgClass(e)}">${esc(e.mensaje_vencimiento || '')} · vto ${esc(e.fecha_vencimiento)}</div>
                 </div>`;
             }).join('');
             box.querySelectorAll('.hist-item').forEach(el => {
@@ -346,7 +351,7 @@ const $ = id => document.getElementById(id);
             if (e.vencido) cls = 'vencido';
             else if (e.estado_vencimiento === 'hoy') cls = 'hoy';
             else if (e.estado_vencimiento === 'proximo') cls = 'proximo';
-            return `<div class="venc-banner ${cls}">${e.mensaje_vencimiento}<br><span style="font-size:0.8rem;font-weight:500">Total a pagar: $${fmt(e.total_pagar)} · Vto ${e.fecha_vencimiento}</span></div>`;
+            return `<div class="venc-banner ${cls}">${esc(e.mensaje_vencimiento)}<br><span style="font-size:0.8rem;font-weight:500">Total a pagar: $${fmt(e.total_pagar)} · Vto ${esc(e.fecha_vencimiento)}</span></div>`;
         }
 
         function renderKpis() {
@@ -411,9 +416,9 @@ const $ = id => document.getElementById(id);
                 const pct = Math.min(100, ((e.cfr || 0) / max) * 100);
                 const cls = (e.cfr || 0) > 10 ? 'critical' : '';
                 return `<div class="chart-row">
-                    <label>${e.alias}</label>
+                    <label>${esc(e.alias)}</label>
                     <div class="chart-track"><div class="chart-fill ${cls}" style="width:${pct}%">${fmtPct(e.cfr)}</div></div>
-                    <span style="font-size:0.75rem;color:var(--text-muted)">${e.tipo}</span>
+                    <span style="font-size:0.75rem;color:var(--text-muted)">${esc(e.tipo)}</span>
                 </div>`;
             }).join('');
         }
@@ -446,8 +451,8 @@ const $ = id => document.getElementById(id);
 
                 return `<tr${rowCls} data-id="${e.id}">
                     <td>
-                        <div class="home-contraparte">${e.alias}</div>
-                        <div style="margin-top:4px"><span class="badge-home ${tipoClase}">${e.tipo}</span></div>
+                        <div class="home-contraparte">${esc(e.alias)}</div>
+                        <div style="margin-top:4px"><span class="badge-home ${tipoClase}">${esc(e.tipo)}</span></div>
                     </td>
                     <td style="line-height:1.4; font-size:10px;">
                         <div style="color:var(--text-muted)">Cap: <span style="color:#111827;font-weight:500">${capText}</span></div>
@@ -479,7 +484,7 @@ const $ = id => document.getElementById(id);
                     : '<div style="margin-bottom:4px"><span class="badge badge-danger" style="font-size:9px;padding:2px 4px">Pendiente</span></div>';
                 return `<tr>
                     <td>
-                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.cliente || '—'}</div>
+                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.cliente || '—')}</div>
                         <div style="font-size:9px;color:var(--text-muted);margin-top:2px">#${r.id} · ${r.fecha.slice(5)}</div>
                     </td>
                     <td style="line-height:1.4; font-size:10px;">
@@ -511,7 +516,7 @@ const $ = id => document.getElementById(id);
 
                 return `<tr>
                     <td>
-                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.cliente || '—'}</div>
+                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.cliente || '—')}</div>
                         <div style="font-size:9px;color:var(--text-muted);margin-top:2px">#${r.id} · ${r.fecha.slice(5)}</div>
                     </td>
                     <td style="line-height:1.4; font-size:10px;">
@@ -598,8 +603,8 @@ const $ = id => document.getElementById(id);
             $('tblAuditoria').innerHTML = arr.length ? arr.map(a => `
                 <tr>
                     <td>${fmtFecha(a.fecha, true)}</td>
-                    <td><strong>${a.alias || 'Registro'}</strong><br><small style="color:var(--text-light)">Op ID: ${a.operacion_id}</small></td>
-                    <td><span class="badge ${a.accion === 'ELIMINADO' ? 'badge-danger' : 'badge-success'}">${a.accion}</span></td>
+                    <td><strong>${esc(a.alias || 'Registro')}</strong><br><small style="color:var(--text-light)">Op ID: ${a.operacion_id}</small></td>
+                    <td><span class="badge ${a.accion === 'ELIMINADO' ? 'badge-danger' : 'badge-success'}">${esc(a.accion)}</span></td>
                     <td class="money">$${fmt(a.monto)}</td>
                     <td><button class="btn btn-ghost btn-sm" onclick="promptDeleteAuditoria(${a.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button></td>
                 </tr>
@@ -632,19 +637,19 @@ const $ = id => document.getElementById(id);
                     : r.cuota_label || '—';
                 return `<tr>
                     <td>
-                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.alias}</div>
+                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.alias)}</div>
                         <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${(r.fecha_pago || '').slice(0, 10)}</div>
                     </td>
                     <td style="line-height:1.4; font-size:10px;">
-                        <div style="color:#111827;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px" title="${r.detalle||''}">${r.detalle || '—'}</div>
-                        <div style="color:var(--text-muted);font-size:9px;margin-top:2px">${r.plazo_texto || '—'}</div>
+                        <div style="color:#111827;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px" title="${esc(r.detalle||'')}">${esc(r.detalle || '—')}</div>
+                        <div style="color:var(--text-muted);font-size:9px;margin-top:2px">${esc(r.plazo_texto || '—')}</div>
                     </td>
                     <td>
                         <div class="home-amount" style="font-size:13px;color:var(--success)">$${fmtCompact(r.monto_pagado)}</div>
                         ${punText}${descText}
                     </td>
                     <td style="text-align:center">
-                        <div style="margin-bottom:4px"><span class="badge-home ${tipoCls}">${r.tipo}</span></div>
+                        <div style="margin-bottom:4px"><span class="badge-home ${tipoCls}">${esc(r.tipo)}</span></div>
                         <div style="font-size:9px;color:var(--text-muted)">${progreso}</div>
                     </td>
                 </tr>`;
@@ -653,7 +658,7 @@ const $ = id => document.getElementById(id);
 
         function renderBancos() {
             $('tblBancos').innerHTML = data.bancos.length ? data.bancos.map(b => `
-                <tr><td>${b.nombre}</td><td>$${fmt(b.limite)}</td></tr>
+                <tr><td>${esc(b.nombre)}</td><td>$${fmt(b.limite)}</td></tr>
             `).join('') : '<tr><td colspan="2" style="color:var(--text-muted);padding:16px">Sin entidades bancarias</td></tr>';
         }
 
@@ -705,7 +710,7 @@ const $ = id => document.getElementById(id);
 
                 return `<tr class="clickable" data-id="${c.id}">
                     <td>
-                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${style}">${c.nombre}</div>
+                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${style}">${esc(c.nombre)}</div>
                         <div style="font-size:9px;color:var(--text-muted);margin-top:2px">Alta: ${(c.created_at || '').slice(0, 10)}</div>
                     </td>
                     <td style="line-height:1.4; font-size:10px;">
@@ -790,7 +795,7 @@ const $ = id => document.getElementById(id);
                 
                 $('drawerClientBody').innerHTML = `
                     <div class="drawer-row"><span class="lbl">ID Cliente</span><span class="val">#${c.id}</span></div>
-                    <div class="drawer-row"><span class="lbl">Nombre</span><span class="val" style="font-weight:bold;color:var(--text-primary)">${c.nombre}</span></div>
+                    <div class="drawer-row"><span class="lbl">Nombre</span><span class="val" style="font-weight:bold;color:var(--text-primary)">${esc(c.nombre)}</span></div>
                     <div class="drawer-row"><span class="lbl">Scoring de Crédito</span><span class="val"><span class="badge badge-neutral" style="width:20px;display:inline-block;text-align:center">${c.scoring}</span></span></div>
                     <div class="drawer-row"><span class="lbl">Techo de Deuda</span><span class="val" style="color:var(--warning)">$${fmt(c.techo_deuda)}</span></div>
                     <div class="drawer-row"><span class="lbl">Saldo de Deuda Actual</span><span class="val" style="color:${c.saldo_actual > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:bold">$${fmt(c.saldo_actual)}</span></div>
@@ -819,7 +824,7 @@ const $ = id => document.getElementById(id);
                 });
                 
             } catch (e) {
-                $('drawerClientBody').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px">Error al cargar detalles: ${e.message}</div>`;
+                $('drawerClientBody').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px">Error al cargar detalles: ${esc(e.message)}</div>`;
             }
         }
 
