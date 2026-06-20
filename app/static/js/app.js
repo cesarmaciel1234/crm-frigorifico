@@ -425,7 +425,7 @@ const $ = id => document.getElementById(id);
 
         function renderHomeTable() {
             if (!data.enemigos || !data.enemigos.length) {
-                $('tblHome').innerHTML = '<tr><td colspan="8"><div class="empty-state">No hay obligaciones cargadas</div></td></tr>';
+                $('tblHome').innerHTML = '<div class="empty-state">No hay obligaciones cargadas</div>';
                 return;
             }
             
@@ -441,35 +441,71 @@ const $ = id => document.getElementById(id);
             });
 
             $('tblHome').innerHTML = sorted.map(e => {
-                const rowCls = e.vencido ? ' class="highlight-red clickable"' : ' class="clickable"';
+                const isVencido = e.vencido;
                 let tipoClase = (e.tipo || 'neutro').toLowerCase();
-                if (!['tarjeta','banco','proveedor','cheque'].includes(tipoClase)) tipoClase = 'neutro';
                 
                 const cfrText = e.sin_interes ? '0%' : fmtPct(e.cfr);
                 const intText = e.sin_interes ? '$0' : '$' + fmtCompact(e.interes);
                 const capText = '$' + fmtCompact(e.recibido);
 
-                return `<tr${rowCls} data-id="${e.id}">
-                    <td>
-                        <div class="home-contraparte">${esc(e.alias)}</div>
-                        <div style="margin-top:4px"><span class="badge-home ${tipoClase}">${esc(e.tipo)}</span></div>
-                    </td>
-                    <td style="line-height:1.4; font-size:10px;">
-                        <div style="color:var(--text-muted)">Cap: <span style="color:#111827;font-weight:500">${capText}</span></div>
-                        <div style="color:var(--text-muted)">Int: <span style="color:#111827;font-weight:500">${intText}</span></div>
-                        <div style="color:var(--text-muted)">CFR: <span style="color:#111827;font-weight:500">${cfrText}</span></div>
-                    </td>
-                    <td>
-                        <div class="home-amount" style="font-size:13px">$${fmtCompact(e.total_pagar)}</div>
-                        <div class="home-subtext" style="font-size:9px;margin-top:4px">${plazoTexto(e)}</div>
-                    </td>
-                    <td>${badgeVencimiento(e)}</td>
-                </tr>`;
+                let icon = '💳';
+                if (tipoClase === 'proveedor') icon = '🏭';
+                if (tipoClase === 'cheque') icon = '🧾';
+                if (tipoClase === 'banco') icon = '🏦';
+                if (tipoClase.includes('préstamo') || tipoClase.includes('prestamo')) icon = '🦈';
+
+                const totalHighlight = isVencido ? ' highlight' : '';
+                
+                let dueHtml = plazoTexto(e);
+                if (dueHtml.toLowerCase().includes('- vto')) {
+                    dueHtml = dueHtml.replace(/ - vto /i, '<br>Vto: <strong>') + '</strong>';
+                } else if (dueHtml.toLowerCase().includes('- vto:')) {
+                    dueHtml = dueHtml.replace(/ - vto: /i, '<br>Vto: <strong>') + '</strong>';
+                }
+
+                return `
+        <div class="debt-card clickable" data-id="${e.id}">
+            <div class="card-header">
+                <div class="card-title-group">
+                    <div class="icon-box">${icon}</div>
+                    <div>
+                        <h3 class="card-title">${esc(e.alias)}</h3>
+                        <span class="pill pill-type">${esc(e.tipo)}</span>
+                    </div>
+                </div>
+                ${badgeVencimiento(e)}
+            </div>
+
+            <div class="card-body">
+                <div class="data-col">
+                    <span class="data-label">Capital</span>
+                    <span class="data-value">${capText}</span>
+                </div>
+                <div class="data-col">
+                    <span class="data-label">Interés</span>
+                    <span class="data-value">${intText}</span>
+                </div>
+                <div class="data-col">
+                    <span class="data-label">CFR</span>
+                    <span class="data-value">${cfrText}</span>
+                </div>
+            </div>
+
+            <div class="card-footer">
+                <div class="amount-section">
+                    <span class="amount-label">TOTAL A PAGAR</span>
+                    <span class="amount-total${totalHighlight}">$${fmtCompact(e.total_pagar)}</span>
+                </div>
+                <div class="due-details">
+                    ${dueHtml}
+                </div>
+            </div>
+        </div>`;
             }).join('');
             
-            document.querySelectorAll('#tblHome .clickable').forEach(tr => {
-                tr.addEventListener('click', () => {
-                    const id = parseInt(tr.dataset.id, 10);
+            document.querySelectorAll('#tblHome .clickable').forEach(card => {
+                card.addEventListener('click', () => {
+                    const id = parseInt(card.dataset.id, 10);
                     const e = data.enemigos.find(x => x.id === id);
                     if (e) openDrawer(e);
                 });

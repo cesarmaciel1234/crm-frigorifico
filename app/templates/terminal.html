@@ -320,19 +320,8 @@
                 <div style="margin-bottom: 20px;">
                     <h2 style="margin:0; font-size: 1.5rem; color: #111827;">Obligaciones y Pagos</h2>
                 </div>
-                <div style="overflow-x: auto;">
-                    <table class="home-table">
-                        <thead>
-                            <tr>
-                                <th>Contraparte</th>
-                                <th>Detalle</th>
-                                <th>A Pagar</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tblHome">
-                        </tbody>
-                    </table>
+                <div id="tblHome" class="cards-grid">
+                    <!-- Las obligaciones en tarjetas 3D se cargarán aquí desde JS -->
                 </div>
             </div>
 
@@ -758,7 +747,7 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/app.js?v=1.7"></script>
+    <script src="/static/js/app.js?v=1.9"></script>
 
 
     <div class="dashboard-bar">

@@ -1,5 +1,5 @@
-const CACHE_NAME = 'crm-frigorifico-static-v7';
-const API_CACHE_NAME = 'crm-frigorifico-api-v7';
+const CACHE_NAME = 'crm-frigorifico-static-v9';
+const API_CACHE_NAME = 'crm-frigorifico-api-v9';
 
 const ASSETS_TO_CACHE = [
   '/',
