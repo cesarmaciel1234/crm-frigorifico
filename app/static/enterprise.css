@@ -278,7 +278,7 @@ body::before {
     50% { opacity: 0.5; transform: scale(0.85); }
 }
 
-.content { padding: 24px 28px 48px; max-width: 1600px; }
+.content { padding: 24px 28px 120px; max-width: 1600px; }
 
 /* ─── KPI strip ─── */
 .kpi-grid {
@@ -748,7 +748,7 @@ table:not(.data-table):not(.xls-table) tr:hover td { background: var(--bg-hover)
     .status-pill, .breadcrumb, .topbar-sub, .clock { display: none !important; }
     .topbar { padding: 0 12px; height: 54px; }
     .topbar-title { font-size: 15px !important; }
-    .content { padding: 12px; }
+    .content { padding: 12px 12px 120px 12px; }
     body { font-size: 11px; }
     .kpi-value { font-size: 18px; }
     table:not(.data-table):not(.xls-table) th, .home-table th { padding: 6px 8px !important; font-size: 9px !important; }
