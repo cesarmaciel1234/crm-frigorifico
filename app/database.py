@@ -56,6 +56,10 @@ class PostgresCursorWrapper:
 class PostgresConnWrapper:
     def __init__(self, conn):
         self.conn = conn
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
     def execute(self, query, vars=None):
         cur = PostgresCursorWrapper(self.conn.cursor())
         cur.execute(query, vars)
