@@ -18,7 +18,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/enterprise.css">
+    <link rel="stylesheet" href="/static/enterprise.css?v=1718854000">
     <style>
         .balance-grid {
             display: grid;
@@ -75,8 +75,82 @@
             color: var(--text-muted);
             font-weight: bold;
         }
+        
+        @media (max-width: 768px) {
+            .terminal-footer {
+                padding: 0 5px;
+                font-size: 0.65rem;
+                justify-content: space-between;
+            }
+            .footer-segment {
+                gap: 3px;
+                white-space: nowrap;
+            }
+        }
         .content {
             padding-bottom: 60px !important;
+        }
+        /* Home View Styles */
+        #view-home {
+            background-color: #ffffff;
+            color: #111827;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .home-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .home-table th {
+            text-align: left;
+            padding: 12px 16px;
+            color: #6b7280;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .home-table td {
+            padding: 16px;
+            border-bottom: 1px solid #f3f4f6;
+            vertical-align: middle;
+        }
+        .home-table tr:hover {
+            background-color: #f9fafb;
+        }
+        .home-table tr.highlight-red {
+            background-color: #fff5f5;
+        }
+        .badge-home {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .badge-home.tarjeta, .badge-home.banco, .badge-home.proveedor, .badge-home.cheque {
+            background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb;
+        }
+        .badge-home.vencido { background: #fee2e2; color: #991b1b; }
+        .badge-home.restantes { background: #fef3c7; color: #92400e; }
+        .badge-home.neutro { background: #f3f4f6; color: #6b7280; }
+        .badge-home.verde { background: #d1fae5; color: #065f46; }
+        .home-contraparte {
+            font-weight: 600;
+            color: #111827;
+            font-size: 0.95rem;
+        }
+        .home-amount {
+            font-weight: 600;
+            color: #111827;
+        }
+        .home-subtext {
+            color: #6b7280;
+            font-size: 0.8rem;
+            margin-top: 2px;
         }
     </style>
 </head>
@@ -86,7 +160,7 @@
     <aside class="sidebar" id="sidebar">
         <div class="brand">
             <div class="brand-inner">
-                <div class="brand-mark">MT</div>
+                <div class="brand-mark" id="sidebarCloseMobile" style="cursor: pointer;">MT</div>
                 <div class="brand-text">
                     <h1>Master Total</h1>
                     <p>Financial Command</p>
@@ -96,13 +170,13 @@
         </div>
         <nav class="nav">
             <div class="nav-label">Executive</div>
-            <button type="button" class="nav-item active" data-view="dashboard">
+            <button type="button" class="nav-item active" data-view="home">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                Home
+            </button>
+            <button type="button" class="nav-item" data-view="dashboard">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
                 Dashboard
-            </button>
-            <button type="button" class="nav-item" data-view="deudas">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                Prioridad de pagos
             </button>
             <button type="button" class="nav-item" data-view="remitos">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
@@ -121,10 +195,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 Historial de pagos
             </button>
-            <a class="nav-item" href="/pos" style="text-decoration:none;color:inherit">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M6 12h12"/></svg>
-                POS offline
-            </a>
+
             
             <!-- Botón de instalación PWA -->
             <div class="nav-label" style="margin-top:12px; display:none;" id="installSection">Aplicación</div>
@@ -145,25 +216,50 @@
 
     <div class="main">
         <header class="topbar">
-            <div class="topbar-left">
-                <div class="breadcrumb">Master Total <span>/</span> <strong id="breadcrumbPage">Executive Overview</strong></div>
-                <div class="topbar-title" id="pageTitle">Dashboard ejecutivo</div>
-                <div class="topbar-sub" id="pageSub">Visión consolidada del negocio</div>
+            <div class="topbar-left" style="display: flex; flex-direction: row; align-items: center; gap: 12px;">
+                <button type="button" class="btn btn-ghost menu-toggle" id="menuToggle" style="padding: 0; border: none; background: transparent; box-shadow: none;">
+                    <div class="brand-mark" style="width: 32px; height: 32px; font-size: 11px;">MT</div>
+                </button>
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <div class="breadcrumb">Master Total <span>/</span> <strong id="breadcrumbPage">Executive Overview</strong></div>
+                    <div class="topbar-title" id="pageTitle">Dashboard ejecutivo</div>
+                    <div class="topbar-sub" id="pageSub">Visión consolidada del negocio</div>
+                </div>
             </div>
             <div class="topbar-actions">
                 <span class="status-pill" id="statusPill"><span class="pulse"></span> En línea</span>
                 <span class="clock" id="clock"></span>
-                <button type="button" class="btn btn-ghost menu-toggle" id="menuToggle">☰</button>
                 <button type="button" class="btn btn-primary" id="btnRefresh">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-                    Actualizar
+                    <span class="hide-mobile">Actualizar</span>
                 </button>
             </div>
         </header>
 
         <div class="content">
+            <!-- VIEW: Home -->
+            <div class="view active" id="view-home">
+                <div style="margin-bottom: 20px;">
+                    <h2 style="margin:0; font-size: 1.5rem; color: #111827;">Obligaciones y Pagos</h2>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="home-table">
+                        <thead>
+                            <tr>
+                                <th>Contraparte</th>
+                                <th>Detalle</th>
+                                <th>A Pagar</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tblHome">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- VIEW: Dashboard -->
-            <div class="view active" id="view-dashboard">
+            <div class="view" id="view-dashboard">
                 <div class="kpi-grid" id="kpiGrid">
                     <div class="kpi red">
                         <div class="kpi-head">
@@ -227,28 +323,7 @@
                 </div>
                 <div class="card" style="margin-top:18px">
                     <div class="card-head"><h2>Últimos remitos de venta</h2><span>Operaciones recientes</span></div>
-                    <div class="table-wrap"><table class="data-table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Kg</th><th>Costo log.</th><th>Venta</th><th>Margen</th><th>Cobro</th></tr></thead><tbody id="tblRemitosDash"></tbody></table></div>
-                </div>
-            </div>
-
-            <!-- VIEW: Deudas -->
-            <div class="view" id="view-deudas">
-                <div class="card">
-                    <div class="card-head">
-                        <h2>Ranking de obligaciones — Enemigos financieros</h2>
-                        <span id="deudaCount">0 registros</span>
-                    </div>
-                    <div class="table-wrap">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th><th>Contraparte</th><th>Tipo</th><th>Recibido</th><th>A pagar</th>
-                                    <th>Interés</th><th>Vencimiento</th><th>Plazo / Cuotas</th><th>CFR</th><th>Estado</th><th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="tblDeudas"></tbody>
-                        </table>
-                    </div>
+                    <div class="table-wrap"><table class="data-table home-table"><thead><tr><th>Info</th><th>Operación</th><th>Venta</th><th>Estado</th></tr></thead><tbody id="tblRemitosDash"></tbody></table></div>
                 </div>
             </div>
 
@@ -257,8 +332,8 @@
                 <div class="card">
                     <div class="card-head"><h2>Historial de remitos de venta</h2><span id="remitoCount">0 registros</span></div>
                     <div class="table-wrap">
-                        <table class="data-table">
-                            <thead><tr><th>ID</th><th>Fecha</th><th>Cliente</th><th>Kg</th><th>Costo logística</th><th>Venta total</th><th>Margen</th><th>Plazo cobro</th><th>Estado</th><th>Acciones</th></tr></thead>
+                        <table class="data-table home-table">
+                            <thead><tr><th>Info</th><th>Operación</th><th>Venta</th><th>Estado</th></tr></thead>
                             <tbody id="tblRemitosFull"></tbody>
                         </table>
                     </div>
@@ -295,15 +370,13 @@
                         </form>
                         
                         <div class="table-wrap">
-                            <table class="data-table">
+                            <table class="data-table home-table">
                                 <thead>
                                     <tr>
-                                        <th>Cliente</th>
+                                        <th>Info</th>
+                                        <th>Finanzas</th>
                                         <th>Scoring</th>
-                                        <th>Techo de Deuda</th>
-                                        <th>Saldo Actual</th>
-                                        <th>Estado Límite</th>
-                                        <th>Fecha Registro</th>
+                                        <th>Estado</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tblClientes"></tbody>
@@ -319,15 +392,13 @@
                     </div>
                     <div class="card-body padded">
                         <div class="table-wrap">
-                            <table class="data-table">
+                            <table class="data-table home-table">
                                 <thead>
                                     <tr>
-                                        <th>Fecha Declarada</th>
                                         <th>Cliente</th>
-                                        <th class="cell-money">Pérdida Nominal</th>
-                                        <th>Días Transcurridos</th>
-                                        <th class="cell-money">Costo de Oportunidad (15% anual)</th>
-                                        <th class="cell-money">Pérdida Total Real</th>
+                                        <th>Pérdida ($)</th>
+                                        <th>Costo Op.</th>
+                                        <th>Total ($)</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tblPerdidas"></tbody>
@@ -361,20 +432,13 @@
                         </div>
                     </div>
                     <div class="table-wrap xls-wrap">
-                        <table class="xls-table">
+                        <table class="data-table home-table">
                             <thead>
                                 <tr>
-                                    <th>Fecha</th>
-                                    <th>Contraparte</th>
-                                    <th>Tipo</th>
-                                    <th>Cuota</th>
-                                    <th>Plazo</th>
-                                    <th>Detalle</th>
-                                    <th>Monto cuota</th>
-                                    <th>Pagado</th>
-                                    <th>Punitorio</th>
-                                    <th>Descuento</th>
-                                    <th>Progreso op.</th>
+                                    <th>Info</th>
+                                    <th>Operación</th>
+                                    <th>Pago ($)</th>
+                                    <th>Estado</th>
                                 </tr>
                             </thead>
                             <tbody id="tblHistorialPagos"></tbody>
@@ -442,7 +506,7 @@
                             <div class="field" style="width:160px"><label>Límite ($)</label><input name="limite" type="number" step="0.01" min="0" required></div>
                             <button type="submit" class="btn btn-ghost">Agregar entidad</button>
                         </form>
-                        <div class="table-wrap" style="margin-top:20px"><table class="data-table"><thead><tr><th>Entidad</th><th>Límite</th></tr></thead><tbody id="tblBancos"></tbody></table></div>
+                        <div class="table-wrap" style="margin-top:20px"><table class="data-table home-table"><thead><tr><th>Entidad</th><th>Límite</th></tr></thead><tbody id="tblBancos"></tbody></table></div>
                     </div>
                 </div>
 
@@ -456,15 +520,13 @@
                             <button type="submit" class="btn btn-ghost">Registrar Lote Bulk</button>
                         </form>
                         <div class="table-wrap" style="margin-top:20px">
-                            <table class="data-table">
+                            <table class="data-table home-table">
                                 <thead>
                                     <tr>
-                                        <th>ID Lote</th>
+                                        <th>Lote</th>
                                         <th>Fecha</th>
-                                        <th>Kg Originales</th>
-                                        <th>Kg Remanentes</th>
-                                        <th>Costo Total</th>
-                                        <th>Costo / Kg</th>
+                                        <th>Kilos (Rem.)</th>
+                                        <th>Costo ($)</th>
                                         <th>Estado</th>
                                     </tr>
                                 </thead>
@@ -542,7 +604,11 @@
 
     <script>
         const $ = id => document.getElementById(id);
-        const fmt = n => Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fmt = n => Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        const fmtCompact = n => {
+            if (n >= 1000000) return (n / 1000000).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + 'M';
+            return fmt(n);
+        };
         const fmtPct = n => n != null ? n.toFixed(2) + '%' : '—';
 
         function remitoEstado(pagado) {
@@ -747,11 +813,11 @@
         }
 
         function badgeVencimiento(e) {
-            if ((!e.es_tarjeta && !e.es_cheque && !e.es_proveedor) || !e.fecha_vencimiento) return '<span class="badge badge-neutral">—</span>';
-            if (e.vencido) return `<span class="badge badge-danger">Vencido · ${e.dias_retraso}d retraso</span>`;
-            if (e.estado_vencimiento === 'hoy') return '<span class="badge badge-warning">Vence hoy</span>';
-            if (e.estado_vencimiento === 'proximo') return `<span class="badge badge-warning">${e.dias_faltantes}d restantes</span>`;
-            return `<span class="badge badge-success">${e.dias_faltantes}d restantes</span>`;
+            if ((!e.es_tarjeta && !e.es_cheque && !e.es_proveedor) || !e.fecha_vencimiento) return '<span class="badge-home neutro">—</span>';
+            if (e.vencido) return `<span class="badge-home vencido" style="line-height:1.2;text-align:center;display:inline-block">${e.dias_retraso} días<br>retraso</span>`;
+            if (e.estado_vencimiento === 'hoy') return '<span class="badge-home vencido">Hoy</span>';
+            if (e.estado_vencimiento === 'proximo') return `<span class="badge-home restantes" style="line-height:1.2;text-align:center;display:inline-block">${e.dias_faltantes} días<br>restantes</span>`;
+            return `<span class="badge-home verde" style="line-height:1.2;text-align:center;display:inline-block">${e.dias_faltantes} días<br>restantes</span>`;
         }
 
         function badgeEstado(e) {
@@ -793,7 +859,7 @@
                 el.addEventListener('click', () => {
                     const id = parseInt(el.dataset.id, 10);
                     const e = data.enemigos.find(x => x.id === id) || data.historial.find(x => x.id === id);
-                    if (e) { openDrawer(e); switchView('deudas'); $('sidebar').classList.remove('open'); }
+                    if (e) { openDrawer(e); switchView('home'); $('sidebar').classList.remove('open'); }
                 });
             });
         }
@@ -848,8 +914,8 @@
             $('kpiExcedente').textContent = '$' + fmt(a.caja_real || 0);
 
             if ($('footSangria')) $('footSangria').textContent = '$' + fmt(s.sangria_diaria || 0);
-            if ($('footStock')) $('footStock').textContent = fmt(a.stock_kg || 0) + ' kg';
-            if ($('footCaja')) $('footCaja').textContent = '$' + fmt(a.caja_real || 0);
+            if ($('footDeuda')) $('footDeuda').textContent = '$' + fmt(a.deuda_real ?? a.deuda_financiera ?? 0);
+            if ($('footCapital')) $('footCapital').textContent = '$' + fmt(a.capital_neto || 0);
         }
 
         function renderHealth() {
@@ -890,38 +956,79 @@
             }).join('');
         }
 
-        function renderDeudas() {
-            $('deudaCount').textContent = data.enemigos.length + ' registros';
-            if (!data.enemigos.length) {
-                $('tblDeudas').innerHTML = '<tr><td colspan="11"><div class="empty-state">No hay deudas cargadas</div></td></tr>';
+        function renderHomeTable() {
+            if (!data.enemigos || !data.enemigos.length) {
+                $('tblHome').innerHTML = '<tr><td colspan="8"><div class="empty-state">No hay obligaciones cargadas</div></td></tr>';
                 return;
             }
-            $('tblDeudas').innerHTML = data.enemigos.map(e => {
-                const barW = Math.min(100, (e.cfr || 0) * 3);
-                const rowCls = e.vencido ? ' style="background:rgba(239,68,68,0.06)"' : '';
-                return `<tr class="clickable" data-id="${e.id}"${rowCls}>
-                    <td>${e.pos}</td>
-                    <td class="cell-primary">${e.alias}</td>
-                    <td><span class="badge badge-neutral">${e.tipo}</span></td>
-                    <td class="cell-money">$${fmt(e.recibido)}</td>
-                    <td class="cell-money"><strong>$${fmt(e.total_pagar)}</strong></td>
-                    <td>${e.sin_interes ? '<span class="badge badge-neutral">Sin interés</span>' : '$' + fmt(e.interes)}</td>
+            
+            const sorted = [...data.enemigos].sort((a, b) => {
+                const getScore = e => {
+                    if (e.vencido) return -1000 - (e.dias_retraso || 0);
+                    if (e.estado_vencimiento === 'hoy') return 0;
+                    if (e.estado_vencimiento === 'proximo') return e.dias_faltantes;
+                    if (e.fecha_vencimiento) return 1000 + e.dias_faltantes;
+                    return 10000;
+                };
+                return getScore(a) - getScore(b);
+            });
+
+            $('tblHome').innerHTML = sorted.map(e => {
+                const rowCls = e.vencido ? ' class="highlight-red clickable"' : ' class="clickable"';
+                let tipoClase = (e.tipo || 'neutro').toLowerCase();
+                if (!['tarjeta','banco','proveedor','cheque'].includes(tipoClase)) tipoClase = 'neutro';
+                
+                const cfrText = e.sin_interes ? '0%' : fmtPct(e.cfr);
+                const intText = e.sin_interes ? '$0' : '$' + fmtCompact(e.interes);
+                const capText = '$' + fmtCompact(e.recibido);
+
+                return `<tr${rowCls} data-id="${e.id}">
+                    <td>
+                        <div class="home-contraparte">${e.alias}</div>
+                        <div style="margin-top:4px"><span class="badge-home ${tipoClase}">${e.tipo}</span></div>
+                    </td>
+                    <td style="line-height:1.4; font-size:10px;">
+                        <div style="color:var(--text-muted)">Cap: <span style="color:#111827;font-weight:500">${capText}</span></div>
+                        <div style="color:var(--text-muted)">Int: <span style="color:#111827;font-weight:500">${intText}</span></div>
+                        <div style="color:var(--text-muted)">CFR: <span style="color:#111827;font-weight:500">${cfrText}</span></div>
+                    </td>
+                    <td>
+                        <div class="home-amount" style="font-size:13px">$${fmtCompact(e.total_pagar)}</div>
+                        <div class="home-subtext" style="font-size:9px;margin-top:4px">${plazoTexto(e)}</div>
+                    </td>
                     <td>${badgeVencimiento(e)}</td>
-                    <td>${plazoTexto(e)}</td>
-                    <td><div class="cfr-bar-wrap">${e.sin_interes ? '<span class="badge badge-neutral">N/A</span>' : `<span>${fmtPct(e.cfr)}</span><div class="cfr-bar"><div class="cfr-bar-fill ${(e.cfr||0)>10?'high':''}" style="width:${barW}%"></div></div>`}</div></td>
-                    <td>${badgeEstado(e)}</td>
-                    <td><button type="button" class="btn btn-danger btn-sm" data-del="${e.id}">Eliminar</button></td>
                 </tr>`;
             }).join('');
-            bindDeudaEvents();
+            
+            document.querySelectorAll('#tblHome .clickable').forEach(tr => {
+                tr.addEventListener('click', () => {
+                    openDeudaModal(parseInt(tr.dataset.id));
+                });
+            });
         }
 
         function renderRemitosDash() {
             const rows = data.remitos.slice(0, 8);
-            $('tblRemitosDash').innerHTML = rows.length ? rows.map(r => `
-                <tr><td>${r.fecha}</td><td><strong>${r.cliente || '—'}</strong></td><td>${fmt(r.kg)}</td><td>$${fmt(r.costo_total_logistica)}</td>
-                <td>$${fmt(r.precio_venta_total)}</td><td>$${fmt(r.margen)}</td><td>${r.plazo_cobro_dias}d</td></tr>
-            `).join('') : '<tr><td colspan="7"><div class="empty-state">Sin remitos de venta</div></td></tr>';
+            $('tblRemitosDash').innerHTML = rows.length ? rows.map(r => {
+                const badge = r.pagado || (r.estado_cobro === 'cobrado') 
+                    ? '<div style="margin-bottom:4px"><span class="badge badge-success" style="font-size:9px;padding:2px 4px">Cobrado</span></div>' 
+                    : '<div style="margin-bottom:4px"><span class="badge badge-danger" style="font-size:9px;padding:2px 4px">Pendiente</span></div>';
+                return `<tr>
+                    <td>
+                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.cliente || '—'}</div>
+                        <div style="font-size:9px;color:var(--text-muted);margin-top:2px">#${r.id} · ${r.fecha.slice(5)}</div>
+                    </td>
+                    <td style="line-height:1.4; font-size:10px;">
+                        <div style="color:var(--text-muted)">Kg: <span style="color:#111827;font-weight:500">${fmt(r.kg)}</span></div>
+                        <div style="color:var(--text-muted)">Log: <span style="color:#111827;font-weight:500">$${fmtCompact(r.costo_total_logistica)}</span></div>
+                    </td>
+                    <td>
+                        <div class="home-amount" style="font-size:13px">$${fmtCompact(r.precio_venta_total)}</div>
+                        <div class="home-subtext" style="font-size:9px;margin-top:2px;color:var(--success)">Mrg: $${fmtCompact(r.margen)}</div>
+                    </td>
+                    <td style="text-align:center">${badge}</td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="4"><div class="empty-state">Sin remitos de venta</div></td></tr>';
         }
 
         async function renderRemitosFull() {
@@ -929,23 +1036,34 @@
             $('remitoCount').textContent = all.length + ' registros';
             $('tblRemitosFull').innerHTML = all.length ? all.map(r => {
                 const est = remitoEstado(r.pagado ?? r.estado_cobro);
-                const badgeStatus = `<span class="badge ${est.badgeClass}">${est.label}</span>`;
+                const badgeStatus = `<div style="margin-bottom:4px"><span class="badge ${est.badgeClass}" style="font-size:9px;padding:2px 4px">${est.label}</span></div>`;
                 const actionBtn = est.cobrable
-                    ? `<button type="button" class="btn btn-ghost btn-sm btn-cobrar-remito" data-rid="${r.id}" style="color:var(--success); border:1px solid var(--success); padding: 3px 6px;">Cobrar</button>`
-                    : '—';
+                    ? `<button type="button" class="btn btn-ghost btn-sm btn-cobrar-remito" data-rid="${r.id}" style="color:var(--success); border:1px solid var(--success); padding: 2px 4px; font-size:9px; width:100%">Cobrar</button>`
+                    : '';
+                
+                const logisticaText = '$' + fmtCompact(r.costo_total_logistica);
+                const ventaText = '$' + fmtCompact(r.precio_venta_total);
+                const margenText = '$' + fmtCompact(r.margen);
+
                 return `<tr>
-                    <td>#${r.id}</td>
-                    <td>${r.fecha}</td>
-                    <td><strong>${r.cliente || '—'}</strong></td>
-                    <td>${fmt(r.kg)} kg</td>
-                    <td>$${fmt(r.costo_total_logistica)}</td>
-                    <td>$${fmt(r.precio_venta_total)}</td>
-                    <td><span class="badge badge-success">$${fmt(r.margen)}</span></td>
-                    <td>${r.plazo_cobro_dias} días</td>
-                    <td>${badgeStatus}</td>
-                    <td>${actionBtn}</td>
+                    <td>
+                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.cliente || '—'}</div>
+                        <div style="font-size:9px;color:var(--text-muted);margin-top:2px">#${r.id} · ${r.fecha.slice(5)}</div>
+                    </td>
+                    <td style="line-height:1.4; font-size:10px;">
+                        <div style="color:var(--text-muted)">Kg: <span style="color:#111827;font-weight:500">${fmt(r.kg)}</span></div>
+                        <div style="color:var(--text-muted)">Log: <span style="color:#111827;font-weight:500">${logisticaText}</span></div>
+                    </td>
+                    <td>
+                        <div class="home-amount" style="font-size:13px">${ventaText}</div>
+                        <div class="home-subtext" style="font-size:9px;margin-top:2px;color:var(--success)">Mrg: ${margenText}</div>
+                    </td>
+                    <td style="text-align:center">
+                        ${badgeStatus}
+                        ${actionBtn}
+                    </td>
                 </tr>`;
-            }).join('') : '<tr><td colspan="10"><div class="empty-state">Sin remitos de venta registrados</div></td></tr>';
+            }).join('') : '<tr><td colspan="4"><div class="empty-state">Sin remitos de venta registrados</div></td></tr>';
 
             // Vincular acciones de cobro
             document.querySelectorAll('.btn-cobrar-remito').forEach(btn => {
@@ -1022,24 +1140,29 @@
                 return;
             }
             $('tblHistorialPagos').innerHTML = rows.map(r => {
-                const tipoCls = (r.tipo || '').toLowerCase();
-                const pun = r.interes_punitorio > 0 ? `<span class="punitorio">$${fmt(r.interes_punitorio)}</span>` : '<span class="num">—</span>';
-                const desc = r.descuento > 0 ? `<span class="descuento">$${fmt(r.descuento)}</span>` : '<span class="num">—</span>';
+                const tipoCls = (r.tipo || 'neutro').toLowerCase();
+                const punText = r.interes_punitorio > 0 ? `<div style="color:var(--danger);font-size:9px;margin-top:2px">+ Pun: $${fmtCompact(r.interes_punitorio)}</div>` : '';
+                const descText = r.descuento > 0 ? `<div style="color:var(--success);font-size:9px;margin-top:2px">- Desc: $${fmtCompact(r.descuento)}</div>` : '';
                 const progreso = r.cuotas_pagadas_op != null && r.cuota_label
                     ? `${r.cuota_label} · ${r.cuotas_pagadas_op} pag.`
                     : r.cuota_label || '—';
                 return `<tr>
-                    <td class="fecha">${(r.fecha_pago || '').replace('T', ' ').slice(0, 16)}</td>
-                    <td><strong>${r.alias}</strong></td>
-                    <td><span class="tipo-badge ${tipoCls}">${r.tipo}</span></td>
-                    <td class="cuota-cell">${r.cuota_label || '—'}</td>
-                    <td>${r.plazo_texto || '—'}</td>
-                    <td>${r.detalle || '—'}</td>
-                    <td class="num">$${fmt(r.monto_cuota_esperado)}</td>
-                    <td class="num"><strong>$${fmt(r.monto_pagado)}</strong></td>
-                    <td class="num">${pun}</td>
-                    <td class="num">${desc}</td>
-                    <td class="progreso">${progreso}</td>
+                    <td>
+                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.alias}</div>
+                        <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${(r.fecha_pago || '').slice(0, 10)}</div>
+                    </td>
+                    <td style="line-height:1.4; font-size:10px;">
+                        <div style="color:#111827;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px" title="${r.detalle||''}">${r.detalle || '—'}</div>
+                        <div style="color:var(--text-muted);font-size:9px;margin-top:2px">${r.plazo_texto || '—'}</div>
+                    </td>
+                    <td>
+                        <div class="home-amount" style="font-size:13px;color:var(--success)">$${fmtCompact(r.monto_pagado)}</div>
+                        ${punText}${descText}
+                    </td>
+                    <td style="text-align:center">
+                        <div style="margin-bottom:4px"><span class="badge-home ${tipoCls}">${r.tipo}</span></div>
+                        <div style="font-size:9px;color:var(--text-muted)">${progreso}</div>
+                    </td>
                 </tr>`;
             }).join('');
         }
@@ -1058,15 +1181,21 @@
                     ? '<span class="badge badge-success">Activo</span>' 
                     : '<span class="badge badge-neutral">Agotado</span>';
                 return `<tr>
-                    <td>LOTE-${String(b.id).padStart(4, '0')}</td>
-                    <td>${b.fecha}</td>
-                    <td class="cell-money">${fmt(b.kg_totales)} kg</td>
-                    <td class="cell-money"><strong>${fmt(b.kg_remanentes)} kg</strong></td>
-                    <td class="cell-money">$${fmt(b.costo_total_bulk)}</td>
-                    <td class="cell-money">$${fmt(b.costo_kg)} / kg</td>
-                    <td>${badge}</td>
+                    <td>
+                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Lote #${b.id}</div>
+                        <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${b.fecha}</div>
+                    </td>
+                    <td style="line-height:1.4; font-size:10px;">
+                        <div style="font-weight:600">${fmt(b.kg_remanentes)} kg</div>
+                        <div style="color:var(--text-muted);font-size:9px;margin-top:2px">Orig: ${fmt(b.kg_totales)} kg</div>
+                    </td>
+                    <td>
+                        <div class="home-amount" style="font-size:13px">$${fmtCompact(b.costo_total_bulk)}</div>
+                        <div class="home-subtext" style="font-size:9px;margin-top:2px">x Kg: $${fmtCompact(b.costo_kg)}</div>
+                    </td>
+                    <td style="text-align:center">${badge}</td>
                 </tr>`;
-            }).join('') : '<tr><td colspan="7" style="color:var(--text-muted);padding:16px">Sin lotes de compra bulk registrados</td></tr>';
+            }).join('') : '<tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center">Sin lotes de compra bulk registrados</td></tr>';
         }
 
         let selectedClienteId = null;
@@ -1083,19 +1212,26 @@
             table.innerHTML = data.clientes && data.clientes.length ? data.clientes.map(c => {
                 const statusBadge = c.limite_superado 
                     ? '<span class="badge badge-danger">Superado</span>' 
-                    : '<span class="badge badge-success">Bajo Límite</span>';
+                    : '<span class="badge badge-success">Límite OK</span>';
                 
                 const style = c.limite_superado ? 'color: var(--danger)' : '';
                 
+                const techoText = '$' + fmtCompact(c.techo_deuda);
+                const saldoText = '$' + fmtCompact(c.saldo_actual);
+
                 return `<tr class="clickable" data-id="${c.id}">
-                    <td class="cell-primary" style="${style}"><strong>${c.nombre}</strong></td>
-                    <td><span class="badge badge-neutral" style="text-align:center; display:inline-block; width:20px;">${c.scoring}</span></td>
-                    <td class="cell-money">$${fmt(c.techo_deuda)}</td>
-                    <td class="cell-money"><strong>$${fmt(c.saldo_actual)}</strong></td>
-                    <td>${statusBadge}</td>
-                    <td>${(c.created_at || '').slice(0, 10)}</td>
+                    <td>
+                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${style}">${c.nombre}</div>
+                        <div style="font-size:9px;color:var(--text-muted);margin-top:2px">Alta: ${(c.created_at || '').slice(0, 10)}</div>
+                    </td>
+                    <td style="line-height:1.4; font-size:10px;">
+                        <div class="home-amount" style="font-size:13px">${saldoText}</div>
+                        <div style="color:var(--text-muted);font-size:9px;margin-top:2px">Techo: <span style="color:#111827">${techoText}</span></div>
+                    </td>
+                    <td style="text-align:center"><span class="badge badge-neutral" style="text-align:center; display:inline-block; width:20px;">${c.scoring}</span></td>
+                    <td style="text-align:center">${statusBadge}</td>
                 </tr>`;
-            }).join('') : '<tr><td colspan="6" style="color:var(--text-muted);padding:16px;text-align:center">Sin clientes registrados</td></tr>';
+            }).join('') : '<tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center">Sin clientes registrados</td></tr>';
             
             table.querySelectorAll('tr.clickable').forEach((row, idx) => {
                 row.addEventListener('click', () => {
@@ -1127,35 +1263,35 @@
                     remitosHtml = `
                     <h4 style="margin:20px 0 10px 0;border-bottom:1px solid var(--border);padding-bottom:5px">Remitos de Venta</h4>
                     <div class="table-wrap">
-                        <table class="data-table" style="font-size:0.85rem">
+                        <table class="home-table" style="font-size:0.85rem">
                             <thead>
                                 <tr>
-                                    <th>Fecha</th>
-                                    <th>Kilos</th>
-                                    <th>Precio/kg</th>
-                                    <th>Venta Total</th>
+                                    <th>Info</th>
+                                    <th>Venta</th>
                                     <th>Estado</th>
-                                    <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${c.remitos.map(r => {
                                     const est = remitoEstado(r.pagado ?? r.estado_cobro);
-                                    const badge = `<span class="badge ${est.badgeClass}" style="padding:2px 4px;font-size:0.75rem">${est.label}</span>`;
-                                    const action = est.cobrable
-                                        ? `<button type="button" class="btn btn-ghost btn-sm btn-cobrar-remito-drawer" data-rid="${r.id}" style="color:var(--success); border:1px solid var(--success); padding: 2px 4px; font-size:0.75rem">Cobrar</button>`
-                                        : '—';
-                                    const precioKg = r.kg > 0 ? r.precio_venta_total / r.kg : 0;
-                                    return `
-                                    <tr>
-                                        <td>${r.fecha}</td>
-                                        <td>${fmt(r.kg)} kg</td>
-                                        <td>$${fmt(precioKg)}</td>
-                                        <td><strong>$${fmt(r.precio_venta_total)}</strong></td>
-                                        <td>${badge}</td>
-                                        <td>${action}</td>
-                                    </tr>
-                                    `;
+                                    const btn = r.estado_cobro !== 'cobrado' 
+                                        ? `<div style="margin-top:4px"><button class="btn btn-ghost btn-sm btn-cobrar-remito-drawer" data-rid="${r.id}" style="color:var(--success); border:1px solid var(--success); padding:2px 6px; font-size:9px">Cobrar</button></div>` 
+                                        : '';
+                                        
+                                    return `<tr>
+                                        <td>
+                                            <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Remito #${r.id}</div>
+                                            <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${r.fecha}</div>
+                                        </td>
+                                        <td style="line-height:1.4; font-size:10px;">
+                                            <div class="home-amount" style="font-size:13px">$${fmtCompact(r.precio_venta_total)}</div>
+                                            <div style="color:var(--text-muted);font-size:9px;margin-top:2px">${fmt(r.kg)} kg</div>
+                                        </td>
+                                        <td style="text-align:center">
+                                            <span class="badge ${est.badgeClass}" style="padding:2px 4px;font-size:0.75rem">${est.label}</span>
+                                            ${btn}
+                                        </td>
+                                    </tr>`;
                                 }).join('')}
                             </tbody>
                         </table>
@@ -1307,7 +1443,7 @@
             renderKpis();
             renderHealth();
             renderChartCfr();
-            renderDeudas();
+            renderHomeTable();
             renderRemitosDash();
             renderBancos();
             renderBulkLots();
@@ -1358,6 +1494,7 @@
         });
 
         $('menuToggle').addEventListener('click', () => $('sidebar').classList.toggle('open'));
+        if($('sidebarCloseMobile')) $('sidebarCloseMobile').addEventListener('click', () => $('sidebar').classList.remove('open'));
         $('drawerClose').addEventListener('click', closeDrawer);
         $('drawerOverlay').addEventListener('click', ev => { if (ev.target === $('drawerOverlay')) closeDrawer(); });
         
@@ -1437,7 +1574,7 @@
                 ev.target.reset();
                 toggleFormTipo();
                 await loadAll();
-                switchView('deudas');
+                switchView('home');
             } catch (e) { toast(e.message, true); }
         });
 
@@ -1726,7 +1863,7 @@
 
             // Cambiar de vista con las teclas 1 a 6
             if (ev.key === '1') { switchView('dashboard'); return; }
-            if (ev.key === '2') { switchView('deudas'); return; }
+            if (ev.key === '2') { switchView('home'); return; }
             if (ev.key === '3') { switchView('remitos'); return; }
             if (ev.key === '4') { switchView('clientes'); return; }
             if (ev.key === '5') { switchView('registro'); return; }
@@ -1836,9 +1973,9 @@
         setInterval(loadAll, 60000);
     </script>
     <footer class="terminal-footer">
-        <div class="footer-segment"><span class="lbl">[SANGRE DIARIA]</span> <span id="footSangria" style="color:var(--danger)">—</span></div>
-        <div class="footer-segment"><span class="lbl">[STOCK DISPONIBLE]</span> <span id="footStock" style="color:var(--success)">—</span></div>
-        <div class="footer-segment"><span class="lbl">[CAJA REAL]</span> <span id="footCaja" style="color:var(--accent)">—</span></div>
+        <div class="footer-segment"><span class="lbl">[SANGRE]</span> <span id="footSangria" style="color:var(--danger)">—</span></div>
+        <div class="footer-segment"><span class="lbl">[DEUDA]</span> <span id="footDeuda" style="color:var(--warning)">—</span></div>
+        <div class="footer-segment"><span class="lbl">[CAPITAL]</span> <span id="footCapital" style="color:var(--success)">—</span></div>
     </footer>
 </body>
 </html>

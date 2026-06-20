@@ -99,6 +99,8 @@ body::before {
     flex-direction: column;
     z-index: 100;
     backdrop-filter: blur(16px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .brand {
@@ -175,14 +177,11 @@ body::before {
 }
 
 .sidebar-history {
-    flex: 1; min-height: 0;
     display: flex; flex-direction: column;
     border-top: 1px solid var(--border-subtle);
     margin-top: 4px;
 }
-.hist-list { flex: 1; overflow-y: auto; padding: 0 10px 10px; }
-.hist-list::-webkit-scrollbar { width: 4px; }
-.hist-list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+.hist-list { padding: 0 10px 10px; }
 
 .hist-item {
     padding: 10px 12px; margin-bottom: 6px;
@@ -610,7 +609,7 @@ table:not(.data-table):not(.xls-table) tr:hover td { background: var(--bg-hover)
 .drawer-overlay.open { display: block; }
 .drawer {
     position: fixed; top: 0; right: -440px;
-    width: 420px; max-width: 100%; height: 100%;
+    width: 420px; max-width: 100%; height: calc(100% - 40px);
     background: var(--bg-elevated);
     backdrop-filter: blur(20px);
     border-left: 1px solid var(--border-default);
@@ -746,6 +745,27 @@ table:not(.data-table):not(.xls-table) tr:hover td { background: var(--bg-hover)
     .sidebar.open { transform: translateX(0); }
     .main { margin-left: 0; }
     .menu-toggle { display: inline-flex !important; }
-    .status-pill { display: none; }
-    .content { padding: 16px; }
+    .status-pill, .breadcrumb, .topbar-sub, .clock { display: none !important; }
+    .topbar { padding: 0 12px; height: 54px; }
+    .topbar-title { font-size: 15px !important; }
+    .content { padding: 12px; }
+    body { font-size: 11px; }
+    .kpi-value { font-size: 18px; }
+    table:not(.data-table):not(.xls-table) th, .home-table th { padding: 6px 8px !important; font-size: 9px !important; }
+    table:not(.data-table):not(.xls-table) td, .home-table td { padding: 8px 10px !important; font-size: 11px !important; }
+    .badge, .badge-home { font-size: 9px !important; padding: 2px 6px !important; }
+    .btn { font-size: 11px; padding: 6px 10px; }
+    .hide-mobile { display: none !important; }
+    .home-contraparte { 
+        font-size: 12px !important; 
+        white-space: nowrap !important; 
+        overflow: hidden !important; 
+        text-overflow: ellipsis !important; 
+        display: block; 
+    }
+    .home-table { table-layout: fixed !important; width: 100% !important; word-wrap: break-word !important; }
+    .home-table th:nth-child(1) { width: 33%; }
+    .home-table th:nth-child(2) { width: 23%; }
+    .home-table th:nth-child(3) { width: 25%; }
+    .home-table th:nth-child(4) { width: 19%; }
 }
