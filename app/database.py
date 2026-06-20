@@ -101,6 +101,14 @@ def get_db():
         finally:
             conn.close()
 
+# ------------------------------------------------------------------------------
+# 🏗️ CONSTRUIR LA BÓVEDA (init_db)
+# ¿Qué hace esto? Imagina que el restaurante recién abre y no hay dónde guardar
+# las facturas. Esta función lee el plano de construcción ("schema.sql"), que dice:
+# "Construye una caja para los remitos, una caja para los bancos", y luego usa a 
+# los obreros de la bóveda para armarlas (executescript).
+# Finalmente, revisa si hay alguna caja vieja que necesite actualizarse (_run_migrations).
+# ------------------------------------------------------------------------------
 def init_db():
     with open(Config.SCHEMA_PATH, encoding="utf-8") as f:
         sql = f.read()

@@ -17,15 +17,36 @@ from app.services.bulk import registrar_lote_bulk, list_bulk_lots, fraccionar_lo
 from app.services.clientes import list_clientes, registrar_cliente, get_cliente_detalle, buscar_o_crear_cliente, recalcular_saldo_cliente, marcar_cliente_incobrable, list_perdidas_acumuladas
 from app.services.ventas_mostrador import list_ventas_mostrador, sync_ventas_offline
 
+# ==============================================================================
+# 🤵 EL MOZO DEL RESTAURANTE (api_bp)
+# Esto es como la libreta del mozo. Cuando el cliente (la pantalla de la app)
+# quiere hacer algo (ver datos, guardar ventas), llama a una "ruta" de aquí.
+# ==============================================================================
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
+# ------------------------------------------------------------------------------
+# 📊 RUTA: EL TABLERO PRINCIPAL (DASHBOARD)
+# ¿Qué hace esto? Imagina que el dueño del restaurante pregunta: 
+# "¿Cómo nos fue hoy?". El mozo corre a la cocina, le pide a todos los expertos 
+# un resumen (bancos, ventas, remitos), los junta en un solo paquete y se lo
+# entrega al dueño (la pantalla del celular) en formato de diccionario (JSON).
+# ------------------------------------------------------------------------------
 @api_bp.route("/dashboard")
 def api_dashboard():
+    # 1. Pide la estrategia y la lista de "enemigos" (deudores peligrosos)
     estrategia = panel_estrategia()
     enemigos = ranking_enemigos()
+    
+    # 2. Pide los últimos 8 remitos de carne
     remitos = list_remitos(8)
+    
+    # 3. Pide la historia clínica de vencimientos
     historial = historial_vencimientos()
+    
+    # 4. Filtra solo las deudas que ya vencieron (están en rojo)
     vencidos = [h for h in historial if h.get("vencido")]
+    
+    # 5. Devuelve todo empaquetado en una caja llamada "JSON" para que la app lo lea
     return jsonify(
         {
             "estrategia": estrategia,
@@ -65,23 +86,39 @@ def api_estrategia():
 def api_enemigos():
     return jsonify(ranking_enemigos())
 
+# ------------------------------------------------------------------------------
+# 📝 RUTA: GUARDAR UNA OPERACIÓN (NUEVA DEUDA)
+# ¿Qué hace esto? Imagina que la pantalla del celular le dice al Mozo:
+# "¡Oye, acabo de tomar una nueva deuda!". 
+# Aquí el Mozo recibe la nota, revisa que esté bien escrita (parse_operacion),
+# calcula si el interés es peligroso (CFR), y luego corre a la Bóveda a guardarla.
+# ------------------------------------------------------------------------------
 @api_bp.route("/operaciones", methods=["POST"])
 def api_create_op():
+    # 1. El Mozo lee la nota (el JSON) que le mandó la pantalla
     d = request.get_json(silent=True) or {}
+    
     try:
+        # 2. Revisa que no falten datos importantes (nombres, montos)
         payload = parse_operacion_payload(d)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
+    # 3. Hace matemáticas: ¿Es un trato justo o un robo? Calcula el Costo Financiero Real (CFR)
     cfr = None if payload["tipo"].lower() in ("cheque", "proveedor") else calc_cfr(payload["recibido"], payload["pagar"], payload["meses"])
+    
+    # 4. El UUID es como un código de barras único para que no guardemos esto dos veces
     uuid_val = d.get("uuid")
     
+    # 5. ¡Abre la Bóveda de acero!
     with get_db() as conn:
         if uuid_val:
+            # Primero pregunta: "¿Ya guardé esto antes?"
             row = conn.execute("SELECT id FROM operaciones_financieras WHERE uuid = ?", (uuid_val,)).fetchone()
             if row:
                 return jsonify({"id": row["id"], "ok": True, "duplicate": True}), 200
 
+        # 6. Lo guarda en el archivo correcto de la Bóveda usando el lenguaje secreto SQL (INSERT INTO)
         cur = conn.execute(
             """
             INSERT INTO operaciones_financieras
