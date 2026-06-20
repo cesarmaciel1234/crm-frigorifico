@@ -1,19 +1,94 @@
 import sqlite3
+import re
 from contextlib import contextmanager
 from app.config import Config
 
+try:
+    import psycopg2
+    import psycopg2.extras
+except ImportError:
+    psycopg2 = None
+
+class PostgresCursorWrapper:
+    def __init__(self, cursor):
+        self.cursor = cursor
+        self._lastrowid = None
+        
+    def execute(self, query, vars=None):
+        query = query.replace("?", "%s")
+        query = query.replace("datetime('now', 'localtime')", "CURRENT_TIMESTAMP")
+        query = query.replace("date('now', 'localtime')", "CURRENT_DATE")
+        
+        if "PRAGMA table_info" in query:
+            match = re.search(r"PRAGMA table_info\((.+?)\)", query)
+            if match:
+                table = match.group(1).strip("'\"")
+                query = f"SELECT column_name as name FROM information_schema.columns WHERE table_name = '{table}'"
+        elif query.strip().upper().startswith("SELECT 1 FROM SQLITE_MASTER WHERE TYPE='TABLE'"):
+            query = "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=%s"
+
+        is_insert = query.strip().upper().startswith("INSERT")
+        if is_insert and "RETURNING" not in query.upper():
+            query += " RETURNING id"
+
+        self.cursor.execute(query, vars)
+        
+        if self.cursor.description and is_insert:
+            row = self.cursor.fetchone()
+            self._lastrowid = row['id'] if row and 'id' in row else (row[0] if row else None)
+        else:
+            self._lastrowid = None
+            
+        return self
+        
+    def fetchone(self): return self.cursor.fetchone()
+    def fetchall(self): return self.cursor.fetchall()
+    
+    @property
+    def lastrowid(self): return self._lastrowid
+
+class PostgresConnWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+    def execute(self, query, vars=None):
+        cur = PostgresCursorWrapper(self.conn.cursor())
+        cur.execute(query, vars)
+        return cur
+    def executescript(self, sql):
+        sql = sql.replace("AUTOINCREMENT", "SERIAL")
+        sql = sql.replace("datetime('now', 'localtime')", "CURRENT_TIMESTAMP")
+        sql = sql.replace("date('now', 'localtime')", "CURRENT_DATE")
+        sql = sql.replace("REAL", "DOUBLE PRECISION")
+        cur = self.conn.cursor()
+        cur.execute(sql)
+    def commit(self): self.conn.commit()
+    def rollback(self): self.conn.rollback()
+    def close(self): self.conn.close()
+
 @contextmanager
 def get_db():
-    conn = sqlite3.connect(Config.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    if Config.DATABASE_URL and psycopg2:
+        conn = psycopg2.connect(Config.DATABASE_URL)
+        conn.cursor_factory = psycopg2.extras.DictCursor
+        try:
+            yield PostgresConnWrapper(conn)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(Config.DB_PATH)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
 def init_db():
     with open(Config.SCHEMA_PATH, encoding="utf-8") as f:

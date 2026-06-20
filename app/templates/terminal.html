@@ -609,8 +609,9 @@
         // --- OFFLINE SYNC ENGINE (Dexie) ---
         const MODO_PRUEBA = false; // Cambiar a false para enviar datos a la nube
         const db = new Dexie('CarniceriaContableDB');
-        db.version(1).stores({
-            transacciones: '++id, uuid, tipo, monto, fecha, status, updated_at'
+        db.version(2).stores({
+            transacciones: '++id, uuid, tipo, monto, fecha, status, updated_at',
+            cache: 'key, updated_at'
         });
 
         async function registrarTransaccion(datos) {
@@ -1523,14 +1524,28 @@
         async function loadAll() {
             setLoading(true);
             try {
+                // 1. LAZY LOAD: Mostrar caché local instantáneamente
+                const cached = await db.cache.get('appData');
+                if (cached && cached.data) {
+                    data = cached.data;
+                    renderAll();
+                    setLoading(false); // Ocultar loader rápido si hay caché
+                }
+
+                // 2. SYNC: Actualizar desde el servidor en segundo plano
                 const [dash, pagos, bulk, clientes] = await Promise.all([
                     api('/api/dashboard'),
                     api('/api/historial-pagos'),
                     api('/api/bulk'),
                     api('/api/clientes')
                 ]);
-                data = { ...dash, historialPagos: pagos, bulk: bulk, clientes: clientes };
-                renderAll();
+                const freshData = { ...dash, historialPagos: pagos, bulk: bulk, clientes: clientes };
+                
+                data = freshData;
+                await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
+                renderAll(); // Re-renderizar con los datos frescos
+            } catch (e) {
+                console.warn("Error al cargar del servidor. Mostrando datos locales (offline).", e);
             } finally {
                 setLoading(false);
             }
