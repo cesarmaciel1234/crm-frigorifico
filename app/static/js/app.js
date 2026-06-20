@@ -69,6 +69,12 @@ const $ = id => document.getElementById(id);
         window.addEventListener('online', intentarSincronizar);
         // -----------------------------------
         const fmt = n => Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        const fmtFecha = (iso, time=false) => {
+            if (!iso) return '-';
+            const d = new Date(iso);
+            if (isNaN(d)) return iso;
+            return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: time ? '2-digit' : undefined, minute: time ? '2-digit' : undefined });
+        };
         const fmtCompact = n => {
             if (n >= 1000000) return (n / 1000000).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + 'M';
             return fmt(n);
