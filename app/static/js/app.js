@@ -356,8 +356,12 @@ const $ = id => document.getElementById(id);
                 if ($('barDeudaValue')) $('barDeudaValue').textContent = '$' + fmt(mf.deuda);
                 if ($('barDeudaSub')) $('barDeudaSub').textContent = `Int. $${fmt(data.totales?.intereses_totales || 0)}`;
                 
-                const capitalSign = mf.capital > 0 ? '+' : '';
-                if ($('barCapitalValue')) $('barCapitalValue').textContent = '$' + capitalSign + fmt(mf.capital);
+                const absCapital = Math.abs(mf.capital);
+                const isPos = mf.capital >= 0;
+                const signStr = isPos ? '+' : '-';
+                const signClass = isPos ? 'sign-pos' : 'sign-neg';
+                const signSpan = `<span class="${signClass}">${signStr}</span>`;
+                if ($('barCapitalValue')) $('barCapitalValue').innerHTML = '$' + signSpan + fmt(absCapital);
                 if ($('barCapitalTrend')) {
                     $('barCapitalTrend').textContent = mf.tendencia === 'up' ? '▲' : '▼';
                     $('barCapitalTrend').className = 'trend ' + mf.tendencia;
