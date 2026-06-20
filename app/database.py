@@ -117,10 +117,16 @@ def init_db():
         _run_migrations(conn)
 
 def _table_exists(conn, name: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
-        (name,),
-    ).fetchone()
+    if type(conn).__name__ == "PostgresConnWrapper":
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = %s",
+            (name,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (name,),
+        ).fetchone()
     return row is not None
 
 
@@ -136,12 +142,21 @@ def _run_migrations(conn):
         "precio_kg": "REAL",
         "plazo_dias": "INTEGER",
     }
+    is_pg = type(conn).__name__ == "PostgresConnWrapper"
+    
     if _table_exists(conn, "operaciones_financieras"):
-        existing = {row[1] for row in conn.execute("PRAGMA table_info(operaciones_financieras)")}
+        if is_pg:
+            existing = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'operaciones_financieras'")}
+        else:
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(operaciones_financieras)")}
+            
         for name, col_type in cols.items():
             if name not in existing:
                 default = " DEFAULT 0" if name == "cuotas_pagadas" else ""
-                conn.execute(f"ALTER TABLE operaciones_financieras ADD COLUMN {name} {col_type}{default}")
+                pg_type = "DOUBLE PRECISION" if col_type == "REAL" else col_type
+                final_type = pg_type if is_pg else col_type
+                conn.execute(f"ALTER TABLE operaciones_financieras ADD COLUMN {name} {final_type}{default}")
+                
         if "uuid" in existing or "uuid" in cols:
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_op_uuid "
@@ -171,13 +186,19 @@ def _run_migrations(conn):
         "pagado": "INTEGER NOT NULL DEFAULT 0",
     }
     if _table_exists(conn, "remitos_carga"):
-        remito_existing = {row[1] for row in conn.execute("PRAGMA table_info(remitos_carga)")}
+        if is_pg:
+            remito_existing = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'remitos_carga'")}
+        else:
+            remito_existing = {row[1] for row in conn.execute("PRAGMA table_info(remitos_carga)")}
+            
         for name, col_type in remito_cols.items():
             if name not in remito_existing:
-                conn.execute(f"ALTER TABLE remitos_carga ADD COLUMN {name} {col_type}")
+                pg_type = "DOUBLE PRECISION" if col_type.startswith("REAL") else col_type
+                final_type = pg_type if is_pg else col_type
+                conn.execute(f"ALTER TABLE remitos_carga ADD COLUMN {name} {final_type}")
 
     # Migración de clientes
-    conn.execute(
+    conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS clientes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -191,7 +212,7 @@ def _run_migrations(conn):
     )
 
     # Migración de compras_bulk
-    conn.execute(
+    conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS compras_bulk (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,7 +226,7 @@ def _run_migrations(conn):
     )
 
     # Migración de remitos_fracciones
-    conn.execute(
+    conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS remitos_fracciones (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -221,7 +242,7 @@ def _run_migrations(conn):
     )
 
     # Migración de perdidas_acumuladas
-    conn.execute(
+    conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS perdidas_acumuladas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

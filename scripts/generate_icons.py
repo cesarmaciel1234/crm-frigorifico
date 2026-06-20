@@ -10,28 +10,40 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "app" / "static" / "icons"
 OUT.mkdir(parents=True, exist_ok=True)
 
-BRAND = (37, 99, 235)
-BG = (15, 23, 42)
-
+# Elegant Gold and Black Theme
+BRAND_GOLD = (212, 175, 55) # Metallic Gold
+BG_DARK = (15, 23, 30)      # Very dark blue/black
 
 def draw_icon(size: int) -> Image.Image:
-    img = Image.new("RGB", (size, size), BG)
+    # Fondo oscuro
+    img = Image.new("RGB", (size, size), BG_DARK)
     draw = ImageDraw.Draw(img)
-    margin = size // 8
+    
+    # Borde dorado sutil o gradiente simulado
+    margin = size // 10
     draw.rounded_rectangle(
         (margin, margin, size - margin, size - margin),
-        radius=size // 6,
-        fill=BRAND,
+        radius=size // 5,
+        outline=BRAND_GOLD,
+        width=max(2, size // 50)
     )
+    
     text = "MT"
-    font_size = size // 3
+    font_size = int(size / 2.2)
     try:
-        font = ImageFont.truetype("arialbd.ttf", font_size)
+        # Intentar cargar una fuente elegante o serif
+        font = ImageFont.truetype("times.ttf", font_size)
     except OSError:
-        font = ImageFont.load_default()
+        try:
+            font = ImageFont.truetype("georgia.ttf", font_size)
+        except OSError:
+            font = ImageFont.load_default()
+            
     bbox = draw.textbbox((0, 0), text, font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    draw.text(((size - tw) / 2, (size - th) / 2 - size * 0.02), text, fill="white", font=font)
+    
+    # Dibujar texto en dorado
+    draw.text(((size - tw) / 2, (size - th) / 2 - size * 0.05), text, fill=BRAND_GOLD, font=font)
     return img
 
 
