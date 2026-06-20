@@ -371,9 +371,7 @@ const $ = id => document.getElementById(id);
             $('kpiMeta').textContent = fmt(a.stock_kg || 0) + ' kg';
             $('kpiExcedente').textContent = '$' + fmt(a.caja_real || 0);
 
-            if ($('footSangria')) $('footSangria').textContent = '$' + fmt(s.sangria_diaria || 0);
-            if ($('footDeuda')) $('footDeuda').textContent = '$' + fmt(a.deuda_real ?? a.deuda_financiera ?? 0);
-            if ($('footCapital')) $('footCapital').textContent = '$' + fmt(a.capital_neto || 0);
+
         }
 
         function renderHealth() {
