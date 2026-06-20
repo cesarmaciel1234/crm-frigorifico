@@ -602,8 +602,66 @@
 
     <div class="toast" id="toast"></div>
 
+    <script src="/static/vendor/dexie.min.js"></script>
     <script>
         const $ = id => document.getElementById(id);
+
+        // --- OFFLINE SYNC ENGINE (Dexie) ---
+        const db = new Dexie('CarniceriaContableDB');
+        db.version(1).stores({
+            transacciones: '++id, uuid, tipo, monto, fecha, status, updated_at'
+        });
+
+        async function registrarTransaccion(datos) {
+            const registro = {
+                uuid: crypto.randomUUID(),
+                ...datos,
+                status: 0,
+                updated_at: Date.now()
+            };
+            try {
+                await db.transacciones.add(registro);
+                console.log("Guardado localmente:", registro.uuid);
+                intentarSincronizar();
+                return true;
+            } catch (e) {
+                console.error("Error al guardar localmente:", e);
+                return false;
+            }
+        }
+
+        async function intentarSincronizar() {
+            if (!navigator.onLine) {
+                console.log("Sin conexión. Los datos están seguros en el dispositivo.");
+                return;
+            }
+            const pendientes = await db.transacciones.where('status').equals(0).toArray();
+            let syncCount = 0;
+            for (const item of pendientes) {
+                try {
+                    const response = await fetch('/api/operaciones', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(item)
+                    });
+                    if (response.ok) {
+                        await db.transacciones.update(item.id, { status: 1 });
+                        console.log("Sincronizado con éxito:", item.uuid);
+                        syncCount++;
+                    }
+                } catch (error) {
+                    console.warn("Error de conexión al sincronizar:", error);
+                    break;
+                }
+            }
+            if (syncCount > 0) {
+                toast(`Sincronizados ${syncCount} registros pendientes`);
+                loadAll();
+            }
+        }
+
+        window.addEventListener('online', intentarSincronizar);
+        // -----------------------------------
         const fmt = n => Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         const fmtCompact = n => {
             if (n >= 1000000) return (n / 1000000).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + 'M';
@@ -1562,20 +1620,15 @@
                 delete payload.precio_kg;
                 delete payload.plazo_dias;
             }
-            try {
-                const res = await api('/api/operaciones', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const msg = payload.tipo === 'proveedor'
-                    ? 'Proveedor registrado · plazo ' + (res.plazo_texto || payload.plazo_dias + ' días')
-                    : 'Deuda registrada' + (res.cfr != null ? ' — CFR ' + res.cfr + '%' : '');
-                toast(msg);
+            const guardado = await registrarTransaccion(payload);
+            if (guardado) {
+                toast(payload.tipo === 'proveedor' ? 'Proveedor guardado localmente (sincronizando...)' : 'Operación guardada localmente (sincronizando...)');
                 ev.target.reset();
                 toggleFormTipo();
-                await loadAll();
                 switchView('home');
-            } catch (e) { toast(e.message, true); }
+            } else {
+                toast('Error al guardar localmente', true);
+            }
         });
 
         $('selTipo').addEventListener('change', toggleFormTipo);

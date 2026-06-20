@@ -74,14 +74,22 @@ def api_create_op():
         return jsonify({"error": str(e)}), 400
 
     cfr = None if payload["tipo"].lower() in ("cheque", "proveedor") else calc_cfr(payload["recibido"], payload["pagar"], payload["meses"])
+    uuid_val = d.get("uuid")
+    
     with get_db() as conn:
+        if uuid_val:
+            row = conn.execute("SELECT id FROM operaciones_financieras WHERE uuid = ?", (uuid_val,)).fetchone()
+            if row:
+                return jsonify({"id": row["id"], "ok": True, "duplicate": True}), 200
+
         cur = conn.execute(
             """
             INSERT INTO operaciones_financieras
-                (alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                uuid_val,
                 payload["alias"],
                 payload["tipo"],
                 payload["recibido"],

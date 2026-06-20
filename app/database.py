@@ -33,6 +33,7 @@ def _table_exists(conn, name: str) -> bool:
 def _run_migrations(conn):
     """Migraciones incrementales sobre la conexión activa."""
     cols = {
+        "uuid": "TEXT",
         "fecha_cierre": "TEXT",
         "fecha_vencimiento": "TEXT",
         "cuotas": "INTEGER",
@@ -47,6 +48,11 @@ def _run_migrations(conn):
             if name not in existing:
                 default = " DEFAULT 0" if name == "cuotas_pagadas" else ""
                 conn.execute(f"ALTER TABLE operaciones_financieras ADD COLUMN {name} {col_type}{default}")
+        if "uuid" in existing or "uuid" in cols:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_op_uuid "
+                "ON operaciones_financieras(uuid) WHERE uuid IS NOT NULL"
+            )
         _migrate_pagar_constraint(conn)
     conn.executescript(
         """
