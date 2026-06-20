@@ -1,6 +1,13 @@
 from app.database import get_db
 
 
+# ==============================================================================
+# 🥩 EL EXPERTO EN CARNE (remitos.py)
+# Esta es otra oficina en la cocina del restaurante. Aquí está el encargado
+# de revisar todos los envíos de carne, calcular los costos de envío (logística)
+# y ver si estamos ganando o perdiendo plata con la venta.
+# ==============================================================================
+
 def _estado_cobro(pagado: int) -> str:
     if pagado == 1:
         return "cobrado"
@@ -8,9 +15,15 @@ def _estado_cobro(pagado: int) -> str:
         return "incobrable"
     return "pendiente"
 
-
+# ------------------------------------------------------------------------------
+# 📋 REVISAR EL HISTORIAL DE ENVÍOS (list_remitos)
+# ¿Qué hace esto? El dueño quiere ver los últimos envíos de carne.
+# El experto va a la Bóveda, saca la lista (SELECT), y con su calculadora
+# saca el "Margen Neto" (cuánta plata real nos quedó en el bolsillo).
+# ------------------------------------------------------------------------------
 def list_remitos(limit: int = 50) -> list[dict]:
     with get_db() as conn:
+        # 1. Pide la lista a la Bóveda usando SQL
         rows = conn.execute(
             """
             SELECT r.id, r.fecha, COALESCE(c.nombre, r.cliente) AS cliente, r.cliente_id,

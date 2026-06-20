@@ -1,15 +1,33 @@
 from app.database import get_db
 from app.services.remitos import _estado_cobro
 
+# ==============================================================================
+# 🕵️ EL EXPERTO EN CLIENTES (clientes.py)
+# Esta es una pequeña oficina dentro de la cocina del restaurante.
+# Aquí trabaja la persona que conoce a todos los clientes: quién debe plata,
+# quién tiene buen comportamiento (Scoring A) y a quién no hay que fiarle más.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 📝 ANOTAR UN NUEVO CLIENTE (registrar_cliente)
+# ¿Qué hace esto? Imagina que llega alguien nuevo al restaurante y pide abrir
+# una cuenta para pagar a fin de mes. El experto le pregunta su nombre y cuánto
+# es lo máximo que le podemos fiar (techo_deuda).
+# ------------------------------------------------------------------------------
 def registrar_cliente(nombre: str, techo_deuda: float, scoring: str = "A") -> int:
     nombre = nombre.strip()
+    # 1. El experto es estricto: ¡No puedes abrir una cuenta sin decir tu nombre!
     if not nombre:
         raise ValueError("El nombre del cliente no puede estar vacío")
+    
+    # 2. Tampoco puedes tener un límite negativo. ¡El restaurante no regala plata!
     if techo_deuda < 0:
         raise ValueError("El techo de deuda debe ser mayor o igual a 0")
+        
     if scoring not in ("A", "B", "C", "D"):
         raise ValueError("Scoring inválido. Debe ser A, B, C o D")
 
+    # 3. Va a la bóveda y anota al cliente nuevo en el cajón de "clientes"
     with get_db() as conn:
         cur = conn.execute(
             """
@@ -19,6 +37,8 @@ def registrar_cliente(nombre: str, techo_deuda: float, scoring: str = "A") -> in
             (nombre, scoring, techo_deuda)
         )
         cliente_id = cur.lastrowid
+        
+    # 4. Le devuelve al Mozo el "número de cliente" para que le entregue su tarjeta
     return cliente_id
 
 def list_clientes() -> list[dict]:
