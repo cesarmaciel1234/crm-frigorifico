@@ -797,7 +797,7 @@
             font-family: 'Segoe UI', sans-serif;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             border: 1px solid #333;
-            z-index: 9999;
+            z-index: 90;
         }
         .kpi-item { display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .dashboard-bar .label { font-size: 0.65em; color: #888; letter-spacing: 0.5px; font-weight: bold; margin-bottom: 4px; }
@@ -805,10 +805,19 @@
         .value-container { display: flex; align-items: center; gap: 5px; }
         .dashboard-bar .sub { font-size: 0.6em; color: #666; margin-top: 2px; }
         
+        /* Colores específicos de valores */
+        #barDeudaValue { color: #f97316; } /* Naranja */
+        #barCapitalValue { color: #10b981; } /* Verde */
+
         /* Indicadores Trading */
-        .trend { font-size: 0.7em; font-weight: bold; }
+        .trend { font-size: 1.1em; font-weight: bold; animation: blink-trend 1s infinite; }
         .trend.up { color: #00ff88; }
         .trend.down { color: #ff3333; }
+
+        @keyframes blink-trend {
+            0%, 100% { opacity: 1; text-shadow: 0 0 8px currentColor; }
+            50% { opacity: 0.4; text-shadow: none; }
+        }
 
         /* Alerta Sangre (Efecto Latido) */
         .alerta-urgente .value {
