@@ -43,8 +43,37 @@ def api_dashboard():
     # 3. Pide la historia clínica de vencimientos
     historial = historial_vencimientos()
     
-    # 4. Filtra solo las deudas que ya vencieron (están en rojo)
     vencidos = [h for h in historial if h.get("vencido")]
+    
+    # Lógica de cálculo solicitada por el usuario
+    capital_disponible = estrategia.get("activo", {}).get("capital_neto", 0)
+    cubre = estrategia.get("activo", {}).get("activo_pendiente", 0) >= estrategia.get("activo", {}).get("deuda_real", 0)
+    tendencia_capital = 'up' if cubre else 'down'
+    
+    sangre_diaria = 0
+    interes_diario = 0
+    deuda_total = 0
+    interes_acumulado = 0
+
+    for d in enemigos:
+        monto = d.get('recibido') or 0  # El capital original sin intereses
+        interes = d.get('interes') or 0 # El interés calculado
+        dias = max(1, d.get('dias_faltantes') or 30)
+
+        # Usamos tu fórmula explícita
+        sangre_diaria += (monto + interes) / dias
+        interes_diario += interes / dias
+        deuda_total += (monto + interes)
+        interes_acumulado += interes
+    
+    metricas_flotantes = {
+        "sangre": sangre_diaria,
+        "int_diario": interes_diario,
+        "deuda": deuda_total,
+        "int_acumulado": interes_acumulado,
+        "capital": capital_disponible,
+        "tendencia": tendencia_capital
+    }
     
     # 5. Devuelve todo empaquetado en una caja llamada "JSON" para que la app lo lea
     return jsonify(
@@ -55,6 +84,7 @@ def api_dashboard():
             "bancos": list_bancos(),
             "historial": historial,
             "perdidas": list_perdidas_acumuladas(),
+            "metricas_flotantes": metricas_flotantes,
             "totales": {
                 "deudas_activas": len(enemigos),
                 "urgentes": sum(1 for e in enemigos if e.get("urgente")),
