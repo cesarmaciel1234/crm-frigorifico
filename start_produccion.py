@@ -21,8 +21,9 @@ from app.config import Config
 
 def main():
     if not Config.SECRET_KEY:
-        print("ERROR: SECRET_KEY obligatoria en produccion (ver .env.example)", file=sys.stderr)
-        sys.exit(1)
+        print("AVISO: SECRET_KEY no configurada. Generando una temporal. Las sesiones se perderán al reiniciar.", file=sys.stderr)
+        from app.security import generate_secret
+        Config.SECRET_KEY = generate_secret()
     if not Config.MT_API_KEY:
         print("AVISO: MT_API_KEY no definida — configure antes de exponer a internet", file=sys.stderr)
 

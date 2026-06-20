@@ -19,10 +19,11 @@ def create_app():
         elif app.config["DEBUG"]:
             app.config["SECRET_KEY"] = generate_secret()
         else:
-            raise RuntimeError(
-                "SECRET_KEY es obligatoria en producción. "
-                "Definila en variables de entorno (ver .env.example)."
+            app.logger.warning(
+                "SECRET_KEY no configurada en producción. Generando temporal. "
+                "Definila en variables de entorno para persistir sesiones."
             )
+            app.config["SECRET_KEY"] = generate_secret()
 
     register_security(app)
 
