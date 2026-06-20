@@ -358,12 +358,10 @@ const $ = id => document.getElementById(id);
             }
             const costo = a.activo_costo ?? a.activo_clientes ?? 0;
 
-            if (a.estado !== 'SIN DATOS') {
-                if ($('barCapitalValue')) {
-                    const cubre = (a.activo_pendiente || 0) >= (a.deuda_real ?? a.deuda_financiera ?? 0);
-                    $('barCapitalValue').innerHTML = '$' + fmt(a.activo_pendiente || 0) + 
-                        ' <span class="trend ' + (cubre ? 'up' : 'down') + '">' + (cubre ? '▲' : '▼') + '</span>';
-                }
+            if ($('barCapitalValue')) {
+                const cubre = (a.activo_pendiente || 0) >= (a.deuda_real ?? a.deuda_financiera ?? 0);
+                $('barCapitalValue').innerHTML = '$' + fmt(a.deuda_neta ?? 0) + 
+                    ' <span class="trend ' + (cubre ? 'up' : 'down') + '" title="Ventas cubren pasivo">' + (cubre ? '▲' : '▼') + '</span>';
             }
 
             $('kpiMeta').textContent = fmt(a.stock_kg || 0) + ' kg';
