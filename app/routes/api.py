@@ -151,27 +151,33 @@ def api_create_op():
                 return jsonify({"id": row["id"], "ok": True, "duplicate": True}), 200
 
         # 6. Lo guarda en el archivo correcto de la Bóveda usando el lenguaje secreto SQL (INSERT INTO)
-        cur = conn.execute(
+        fecha_inicio_val = payload.get("fecha_inicio")
+        if fecha_inicio_val:
+            fecha_inicio_val = f"{fecha_inicio_val} 12:00:00"
+            query = """
+            INSERT INTO operaciones_financieras
+                (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
+            params = (
+                uuid_val, payload["alias"], payload["tipo"], payload["recibido"], payload["pagar"],
+                payload["meses"], payload["fecha_cierre"], payload["fecha_vencimiento"],
+                payload["cuotas"], payload.get("kg"), payload.get("precio_kg"), payload.get("plazo_dias"),
+                fecha_inicio_val
+            )
+        else:
+            query = """
             INSERT INTO operaciones_financieras
                 (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                uuid_val,
-                payload["alias"],
-                payload["tipo"],
-                payload["recibido"],
-                payload["pagar"],
-                payload["meses"],
-                payload["fecha_cierre"],
-                payload["fecha_vencimiento"],
-                payload["cuotas"],
-                payload.get("kg"),
-                payload.get("precio_kg"),
-                payload.get("plazo_dias"),
-            ),
-        )
+            """
+            params = (
+                uuid_val, payload["alias"], payload["tipo"], payload["recibido"], payload["pagar"],
+                payload["meses"], payload["fecha_cierre"], payload["fecha_vencimiento"],
+                payload["cuotas"], payload.get("kg"), payload.get("precio_kg"), payload.get("plazo_dias")
+            )
+
+        cur = conn.execute(query, params)
         op_id = cur.lastrowid
 
     return jsonify(

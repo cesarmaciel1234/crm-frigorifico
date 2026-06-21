@@ -1,5 +1,5 @@
 from typing import Optional, Any
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 def fmt_plazo_dias(dias: Optional[int]) -> Optional[str]:
     if dias is None:
@@ -85,6 +85,19 @@ def parse_operacion_payload(d: dict) -> dict[str, Any]:
             pagar = monto
         meses = max(1, (plazo_dias + 29) // 30)
         fecha_vencimiento = (date.today() + timedelta(days=plazo_dias)).isoformat()
+    elif tipo_l == "prestamo":
+        recibido = _f(d.get("recibido"), "recibido")
+        pagar = _f(d.get("pagar"), "pagar")
+        if pagar <= recibido:
+            raise ValueError("pagar debe superar recibido")
+        plazo_dias = _i(d.get("plazo_dias"), "plazo_dias", mn=1)
+        meses = max(1, (plazo_dias + 29) // 30)
+        
+        fecha_inicio_str = d.get("fecha_inicio")
+        if fecha_inicio_str:
+            fecha_vencimiento = (datetime.strptime(fecha_inicio_str, "%Y-%m-%d").date() + timedelta(days=plazo_dias)).isoformat()
+        else:
+            fecha_vencimiento = (date.today() + timedelta(days=plazo_dias)).isoformat()
     else:
         recibido = _f(d.get("recibido"), "recibido")
         pagar = _f(d.get("pagar"), "pagar")
@@ -104,4 +117,5 @@ def parse_operacion_payload(d: dict) -> dict[str, Any]:
         "kg": kg,
         "precio_kg": precio_kg,
         "plazo_dias": plazo_dias,
+        "fecha_inicio": d.get("fecha_inicio") or None
     }

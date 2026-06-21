@@ -256,11 +256,13 @@ const $ = id => document.getElementById(id);
             ['fldKg', 'fldPrecioKg', 'fldProvTotal', 'hintProveedor'].forEach(id => {
                 $(id).classList.toggle('field-hidden', !esProveedor);
             });
-            $('hintPrestamo').classList.toggle('field-hidden', !esPrestamo);
+            ['hintPrestamo', 'fldInicioFecha'].forEach(id => {
+                $(id).classList.toggle('field-hidden', !esPrestamo);
+            });
             $('fldPlazoDias').classList.toggle('field-hidden', !(esProveedor || esPrestamo));
             $('fldVencimiento').classList.toggle('field-hidden', !(esTarjeta || esCheque));
-            $('fldRecibido').classList.toggle('field-hidden', esCheque || esProveedor || esPrestamo);
-            $('fldPagar').classList.toggle('field-hidden', esCheque || esPrestamo);
+            $('fldRecibido').classList.toggle('field-hidden', esCheque || esProveedor);
+            $('fldPagar').classList.toggle('field-hidden', esCheque);
             $('fldMeses').classList.toggle('field-hidden', esTarjeta || esCheque || esProveedor || esPrestamo);
 
             if (!esCheque) {
@@ -269,8 +271,8 @@ const $ = id => document.getElementById(id);
             }
 
             form.monto.required = esCheque;
-            form.recibido.required = !esCheque && !esProveedor && !esPrestamo;
-            form.pagar.required = !esCheque && !esTarjeta && !esProveedor && !esPrestamo;
+            form.recibido.required = !esCheque && !esProveedor;
+            form.pagar.required = !esCheque && !esTarjeta && !esProveedor;
             form.fecha_cierre.required = esTarjeta;
             form.fecha_vencimiento.required = esTarjeta || esCheque;
             form.cuotas.required = esTarjeta;
@@ -1069,10 +1071,26 @@ const $ = id => document.getElementById(id);
             setTimeout(() => $('registroMenu').classList.remove('fade-in'), 300);
         }
 
+        function getGreeting() {
+            const h = new Date().getHours();
+            if (h >= 5 && h < 12) return '☀️ Buenos días, jefe';
+            if (h >= 12 && h < 20) return '🌤️ Buenas tardes, jefe';
+            return '🌙 Buenas noches, jefe';
+        }
+
         function switchView(name) {
+            if (!titles[name]) return;
             activeRowIndex = -1;
             document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
             document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
+            
+            if (name === 'dashboard') {
+                titles.dashboard[0] = getGreeting();
+                if ($('weatherWidget')) $('weatherWidget').classList.remove('field-hidden');
+            } else {
+                if ($('weatherWidget')) $('weatherWidget').classList.add('field-hidden');
+            }
+
             const [t, s, bc] = titles[name] || ['', '', name];
             $('pageTitle').textContent = t;
             $('pageSub').textContent = s;
