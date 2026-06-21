@@ -592,16 +592,17 @@
                                     <div class="tipo-hint field-hidden" id="hintProveedor">Proveedor: te da carne → <strong>deuda comercial</strong> (pasivo) y al mismo tiempo <strong>activo mercadería</strong>. No es deuda real como un préstamo.</div>
                                     <div class="tipo-hint field-hidden" id="hintPrestamo">Préstamo usurero: ingreso rápido de efectivo, con interés y devolución a corto plazo (días). Puedes poner una fecha pasada si lo cargaste tarde.</div>
 
-                                    <div class="field field-hidden" id="fldInicioFecha"><label>Fecha de inicio (opcional)</label><input name="fecha_inicio" type="date"></div>
-                                    <div class="field field-hidden" id="fldKg"><label>Kilos</label><input name="kg" type="number" step="0.01" min="0.01" placeholder="Ej: 500"></div>
-                                    <div class="field field-hidden" id="fldPrecioKg"><label>Precio por kg ($)</label><input name="precio_kg" type="number" step="0.01" min="0.01" placeholder="Ej: 850"></div>
-                                    <div class="field field-hidden" id="fldPlazoDias"><label>Plazo de pago (días)</label><input name="plazo_dias" type="number" min="1" placeholder="1 = 1 día, 2 = 2 días…"></div>
-                                    <div class="field field-hidden" id="fldProvTotal" style="grid-column:1/-1"><div class="prov-total" id="provTotalBox">Total: <strong id="inpTotalProveedor">—</strong></div></div>
-
-                                    <div class="field field-hidden" id="fldMonto"><label>Monto del cheque ($)</label><input name="monto" type="number" step="0.01" min="0.01"></div>
                                     <div class="field" id="fldRecibido"><label id="lblRecibido">Monto recibido ($)</label><input name="recibido" type="number" step="0.01" min="0.01"></div>
                                     <div class="field" id="fldPagar"><label id="lblPagar">Monto a pagar ($)</label><input name="pagar" type="number" step="0.01" min="0.01"></div>
 
+                                    <div class="field field-hidden" id="fldInicioFecha"><label>Fecha de inicio (opcional)</label><input name="fecha_inicio" type="date"></div>
+                                    <div class="field field-hidden" id="fldPlazoDias"><label>Plazo de pago (días)</label><input name="plazo_dias" type="number" min="1" placeholder="1 = 1 día, 2 = 2 días…"></div>
+                                    
+                                    <div class="field field-hidden" id="fldKg"><label>Kilos</label><input name="kg" type="number" step="0.01" min="0.01" placeholder="Ej: 500"></div>
+                                    <div class="field field-hidden" id="fldPrecioKg"><label>Precio por kg ($)</label><input name="precio_kg" type="number" step="0.01" min="0.01" placeholder="Ej: 850"></div>
+                                    <div class="field field-hidden" id="fldProvTotal" style="grid-column:1/-1"><div class="prov-total" id="provTotalBox">Total: <strong id="inpTotalProveedor">—</strong></div></div>
+
+                                    <div class="field field-hidden" id="fldMonto"><label>Monto del cheque ($)</label><input name="monto" type="number" step="0.01" min="0.01"></div>
                                     <div class="field field-hidden" id="fldCierre"><label>Fecha de cierre</label><input name="fecha_cierre" type="date"></div>
                                     <div class="field field-hidden" id="fldVencimiento"><label>Fecha de vencimiento</label><input name="fecha_vencimiento" type="date"></div>
                                     <div class="field field-hidden" id="fldCuotas"><label>Cantidad de cuotas</label><input name="cuotas" type="number" min="1" placeholder="Ej: 3, 6, 12"></div>
