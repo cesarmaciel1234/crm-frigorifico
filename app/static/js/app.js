@@ -1092,8 +1092,8 @@ const $ = id => document.getElementById(id);
             }
 
             const [t, s, bc] = titles[name] || ['', '', name];
-            $('pageTitle').textContent = t;
-            $('pageSub').textContent = s;
+            if ($('pageTitle')) $('pageTitle').textContent = t;
+            if ($('pageSub')) $('pageSub').textContent = s;
             if ($('breadcrumbPage')) $('breadcrumbPage').textContent = bc || t;
             if (name === 'remitos') renderRemitosFull();
             if (name === 'clientes') renderClientes();
