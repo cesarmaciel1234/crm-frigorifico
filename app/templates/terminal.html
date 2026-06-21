@@ -307,6 +307,10 @@
             <div class="topbar-actions">
                 <span class="status-pill" id="statusPill"><span class="pulse"></span> En línea</span>
                 <span class="clock" id="clock"></span>
+                <button type="button" class="btn btn-ghost" id="btnTogglePro" style="font-weight:bold; color:#111827; background:#e2e8f0; border-radius: 8px;">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px; vertical-align:text-bottom;"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    Modo PRO
+                </button>
                 <button type="button" class="btn btn-primary" id="btnRefresh">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
                     <span class="hide-mobile">Actualizar</span>
@@ -320,7 +324,21 @@
                 <div style="margin-bottom: 20px;">
                     <h2 style="margin:0; font-size: 1.5rem; color: #111827;">Obligaciones y Pagos</h2>
                 </div>
-                <div id="tblHome" class="cards-grid">
+                <div id="tblHomeWrapperNormal" style="overflow-x: auto;">
+                    <table class="home-table">
+                        <thead>
+                            <tr>
+                                <th>Contraparte</th>
+                                <th>Detalle</th>
+                                <th>A Pagar</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tblHome">
+                        </tbody>
+                    </table>
+                </div>
+                <div id="tblHomeWrapperPro" class="cards-grid field-hidden">
                     <!-- Las obligaciones en tarjetas 3D se cargarán aquí desde JS -->
                 </div>
             </div>
@@ -747,7 +765,7 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/app.js?v=1.9"></script>
+    <script src="/static/js/app.js?v=2.0"></script>
 
 
     <div class="dashboard-bar">
