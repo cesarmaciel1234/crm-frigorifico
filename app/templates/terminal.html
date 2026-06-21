@@ -585,7 +585,7 @@
                             <form id="formDeuda">
                                 <div class="form-grid">
                                     <div class="field"><label>Alias / contraparte</label><input name="alias" required maxlength="20" placeholder="Ej: Visa Nación"></div>
-                                    <div class="field"><label>Tipo</label><select name="tipo" id="selTipo"><option value="tarjeta">tarjeta</option><option value="cheque">cheque</option><option value="proveedor">proveedor</option><option value="prestamo">préstamo (usurero)</option><option value="banco">banco</option><option value="otro">otro</option></select></div>
+                                    <div class="field" style="display:none;"><label>Tipo</label><select name="tipo" id="selTipo"><option value="tarjeta">tarjeta</option><option value="cheque">cheque</option><option value="proveedor">proveedor</option><option value="prestamo">préstamo (usurero)</option><option value="banco">banco</option><option value="otro">otro</option></select></div>
 
                                     <div class="tipo-hint field-hidden" id="hintTarjeta">Modo tarjeta: resumen, cierre, vencimiento y cuotas.</div>
                                     <div class="tipo-hint field-hidden" id="hintCheque">Modo cheque: monto fijo sin interés, solo fecha de vencimiento.</div>
@@ -771,7 +771,7 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/app.js?v=2.4"></script>
+    <script src="/static/js/app.js?v=2.5"></script>
 
 
     <div class="dashboard-bar">

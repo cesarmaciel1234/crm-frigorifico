@@ -1057,7 +1057,10 @@ const $ = id => document.getElementById(id);
             $(id).classList.remove('field-hidden');
             if (tipo) {
                 const selectTipo = $(id).querySelector('select[name="tipo"]');
-                if (selectTipo) selectTipo.value = tipo;
+                if (selectTipo) {
+                    selectTipo.value = tipo;
+                    if (id === 'regDeuda') toggleFormTipo();
+                }
             }
             // Small animation via CSS class
             $(id).classList.add('fade-in');
