@@ -88,8 +88,8 @@ def parse_operacion_payload(d: dict) -> dict[str, Any]:
     elif tipo_l == "prestamo":
         recibido = _f(d.get("recibido"), "recibido")
         pagar = _f(d.get("pagar"), "pagar")
-        if pagar <= recibido:
-            raise ValueError("pagar debe superar recibido")
+        if pagar < recibido:
+            raise ValueError("pagar no puede ser menor a recibido")
         plazo_dias = _i(d.get("plazo_dias"), "plazo_dias", mn=1)
         meses = max(1, (plazo_dias + 29) // 30)
         
@@ -101,8 +101,8 @@ def parse_operacion_payload(d: dict) -> dict[str, Any]:
     else:
         recibido = _f(d.get("recibido"), "recibido")
         pagar = _f(d.get("pagar"), "pagar")
-        if pagar <= recibido:
-            raise ValueError("pagar debe superar recibido")
+        if pagar < recibido:
+            raise ValueError("pagar no puede ser menor a recibido")
         meses = _i(d.get("meses"), "meses")
 
     return {

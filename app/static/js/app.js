@@ -19,7 +19,7 @@ const $ = id => document.getElementById(id);
             try {
                 await db.transacciones.add(registro);
                 console.log("Guardado localmente:", registro.uuid);
-                intentarSincronizar();
+                await intentarSincronizar();
                 return true;
             } catch (e) {
                 console.error("Error al guardar localmente:", e);
