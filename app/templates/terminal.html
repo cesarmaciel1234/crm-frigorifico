@@ -1046,13 +1046,13 @@
             display: flex;
             justify-content: space-around;
             align-items: stretch;
-            background: #ffffff;
+            background: #121212;
             padding: 18px 28px;
             border-radius: 20px;
             font-family: 'Segoe UI', system-ui, sans-serif;
-            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.06);
-            border: 1px solid rgba(0, 0, 0, 0.06);
-            z-index: 90;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
+            z-index: 9999;
         }
         @media (min-width: 1025px) {
             .dashboard-bar {
@@ -1083,7 +1083,7 @@
         }
         .dashboard-bar .label {
             font-size: 0.68rem;
-            color: #6b7280;
+            color: #888888;
             letter-spacing: 0.04em;
             font-weight: 600;
             text-transform: uppercase;
@@ -1093,7 +1093,7 @@
             font-size: 1.35rem;
             font-weight: 700;
             line-height: 1.15;
-            color: #111827;
+            color: #ffffff;
         }
         .value-container {
             display: flex;
@@ -1103,15 +1103,15 @@
         }
         .dashboard-bar .sub {
             font-size: 0.62rem;
-            color: #9ca3af;
+            color: #666666;
             margin-top: 5px;
             font-weight: 500;
         }
         #barSangriaValue { color: #ef4444; }
         #barDeudaValue { color: #f97316; }
         #barCapitalValue.capital-pos { color: #10b981; }
-        #barCapitalValue.capital-neg { color: #ef4444; }
-        #barCapitalValue.capital-zero { color: #6b7280; }
+        #barCapitalValue.capital-neg { color: #10b981; }
+        #barCapitalValue.capital-zero { color: #888888; }
 
         .trend {
             font-size: 1.1rem;
