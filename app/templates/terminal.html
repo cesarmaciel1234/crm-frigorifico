@@ -241,11 +241,14 @@
                     <p>Financial Command</p>
                 </div>
             </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-top: 4px;">
-                <div class="org-chip" style="margin: 0; flex: 1;"><span class="dot"></span> Distribuidora · Operativo</div>
-                <button type="button" class="btn btn-ghost" id="btnEditEmpresa" style="padding: 4px 8px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; background: white; cursor: pointer; transition: all 0.2s;" title="Datos de la Empresa" onclick="abrirModalEmpresa()">
-                    ⚙️
-                </button>
+            <div style="display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 4px; flex-wrap: wrap;">
+                <div class="org-chip" style="margin: 0;"><span class="dot"></span> Distribuidora · Operativo</div>
+                <span id="mobileConnPill" class="mobile-conn-pill online" aria-live="polite"><span class="dot"></span><span id="mobileConnText">En línea</span></span>
+                <div style="margin-left: auto;">
+                    <button type="button" class="btn btn-ghost" id="btnEditEmpresa" style="padding: 4px 8px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; background: white; cursor: pointer; transition: all 0.2s;" title="Datos de la Empresa" onclick="abrirModalEmpresa()">
+                        ⚙️
+                    </button>
+                </div>
             </div>
         </div>
         <nav class="nav">
@@ -359,7 +362,6 @@
 
             <!-- Derecha: Clima, Pro y Refresh -->
             <div class="topbar-actions" style="display: flex; align-items: center; gap: 6px;">
-                <span id="mobileConnPill" class="mobile-conn-pill online" aria-live="polite"><span class="dot"></span><span id="mobileConnText">En línea</span></span>
                 <span id="offlineBadge" style="display: none; align-items: center; justify-content: center; background: #fee2e2; color: #991b1b; font-size: 11px; font-weight: bold; padding: 0 10px; border-radius: 10px; height: 38px; border: 1px dashed #ef4444; cursor: pointer; transition: all 0.2s;" title="Acciones pendientes de subir al servidor. Haz clic para sincronizar.">
                     ⚠️ Offline (<span id="offlinePendingCount">0</span>)
                 </span>

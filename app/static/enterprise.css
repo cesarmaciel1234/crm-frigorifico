@@ -1167,13 +1167,13 @@ body.sidebar-open .dashboard-bar,
 .ios-install-banner p { margin: 0; flex: 1; }
 
 .mobile-conn-pill {
-    display: none;
+    display: inline-flex;
     align-items: center;
     gap: 5px;
     font-size: 10px;
     font-weight: 700;
     padding: 0 8px;
-    height: 32px;
+    height: 24px;
     border-radius: 999px;
     white-space: nowrap;
 }
