@@ -484,7 +484,7 @@ def api_clientes_endpoint():
     except Exception as e:
         err_msg = str(e).lower()
         if "unique constraint" in err_msg or "already exists" in err_msg or "constraint failed" in err_msg:
-            return jsonify({"error": "El nombre del cliente ya existe"}), 400
+            return jsonify({"error": "¡Epa! Ese cliente ya está en la lista. ¡Probá con otro nombre!"}), 400
         return jsonify({"error": f"Error al registrar cliente: {str(e)}"}), 500
 
 @api_bp.route("/clientes/<int:cid>", methods=["GET"])

@@ -45,23 +45,38 @@ def registrar_cliente(nombre: str, techo_deuda: float, scoring: str = "A") -> in
 def list_clientes() -> list[dict]:
     import datetime
     with get_db() as conn:
+        # Consulta compatible con PostgreSQL (GROUP BY ANSI y sin aritmética de fecha nativa compleja)
         rows = conn.execute(
             """
             SELECT c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.created_at, c.fecha_ultimo_pago,
-                   MIN(r.fecha) as oldest_unpaid,
-                   (SELECT COUNT(*) FROM remitos_carga r2
-                    WHERE r2.cliente_id = c.id AND r2.pagado = 0
-                      AND date(r2.fecha, '+' || r2.plazo_cobro_dias || ' days') < date('now', 'localtime')
-                   ) AS remitos_vencidos
+                   MIN(r.fecha) as oldest_unpaid
             FROM clientes c
             LEFT JOIN remitos_carga r ON c.id = r.cliente_id AND r.pagado = 0
-            GROUP BY c.id
+            GROUP BY c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.created_at, c.fecha_ultimo_pago
             ORDER BY c.nombre ASC
             """
         ).fetchall()
         
-    out = []
+        # Obtener los remitos impagos para calcular los vencidos en Python de forma dialécticamente neutra
+        unpaid = conn.execute(
+            "SELECT cliente_id, fecha, plazo_cobro_dias FROM remitos_carga WHERE pagado = 0"
+        ).fetchall()
+        
+    vencidos_map = {}
     today = datetime.date.today()
+    for rem in unpaid:
+        cid = rem["cliente_id"]
+        fecha_str = rem["fecha"]
+        plazo_dias = int(rem["plazo_cobro_dias"] or 0)
+        try:
+            # Parsear fecha e incrementar contador si está vencido
+            f_venc = datetime.datetime.strptime(fecha_str[:10], "%Y-%m-%d").date() + datetime.timedelta(days=plazo_dias)
+            if f_venc < today:
+                vencidos_map[cid] = vencidos_map.get(cid, 0) + 1
+        except Exception:
+            pass
+
+    out = []
     for row in rows:
         r = dict(row)
         limite_superado = r["saldo_actual"] > r["techo_deuda"]
@@ -83,7 +98,8 @@ def list_clientes() -> list[dict]:
                 except:
                     pass
 
-        en_mora = float(r["saldo_actual"]) > 0 and int(r.get("remitos_vencidos") or 0) > 0
+        remitos_vencidos = vencidos_map.get(r["id"], 0)
+        en_mora = float(r["saldo_actual"]) > 0 and remitos_vencidos > 0
 
         out.append({
             "id": r["id"],
