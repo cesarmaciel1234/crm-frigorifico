@@ -97,7 +97,7 @@ const $ = id => document.getElementById(id);
         }
 
         let data = { enemigos: [], remitos: [], estrategia: {}, bancos: [], historial: [], historialPagos: [], bulk: [], clientes: [], auditoria: [] };
-        let isProMode = false;
+        let isProMode = true;
         let selectedDeuda = null;
         let selectedAuditId = null;
         let histPagosFiltro = '';
@@ -1652,16 +1652,21 @@ const $ = id => document.getElementById(id);
         }
 
         async function updateWeather() {
-            try {
-                const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-34.61&longitude=-58.38&current_weather=true');
-                if (res.ok) {
-                    const data = await res.json();
-                    const temp = Math.round(data.current_weather.temperature);
-                    const ww = $('weatherWidget');
-                    if (ww) ww.textContent = temp + '°';
-                }
-            } catch (e) {
-                console.warn('Clima offline', e);
+            function fetchW(lat, lon) {
+                fetch(\`https://api.open-meteo.com/v1/forecast?latitude=\${lat}&longitude=\${lon}&current_weather=true\`)
+                    .then(r => r.json())
+                    .then(data => {
+                        const ww = $('weatherWidget');
+                        if (ww) ww.textContent = Math.round(data.current_weather.temperature) + '°';
+                    }).catch(e => console.warn('Clima offline', e));
+            }
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => fetchW(pos.coords.latitude, pos.coords.longitude),
+                    err => fetchW(-34.61, -58.38)
+                );
+            } else {
+                fetchW(-34.61, -58.38);
             }
         }
         updateWeather();

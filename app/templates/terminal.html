@@ -309,7 +309,7 @@
                 <div class="weather-widget" id="weatherWidget" style="display: inline-flex; align-items: center; justify-content: center; background: rgba(50,50,50,0.9); color: #fff; font-size: 14px; font-family: sans-serif; font-weight: 700; padding: 0 10px; height: 32px; border-radius: 16px; line-height: 1; box-shadow: 0 2px 5px rgba(0,0,0,0.15); letter-spacing: 0.5px;">
                     10°
                 </div>
-                <button type="button" class="btn btn-ghost" id="btnTogglePro" style="color:#111827; background:#e2e8f0; border-radius: 10px; padding: 0; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;" title="Modo PRO">
+                <button type="button" class="btn btn-ghost" id="btnTogglePro" style="color:#fff; background:#1e293b; border-radius: 10px; padding: 0; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;" title="Modo PRO">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                 </button>
                 <button type="button" class="btn btn-primary" id="btnRefresh" style="border-radius: 10px; padding: 0; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;">
@@ -324,7 +324,7 @@
                 <div style="margin-bottom: 20px;">
                     <h2 style="margin:0; font-size: 1.5rem; color: #111827;">Obligaciones y Pagos</h2>
                 </div>
-                <div id="tblHomeWrapperNormal" style="overflow-x: auto;">
+                <div id="tblHomeWrapperNormal" style="overflow-x: auto;" class="field-hidden">
                     <table class="home-table">
                         <thead>
                             <tr>
@@ -338,7 +338,7 @@
                         </tbody>
                     </table>
                 </div>
-                <div id="tblHomeWrapperPro" class="cards-grid field-hidden">
+                <div id="tblHomeWrapperPro" class="cards-grid">
                     <!-- Las obligaciones en tarjetas 3D se cargarán aquí desde JS -->
                 </div>
             </div>
@@ -767,7 +767,7 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/app.js?v=2.11"></script>
+    <script src="/static/js/app.js?v=2.12"></script>
 
 
     <div class="dashboard-bar">
@@ -802,13 +802,15 @@
             right: 20px;
             display: flex;
             justify-content: space-between;
-            background: #121212;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             padding: 12px 20px;
             border-radius: 16px;
-            color: white;
+            color: #111827;
             font-family: 'Segoe UI', sans-serif;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            border: 1px solid #333;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border: 1px solid rgba(0,0,0,0.05);
             z-index: 90;
         }
         @media (min-width: 1025px) {
@@ -817,10 +819,10 @@
             }
         }
         .kpi-item { display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .dashboard-bar .label { font-size: 0.65em; color: #888; letter-spacing: 0.5px; font-weight: bold; margin-bottom: 4px; }
-        .dashboard-bar .value { font-size: 1em; font-weight: 700; }
+        .dashboard-bar .label { font-size: 0.65em; color: #6b7280; letter-spacing: 0.5px; font-weight: bold; margin-bottom: 4px; }
+        .dashboard-bar .value { font-size: 1em; font-weight: 700; color: #111827; }
         .value-container { display: flex; align-items: center; gap: 5px; }
-        .dashboard-bar .sub { font-size: 0.6em; color: #666; margin-top: 2px; }
+        .dashboard-bar .sub { font-size: 0.6em; color: #9ca3af; margin-top: 2px; }
         
         /* Colores específicos de valores */
         #barDeudaValue { color: #f97316; } /* Naranja */
