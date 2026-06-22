@@ -1089,12 +1089,12 @@
             display: flex;
             justify-content: space-around;
             align-items: stretch;
-            background: #121212;
+            background: #ffffff;
             padding: 18px 28px;
             border-radius: 20px;
             font-family: 'Segoe UI', system-ui, sans-serif;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-            border: 1px solid #333;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+            border: 1.5px solid rgba(0, 0, 0, 0.08);
             z-index: 9999;
         }
         @media (min-width: 1025px) {
@@ -1126,7 +1126,7 @@
         }
         .dashboard-bar .label {
             font-size: 0.68rem;
-            color: #888888;
+            color: #64748b;
             letter-spacing: 0.04em;
             font-weight: 600;
             text-transform: uppercase;
@@ -1136,7 +1136,7 @@
             font-size: 1.35rem;
             font-weight: 700;
             line-height: 1.15;
-            color: #ffffff;
+            color: #0f172a;
         }
         .value-container {
             display: flex;
@@ -1146,32 +1146,38 @@
         }
         .dashboard-bar .sub {
             font-size: 0.62rem;
-            color: #666666;
+            color: #64748b;
             margin-top: 5px;
             font-weight: 500;
         }
         #barSangriaValue { color: #ef4444; }
-        #barDeudaValue { color: #f97316; }
-        #barCapitalValue.capital-pos { color: #10b981; }
-        #barCapitalValue.capital-neg { color: #10b981; }
-        #barCapitalValue.capital-zero { color: #888888; }
+        #barDeudaValue { color: #ea580c; }
+        #barCapitalValue.capital-pos { color: #059669; }
+        #barCapitalValue.capital-neg { color: #059669; }
+        #barCapitalValue.capital-zero { color: #64748b; }
 
+        @keyframes trend-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.35; transform: scale(1.18); }
+        }
         .trend {
             font-size: 1.1rem;
             font-weight: 900;
             line-height: 1;
+            display: inline-block;
+            animation: trend-pulse 1.5s ease-in-out infinite;
         }
         .trend.up {
             color: #10b981;
-            text-shadow: 0 0 8px rgba(16, 185, 129, 0.45);
+            text-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
         }
         .trend.down {
             color: #ef4444;
-            text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+            text-shadow: 0 0 8px rgba(239, 68, 68, 0.35);
         }
 
         /* Panel flotante Cobranzas */
-        #cobBarClientesMora { color: #f97316; }
+        #cobBarClientesMora { color: #ea580c; }
         #cobBarMontoMora { color: #ef4444; }
         #cobBarCapitalTotal { color: #2563eb; }
     </style>

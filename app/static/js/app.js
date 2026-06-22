@@ -540,7 +540,7 @@ const $ = id => document.getElementById(id);
                 if ($('barDeudaSub')) $('barDeudaSub').textContent = `Int: $${fmt(mf.int_acumulado || 0)}`;
                 
                 const absCapital = Math.abs(mf.capital);
-                const signStr = mf.capital < 0 ? '-' : '';
+                const signStr = mf.capital < 0 ? '-' : (mf.capital > 0 ? '+' : '');
                 const isNeg = mf.capital < 0;
                 const isZero = mf.capital === 0;
                 if ($('barCapitalValue')) {
