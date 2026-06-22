@@ -1,5 +1,5 @@
-/* Master Total PWA — network-first shell, offline fallback */
-const CACHE_VERSION = 'crm-frigorifico-v7';
+/* Master Total PWA — network-first for shell updates, offline fallback */
+const CACHE_VERSION = 'crm-frigorifico-v8';
 const SHELL_ASSETS = [
   '/',
   '/login',
@@ -15,6 +15,15 @@ const SHELL_ASSETS = [
   '/static/icons/icon-512.png',
 ];
 
+const NETWORK_FIRST_PATHS = [
+  '/',
+  '/login',
+  '/pos',
+  '/static/js/app.js',
+  '/static/enterprise.css',
+  '/static/js/crm-safe.js',
+];
+
 const API_CACHE_PREFIXES = [
   '/api/dashboard',
   '/api/clientes',
@@ -27,9 +36,13 @@ const API_CACHE_PREFIXES = [
 function cacheKey(request) {
   const url = new URL(request.url);
   if (url.pathname.startsWith('/static/')) {
-    return url.origin + url.pathname;
+    return url.origin + url.pathname + (url.search || '');
   }
   return request.url;
+}
+
+function isNetworkFirst(url) {
+  return NETWORK_FIRST_PATHS.some((p) => url.pathname === p || url.pathname.startsWith(p));
 }
 
 function isApiCacheable(pathname) {
@@ -68,6 +81,11 @@ self.addEventListener('fetch', (event) => {
   const isNavigate = event.request.mode === 'navigate';
   const isStatic = url.pathname.startsWith('/static/');
 
+  if (isNetworkFirst(url) || isNavigate) {
+    event.respondWith(networkFirst(event.request));
+    return;
+  }
+
   if (isStatic) {
     event.respondWith(staleWhileRevalidate(event.request));
     return;
@@ -98,6 +116,26 @@ self.addEventListener('fetch', (event) => {
       })
   );
 });
+
+async function networkFirst(request) {
+  const key = cacheKey(request);
+  const cache = await caches.open(CACHE_VERSION);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      await cache.put(key, response.clone());
+    }
+    return response;
+  } catch (_) {
+    const cached = await cache.match(key);
+    if (cached) return cached;
+    if (request.mode === 'navigate') {
+      const shell = await cache.match('/');
+      if (shell) return shell;
+    }
+    throw err;
+  }
+}
 
 async function staleWhileRevalidate(request) {
   const key = cacheKey(request);

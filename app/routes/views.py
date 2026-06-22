@@ -1,4 +1,4 @@
-from flask import Blueprint, current_app, jsonify, redirect, render_template, request, send_from_directory, session
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, send_from_directory, session, make_response
 import os
 
 from app.config import Config
@@ -88,7 +88,10 @@ def logout():
 
 @views_bp.route("/")
 def index():
-    return render_template("terminal.html")
+    resp = make_response(render_template("terminal.html"))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @views_bp.route("/pos")

@@ -2163,6 +2163,13 @@ const $ = id => document.getElementById(id);
             document.body.classList.toggle('sidebar-open', open);
             document.querySelectorAll('.dashboard-bar').forEach(el => {
                 el.classList.toggle('bar-suppressed', open);
+                if (open) {
+                    el.dataset.prevDisplay = el.style.display || '';
+                    el.style.display = 'none';
+                } else {
+                    el.style.display = el.dataset.prevDisplay || '';
+                    delete el.dataset.prevDisplay;
+                }
             });
         }
 
@@ -3268,7 +3275,14 @@ const $ = id => document.getElementById(id);
 
         function registerServiceWorker() {
             if (!('serviceWorker' in navigator)) return;
+            let swReloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (swReloading) return;
+                swReloading = true;
+                window.location.reload();
+            });
             navigator.serviceWorker.register('/sw.js').then((reg) => {
+                if (reg.waiting) showPwaUpdateBanner(reg);
                 reg.addEventListener('updatefound', () => {
                     const nw = reg.installing;
                     nw?.addEventListener('statechange', () => {
