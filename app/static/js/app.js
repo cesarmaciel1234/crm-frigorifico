@@ -2316,12 +2316,12 @@ const $ = id => document.getElementById(id);
         $('formEmpresa')?.addEventListener('submit', async ev => {
             ev.preventDefault();
             const data = {
-                nombre: $('inpEmpresaNombre').value.trim() || "Master Total",
-                cuit: $('inpEmpresaCuit').value.trim(),
-                direccion: $('inpEmpresaDireccion').value.trim(),
-                telefono: $('inpEmpresaTelefono').value.trim(),
-                email: $('inpEmpresaEmail').value.trim(),
-                cotizacion_usd: parseFloat($('inpEmpresaUsd').value) || 1000.0
+                nombre: $('inpEmpresaNombre')?.value.trim() || "Master Total",
+                cuit: $('inpEmpresaCuit')?.value.trim() || "",
+                direccion: $('inpEmpresaDireccion')?.value.trim() || "",
+                telefono: $('inpEmpresaTelefono')?.value.trim() || "",
+                email: $('inpEmpresaEmail')?.value.trim() || "",
+                cotizacion_usd: parseFloat($('inpEmpresaUsd')?.value || 1000) || 1000.0
             };
             localStorage.setItem('empresa_datos', JSON.stringify(data));
             if (sessionUser.role === 'admin') {
@@ -2598,13 +2598,13 @@ const $ = id => document.getElementById(id);
 
         window.abrirModalEmpresa = function() {
             const data = getEmpresaDatos();
-            $('inpEmpresaNombre').value = data.nombre;
-            $('inpEmpresaCuit').value = data.cuit;
-            $('inpEmpresaDireccion').value = data.direccion;
-            $('inpEmpresaTelefono').value = data.telefono;
-            $('inpEmpresaEmail').value = data.email;
-            $('inpEmpresaUsd').value = data.cotizacion_usd || 1000.0;
-            $('modalEmpresa').classList.add('open');
+            if ($('inpEmpresaNombre')) $('inpEmpresaNombre').value = data.nombre || '';
+            if ($('inpEmpresaCuit')) $('inpEmpresaCuit').value = data.cuit || '';
+            if ($('inpEmpresaDireccion')) $('inpEmpresaDireccion').value = data.direccion || '';
+            if ($('inpEmpresaTelefono')) $('inpEmpresaTelefono').value = data.telefono || '';
+            if ($('inpEmpresaEmail')) $('inpEmpresaEmail').value = data.email || '';
+            if ($('inpEmpresaUsd')) $('inpEmpresaUsd').value = data.cotizacion_usd || 1000.0;
+            $('modalEmpresa')?.classList.add('open');
         };
 
         window.cerrarModalEmpresa = function() {
