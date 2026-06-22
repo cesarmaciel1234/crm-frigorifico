@@ -104,7 +104,8 @@ const $ = id => document.getElementById(id);
         let activeRowIndex = -1;
 
         const titles = {
-            dashboard: ['Dashboard ejecutivo', 'Visión consolidada del negocio', 'Executive Overview'],
+            home: ['Inicio', 'Resumen rápido', 'Inicio'],
+            dashboard: ['', 'Análisis general del negocio', 'Panel del jefe'],
             deudas: ['Prioridad de pagos', 'Obligaciones ordenadas por impacto financiero', 'Obligaciones'],
             remitos: ['Remitos de venta', 'Historial de ventas y márgenes', 'Ventas'],
             clientes: ['CRM de Clientes', 'Gestión de cuentas corrientes y créditos', 'Clientes'],
