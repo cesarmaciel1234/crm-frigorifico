@@ -45,10 +45,12 @@ class Config:
         if not cls.is_production():
             return []
         errors = []
-        if not cls.SECRET_KEY or cls.SECRET_KEY in FORBIDDEN_SECRETS:
-            errors.append("SECRET_KEY debe estar definida y ser aleatoria")
-        if not cls.MT_API_KEY or cls.MT_API_KEY in FORBIDDEN_SECRETS:
-            errors.append("MT_API_KEY debe estar definida y ser aleatoria")
-        if not cls.master_password() or cls.master_password() in FORBIDDEN_SECRETS:
-            errors.append("MASTER_PASSWORD (o AUDIT_DELETE_PASSWORD) debe estar definida")
+        # Permitimos valores vacíos para que start_produccion.py los auto-genere de manera segura en el arranque.
+        # Solo fallamos si se configuran explícitamente valores inseguros del listado FORBIDDEN_SECRETS.
+        if cls.SECRET_KEY and cls.SECRET_KEY in FORBIDDEN_SECRETS:
+            errors.append("SECRET_KEY tiene un valor inseguro prohibido")
+        if cls.MT_API_KEY and cls.MT_API_KEY in FORBIDDEN_SECRETS:
+            errors.append("MT_API_KEY tiene un valor inseguro prohibido")
+        if cls.master_password() and cls.master_password() in FORBIDDEN_SECRETS:
+            errors.append("MASTER_PASSWORD tiene un valor inseguro prohibido")
         return errors

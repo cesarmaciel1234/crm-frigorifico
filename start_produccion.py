@@ -31,11 +31,21 @@ def main():
         sys.exit(1)
 
     if not Config.SECRET_KEY:
-        print("AVISO: SECRET_KEY no configurada. Generando una temporal. Las sesiones se perderán al reiniciar.", file=sys.stderr)
         from app.security import generate_secret
         Config.SECRET_KEY = generate_secret()
+        print(f"AVISO: SECRET_KEY no configurada. Generada temporal: {Config.SECRET_KEY}", file=sys.stderr)
+        
     if not Config.MT_API_KEY:
-        print("AVISO: MT_API_KEY no definida — configure antes de exponer a internet", file=sys.stderr)
+        from app.security import generate_secret
+        Config.MT_API_KEY = generate_secret()
+        print(f"AVISO: MT_API_KEY no definida. Generada temporal: {Config.MT_API_KEY}", file=sys.stderr)
+        
+    if not Config.master_password():
+        from app.security import generate_secret
+        gen_pwd = generate_secret()
+        Config.MASTER_PASSWORD = gen_pwd
+        Config.AUDIT_DELETE_PASSWORD = gen_pwd
+        print(f"AVISO: MASTER_PASSWORD / AUDIT_DELETE_PASSWORD no definida. Generada temporal: {gen_pwd}", file=sys.stderr)
 
     from app import create_app
 
