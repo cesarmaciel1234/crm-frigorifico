@@ -1102,6 +1102,12 @@ const $ = id => document.getElementById(id);
                 if ($('weatherWidget')) $('weatherWidget').classList.add('field-hidden');
             }
 
+            if (name === 'home') {
+                if ($('btnTogglePro')) $('btnTogglePro').style.display = '';
+            } else {
+                if ($('btnTogglePro')) $('btnTogglePro').style.display = 'none';
+            }
+
             const [t, s, bc] = titles[name] || ['', '', name];
             if ($('pageTitle')) $('pageTitle').innerHTML = t;
             if ($('pageSub')) $('pageSub').textContent = s;
@@ -1146,6 +1152,15 @@ const $ = id => document.getElementById(id);
 
         $('menuToggle').addEventListener('click', () => $('sidebar').classList.toggle('open'));
         if($('sidebarCloseMobile')) $('sidebarCloseMobile').addEventListener('click', () => $('sidebar').classList.remove('open'));
+        document.addEventListener('click', ev => {
+            const sidebar = $('sidebar');
+            const toggle = $('menuToggle');
+            if (sidebar && toggle && sidebar.classList.contains('open')) {
+                if (!sidebar.contains(ev.target) && !toggle.contains(ev.target)) {
+                    sidebar.classList.remove('open');
+                }
+            }
+        });
         $('drawerClose').addEventListener('click', closeDrawer);
         $('drawerOverlay').addEventListener('click', ev => { if (ev.target === $('drawerOverlay')) closeDrawer(); });
         
