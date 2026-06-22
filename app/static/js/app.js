@@ -695,7 +695,7 @@ const $ = id => document.getElementById(id);
         window.promptDeleteAuditoria = (id) => {
             selectedAuditId = id;
             $('inpPasswordAuditoria').value = '';
-            $('modalPasswordAuditoria').classList.add('active');
+            $('modalPasswordAuditoria').classList.add('open');
         };
 
         function renderHistorialPagos() {
@@ -1095,8 +1095,8 @@ const $ = id => document.getElementById(id);
             document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
             document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
             
-            if (name === 'dashboard') {
-                titles.dashboard[0] = getGreeting();
+            if (name === 'dashboard' || name === 'home') {
+                titles[name][0] = getGreeting();
                 if ($('weatherWidget')) $('weatherWidget').classList.remove('field-hidden');
             } else {
                 if ($('weatherWidget')) $('weatherWidget').classList.add('field-hidden');
@@ -1172,7 +1172,7 @@ const $ = id => document.getElementById(id);
                     body: JSON.stringify({ password: pwd })
                 });
                 toast('Registro eliminado permanentemente');
-                $('modalPasswordAuditoria').classList.remove('active');
+                $('modalPasswordAuditoria').classList.remove('open');
                 await loadAll();
             } catch (err) {
                 toast('Contraseña incorrecta o error', true);
@@ -1632,13 +1632,25 @@ const $ = id => document.getElementById(id);
         });
 
         // Register Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then((reg) => console.log('Service Worker registrado en el ámbito:', reg.scope))
-                    .catch((err) => console.error('Error al registrar Service Worker:', err));
-            });
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("/sw.js").catch(e => console.warn("PWA SW err:", e));
         }
+
+        async function updateWeather() {
+            try {
+                const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-34.61&longitude=-58.38&current_weather=true');
+                if (res.ok) {
+                    const data = await res.json();
+                    const temp = Math.round(data.current_weather.temperature);
+                    const ww = $('weatherWidget');
+                    if (ww) ww.textContent = temp + '°';
+                }
+            } catch (e) {
+                console.warn('Clima offline', e);
+            }
+        }
+        updateWeather();
+        setInterval(updateWeather, 1800000); // 30 mins
 
         loadAll();
         setInterval(loadAll, 60000);
