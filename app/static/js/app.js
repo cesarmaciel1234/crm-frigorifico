@@ -1769,6 +1769,20 @@ const $ = id => document.getElementById(id);
         $('btnConfirmarPagoGlobal')?.addEventListener('click', confirmarPagoGlobal);
         $('modalPagoGlobal')?.addEventListener('click', ev => { if (ev.target === $('modalPagoGlobal')) cerrarModalPagoGlobal(); });
         $('inpMontoPagoGlobal')?.addEventListener('keydown', ev => { if (ev.key === 'Enter') confirmarPagoGlobal(); });
+        $('modalEmpresa')?.addEventListener('click', ev => { if (ev.target === $('modalEmpresa')) cerrarModalEmpresa(); });
+        $('formEmpresa')?.addEventListener('submit', ev => {
+            ev.preventDefault();
+            const data = {
+                nombre: $('inpEmpresaNombre').value.trim() || "Master Total",
+                cuit: $('inpEmpresaCuit').value.trim(),
+                direccion: $('inpEmpresaDireccion').value.trim(),
+                telefono: $('inpEmpresaTelefono').value.trim(),
+                email: $('inpEmpresaEmail').value.trim()
+            };
+            localStorage.setItem('empresa_datos', JSON.stringify(data));
+            toast('Datos de la empresa guardados con éxito');
+            cerrarModalEmpresa();
+        });
         $('inpMontoPago').addEventListener('input', () => {
             const esp = planPagoActual ? planPagoActual.monto_cuota : 0;
             calcDiffUi(esp, parseFloat($('inpMontoPago').value) || 0);
@@ -1997,9 +2011,47 @@ const $ = id => document.getElementById(id);
             return 'st-pending';
         }
 
+        function getEmpresaDatos() {
+            const defaults = {
+                nombre: "Master Total",
+                cuit: "30-12345678-9",
+                direccion: "Av. Juan B. Justo 1234, CABA",
+                telefono: "+54 11 4567-8901",
+                email: "contacto@mastertotal.com"
+            };
+            try {
+                const raw = localStorage.getItem('empresa_datos');
+                if (raw) {
+                    return Object.assign(defaults, JSON.parse(raw));
+                }
+            } catch (e) {}
+            return defaults;
+        }
+
+        window.abrirModalEmpresa = function() {
+            const data = getEmpresaDatos();
+            $('inpEmpresaNombre').value = data.nombre;
+            $('inpEmpresaCuit').value = data.cuit;
+            $('inpEmpresaDireccion').value = data.direccion;
+            $('inpEmpresaTelefono').value = data.telefono;
+            $('inpEmpresaEmail').value = data.email;
+            $('modalEmpresa').classList.add('open');
+        };
+
+        window.cerrarModalEmpresa = function() {
+            $('modalEmpresa').classList.remove('open');
+        };
+
         function buildReporteClienteHtml(c) {
             const remitos = c.remitos || [];
             const genAt = new Date().toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+            const emp = getEmpresaDatos();
+            const initials = emp.nombre
+                .split(' ')
+                .map(w => w[0])
+                .join('')
+                .toUpperCase()
+                .slice(0, 2) || 'MT';
             const totalKg = remitos.reduce((acc, r) => acc + r.kg, 0);
             const totalVendido = remitos.reduce((acc, r) => acc + r.precio_venta_total, 0);
             const totalCobrado = remitos.reduce((acc, r) => acc + (Number(r.monto_pagado || 0) || (Number(r.pagado) === 1 ? r.precio_venta_total : 0)), 0);
@@ -2197,10 +2249,15 @@ const $ = id => document.getElementById(id);
 <body>
     <header class="doc-header">
         <div class="brand-block">
-            <div class="brand-logo">MT</div>
+            <div class="brand-logo">${esc(initials)}</div>
             <div>
-                <div class="brand-name">Master Total</div>
+                <div class="brand-name">${esc(emp.nombre)}</div>
                 <div class="brand-tag">Distribuidora de Carne · Cuenta Corriente</div>
+                <div style="font-size: 8.5pt; color: #475569; margin-top: 4px; line-height: 1.3;">
+                    ${emp.cuit ? `CUIT: ${esc(emp.cuit)}<br>` : ''}
+                    ${emp.direccion ? `Dirección: ${esc(emp.direccion)}<br>` : ''}
+                    ${emp.telefono || emp.email ? `${emp.telefono ? `Tel: ${esc(emp.telefono)}` : ''}${emp.telefono && emp.email ? ' | ' : ''}${emp.email ? `Email: ${esc(emp.email)}` : ''}` : ''}
+                </div>
             </div>
         </div>
         <div class="doc-meta">
@@ -2267,7 +2324,7 @@ const $ = id => document.getElementById(id);
     </div>
 
     <footer class="doc-footer">
-        <p>Master Total Terminal · Distribuidoras de Carne</p>
+        <p>${esc(emp.nombre)} Terminal · Distribuidoras de Carne</p>
         <p>— Fin del estado de cuenta —</p>
     </footer>
     <script>

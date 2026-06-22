@@ -295,6 +295,30 @@ def _run_migrations(conn):
         """
     )
 
+    # Migración de compras_bulk (costo_reparto)
+    if _table_exists(conn, "compras_bulk"):
+        if is_pg:
+            bulk_existing = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'compras_bulk'")}
+        else:
+            bulk_existing = {row[1] for row in conn.execute("PRAGMA table_info(compras_bulk)")}
+        
+        if "costo_reparto" not in bulk_existing:
+            pg_type = "DOUBLE PRECISION"
+            final_type = pg_type if is_pg else "REAL"
+            conn.execute(f"ALTER TABLE compras_bulk ADD COLUMN costo_reparto {final_type} DEFAULT 0")
+
+    # Migración de remitos_fracciones (costo_logistica_porcion)
+    if _table_exists(conn, "remitos_fracciones"):
+        if is_pg:
+            frac_existing = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'remitos_fracciones'")}
+        else:
+            frac_existing = {row[1] for row in conn.execute("PRAGMA table_info(remitos_fracciones)")}
+        
+        if "costo_logistica_porcion" not in frac_existing:
+            pg_type = "DOUBLE PRECISION"
+            final_type = pg_type if is_pg else "REAL"
+            conn.execute(f"ALTER TABLE remitos_fracciones ADD COLUMN costo_logistica_porcion {final_type} DEFAULT 0")
+
     # Migración ventas mostrador (POS offline sync)
     conn.executescript(
         """
