@@ -12,7 +12,8 @@ def secured_app(tmp_path):
     Config.DB_PATH = str(db_path)
     Config.TESTING = False
     Config.MT_API_KEY = os.environ.get("MT_API_KEY", "ci-test-key-not-for-production")
-    Config.AUDIT_DELETE_PASSWORD = os.environ.get("AUDIT_DELETE_PASSWORD", "ci-audit-pw")
+    Config.MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD", os.environ.get("AUDIT_DELETE_PASSWORD", "ci-audit-pw"))
+    Config.AUDIT_DELETE_PASSWORD = Config.MASTER_PASSWORD
     Config.SECRET_KEY = os.environ.get("SECRET_KEY", "ci-secret-key")
 
     from app import create_app
@@ -48,6 +49,34 @@ class TestSecurity:
         assert r.status_code in (302, 303)
         with client.session_transaction() as sess:
             assert sess.get("authenticated") is True
+
+    def test_health_ready(self, secured_app):
+        client = secured_app.test_client()
+        r = client.get("/health/ready")
+        assert r.status_code == 200
+        assert r.get_json()["db"] == "ok"
+
+    def test_delete_op_requires_password(self, secured_app):
+        client = secured_app.test_client()
+        headers = {"X-API-Key": Config.MT_API_KEY, "Content-Type": "application/json"}
+        r_create = client.post(
+            "/api/operaciones",
+            json={"alias": "Del Test", "tipo": "otro", "recibido": 1000, "pagar": 1100, "meses": 1},
+            headers=headers,
+        )
+        assert r_create.status_code == 201
+        op_id = r_create.get_json()["id"]
+        r_del = client.delete(f"/api/operaciones/{op_id}", json={"password": "wrong"}, headers=headers)
+        assert r_del.status_code == 403
+
+    def test_api_v1_alias(self, secured_app):
+        client = secured_app.test_client()
+        headers = {"X-API-Key": Config.MT_API_KEY}
+        r_legacy = client.get("/api/dashboard", headers=headers)
+        r_v1 = client.get("/api/v1/dashboard", headers=headers)
+        assert r_legacy.status_code == 200
+        assert r_v1.status_code == 200
+        assert r_legacy.get_json().keys() == r_v1.get_json().keys()
 
     def test_audit_delete_requires_password(self, secured_app):
         client = secured_app.test_client()

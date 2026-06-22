@@ -23,7 +23,9 @@ def _estado_cobro(pagado: int, monto_pagado: float = 0) -> str:
 # El experto va a la Bóveda, saca la lista (SELECT), y con su calculadora
 # saca el "Margen Neto" (cuánta plata real nos quedó en el bolsillo).
 # ------------------------------------------------------------------------------
-def list_remitos(limit: int = 50) -> list[dict]:
+def list_remitos(limit: int = 50, offset: int = 0) -> list[dict]:
+    limit = max(1, min(int(limit), 10_000))
+    offset = max(0, int(offset))
     with get_db() as conn:
         # 1. Pide la lista a la Bóveda usando SQL
         rows = conn.execute(
@@ -33,9 +35,9 @@ def list_remitos(limit: int = 50) -> list[dict]:
                    r.plazo_cobro_dias, r.costo_carne, r.pagado, COALESCE(r.monto_pagado, 0) AS monto_pagado, r.created_at
             FROM remitos_carga r
             LEFT JOIN clientes c ON r.cliente_id = c.id
-            ORDER BY r.id DESC LIMIT ?
+            ORDER BY r.id DESC LIMIT ? OFFSET ?
             """,
-            (limit,),
+            (limit, offset),
         ).fetchall()
     out = []
     for row in rows:

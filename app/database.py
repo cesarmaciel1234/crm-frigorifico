@@ -379,6 +379,51 @@ def _run_migrations(conn):
                 "ON ventas_mostrador(offline_id) WHERE offline_id IS NOT NULL"
             )
 
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            nombre TEXT NOT NULL DEFAULT '',
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'operador',
+            activo INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+        CREATE TABLE IF NOT EXISTS empresa_config (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            datos TEXT NOT NULL DEFAULT '{}',
+            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_clientes_nombre ON clientes(nombre);
+        CREATE INDEX IF NOT EXISTS idx_remitos_cliente ON remitos_carga(cliente_id);
+        CREATE INDEX IF NOT EXISTS idx_remitos_fecha ON remitos_carga(fecha);
+        """
+    )
+
+    if _table_exists(conn, "auditoria_operaciones"):
+        if is_pg:
+            audit_existing = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'auditoria_operaciones'"
+                )
+            }
+        else:
+            audit_existing = {
+                row[1] for row in conn.execute("PRAGMA table_info(auditoria_operaciones)")
+            }
+        for name, col_type in (
+            ("entidad", "TEXT"),
+            ("entidad_id", "INTEGER"),
+            ("usuario", "TEXT"),
+            ("detalle", "TEXT"),
+        ):
+            if name not in audit_existing:
+                pg_type = "INTEGER" if col_type == "INTEGER" else "TEXT"
+                final_type = pg_type if is_pg else col_type
+                conn.execute(f"ALTER TABLE auditoria_operaciones ADD COLUMN {name} {final_type}")
+
 def _migrate_pagar_constraint(conn):
     """Permite pagar = recibido (cheques sin interés)."""
     if type(conn).__name__ == "PostgresConnWrapper":

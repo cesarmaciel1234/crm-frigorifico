@@ -10,7 +10,8 @@ def app(tmp_path):
     Config.DB_PATH = str(db_path)
     Config.TESTING = True
     Config.MT_API_KEY = ""
-    Config.AUDIT_DELETE_PASSWORD = ""
+    Config.MASTER_PASSWORD = "test-master-pw"
+    Config.AUDIT_DELETE_PASSWORD = "test-master-pw"
     Config.SECRET_KEY = "test-secret-key"
 
     from app import create_app
@@ -37,6 +38,7 @@ def db(app):
 def auth_client(app):
     """Cliente con autenticación habilitada."""
     Config.MT_API_KEY = "test-api-key-secure"
+    Config.MASTER_PASSWORD = "test-audit-pw"
     Config.AUDIT_DELETE_PASSWORD = "test-audit-pw"
     client = app.test_client()
     client.environ_base["HTTP_X_API_KEY"] = "test-api-key-secure"

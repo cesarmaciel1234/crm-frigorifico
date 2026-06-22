@@ -10,6 +10,10 @@ from app.security import generate_secret, register_security
 
 
 def create_app():
+    prod_errors = Config.validate_production()
+    if prod_errors and not Config.TESTING:
+        raise RuntimeError("Configuración de producción inválida: " + "; ".join(prod_errors))
+
     app = Flask(__name__)
     app.config.from_object(Config)
 
@@ -27,22 +31,27 @@ def create_app():
 
     register_security(app)
 
+    storage_uri = os.environ.get("REDIS_URL", "memory://")
     limiter = Limiter(
         get_remote_address,
         app=app,
         default_limits=["200 per minute"],
-        storage_uri="memory://",
+        storage_uri=storage_uri,
     )
     app.extensions["limiter"] = limiter
 
     with app.app_context():
         init_db()
+        from app.services.users import ensure_default_admin
+
+        ensure_default_admin()
 
     from app.routes.views import views_bp
     from app.routes.api import api_bp
 
     app.register_blueprint(views_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(api_bp, url_prefix="/api/v1", name="api_v1")
 
     limiter.limit("10 per minute")(app.view_functions["views.auth_login_json"])
     limiter.limit("5 per minute")(app.view_functions["views.login"])
@@ -53,10 +62,10 @@ def create_app():
                 "MT_API_KEY no configurada: la API queda abierta. "
                 "Configure MT_API_KEY antes de exponer a internet."
             )
-        if not Config.AUDIT_DELETE_PASSWORD:
+        if not Config.master_password():
             app.logger.warning(
-                "AUDIT_DELETE_PASSWORD no configurada: "
-                "no se podrán eliminar registros de auditoría."
+                "MASTER_PASSWORD no configurada: "
+                "no se podrán realizar acciones destructivas."
             )
 
     return app

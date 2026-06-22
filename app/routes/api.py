@@ -16,7 +16,10 @@ from app.services.bancos import list_bancos
 from app.services.bulk import registrar_lote_bulk, list_bulk_lots, fraccionar_lote_fifo
 from app.services.clientes import list_clientes, registrar_cliente, get_cliente_detalle, buscar_o_crear_cliente, recalcular_saldo_cliente, marcar_cliente_incobrable, list_perdidas_acumuladas, registrar_pago_cliente_global
 from app.services.ventas_mostrador import list_ventas_mostrador, sync_ventas_offline
-from app.security import verify_audit_password
+from app.security import require_master_password_in_request, role_at_least
+from app.services.audit import log_audit, list_audit_log
+from app.services.export_data import export_all_data
+from app.services.users import get_empresa_config, save_empresa_config, list_users, create_user, update_user
 
 # ==============================================================================
 # 🤵 EL MOZO DEL RESTAURANTE (api_bp)
@@ -205,32 +208,40 @@ def api_create_op():
 
 @api_bp.route("/operaciones/<int:op_id>", methods=["DELETE"])
 def api_delete_op(op_id: int):
+    ok, msg = require_master_password_in_request()
+    if not ok:
+        return jsonify({"error": msg}), 403
+    if not role_at_least("admin"):
+        return jsonify({"error": "Solo administradores pueden eliminar operaciones"}), 403
     with get_db() as conn:
         row = conn.execute("SELECT alias, recibido FROM operaciones_financieras WHERE id = ?", (op_id,)).fetchone()
         if not row:
             return jsonify({"error": "No encontrada"}), 404
-        # Guardar en la bóveda de auditoría
-        conn.execute(
-            "INSERT INTO auditoria_operaciones (operacion_id, alias, accion, monto) VALUES (?, ?, 'ELIMINADO', ?)",
-            (op_id, row["alias"], row["recibido"])
-        )
-        # Limpiar dependencias para no chocar con la base de datos
         conn.execute("DELETE FROM pagos_cuotas WHERE operacion_id = ?", (op_id,))
-        # Eliminar finalmente
         conn.execute("DELETE FROM operaciones_financieras WHERE id = ?", (op_id,))
+    log_audit(
+        "ELIMINADO",
+        entidad="operacion",
+        entidad_id=op_id,
+        alias=row["alias"],
+        monto=row["recibido"],
+        operacion_id=op_id,
+    )
     return jsonify({"ok": True})
 
 @api_bp.route("/auditoria", methods=["GET"])
 def api_get_auditoria():
-    with get_db() as conn:
-        rows = conn.execute("SELECT id, operacion_id, alias, accion, monto, fecha FROM auditoria_operaciones ORDER BY id DESC").fetchall()
-    return jsonify([dict(r) for r in rows])
+    limit = request.args.get("limit", 200, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    return jsonify(list_audit_log(limit=limit, offset=offset))
 
 @api_bp.route("/auditoria/<int:audit_id>", methods=["DELETE"])
 def api_delete_auditoria(audit_id: int):
-    d = request.get_json(silent=True) or {}
-    if not verify_audit_password(d.get("password")):
-        return jsonify({"error": "Contraseña incorrecta"}), 403
+    ok, msg = require_master_password_in_request()
+    if not ok:
+        return jsonify({"error": msg}), 403
+    if not role_at_least("admin"):
+        return jsonify({"error": "Solo administradores pueden eliminar auditoría"}), 403
     with get_db() as conn:
         n = conn.execute("DELETE FROM auditoria_operaciones WHERE id = ?", (audit_id,)).rowcount
     return jsonify({"ok": True}) if n else (jsonify({"error": "No encontrada"}), 404)
@@ -324,7 +335,9 @@ def api_preview_pago(op_id: int):
 @api_bp.route("/remitos", methods=["GET", "POST"])
 def api_remitos_endpoint():
     if request.method == "GET":
-        return jsonify(list_remitos())
+        limit = request.args.get("limit", 50, type=int)
+        offset = request.args.get("offset", 0, type=int)
+        return jsonify(list_remitos(limit=limit, offset=offset))
 
     d = request.get_json(silent=True) or {}
     try:
@@ -466,7 +479,9 @@ def api_bulk_endpoint():
 @api_bp.route("/clientes", methods=["GET", "POST"])
 def api_clientes_endpoint():
     if request.method == "GET":
-        return jsonify(list_clientes())
+        limit = request.args.get("limit", type=int)
+        offset = request.args.get("offset", 0, type=int)
+        return jsonify(list_clientes(limit=limit, offset=offset))
 
     d = request.get_json(silent=True) or {}
     try:
@@ -512,11 +527,13 @@ def api_clientes_endpoint():
 # ------------------------------------------------------------------------------
 # 🗑️ RUTAS DE ELIMINACIÓN CON CONTRASEÑA MAESTRA
 # ------------------------------------------------------------------------------
-def _check_master_password(req):
-    d = req.get_json(silent=True) or {}
-    pwd = d.get("password") or req.headers.get("X-Master-Password")
-    if str(pwd) != "2094":
-        raise ValueError("Contraseña maestra incorrecta")
+def _guard_master_admin():
+    ok, msg = require_master_password_in_request()
+    if not ok:
+        return jsonify({"error": msg}), 403
+    if not role_at_least("admin"):
+        return jsonify({"error": "Solo administradores pueden realizar esta acción"}), 403
+    return None
 
 
 @api_bp.route("/clientes/<int:cid>", methods=["GET"])
@@ -604,11 +621,10 @@ def api_ventas_mostrador_sync():
 @api_bp.route("/clientes/<int:cid>/saldo-inicial", methods=["POST"])
 def api_cliente_saldo_inicial_endpoint(cid: int):
     try:
+        guard = _guard_master_admin()
+        if guard:
+            return guard
         d = request.get_json(silent=True) or {}
-        password = d.get("password")
-        if password != "2094":
-            return jsonify({"error": "Contraseña maestra incorrecta"}), 403
-            
         monto = float(d.get("saldo_inicial", 0.0))
         if monto < 0:
             raise ValueError("El saldo inicial no puede ser negativo")
@@ -625,11 +641,9 @@ def api_cliente_saldo_inicial_endpoint(cid: int):
 @api_bp.route("/clientes/<int:cid>", methods=["DELETE"])
 def api_eliminar_cliente_endpoint(cid: int):
     try:
-        d = request.get_json(silent=True) or {}
-        password = d.get("password")
-        if password != "2094":
-            return jsonify({"error": "Contraseña maestra incorrecta"}), 403
-            
+        guard = _guard_master_admin()
+        if guard:
+            return guard
         from app.services.clientes import eliminar_cliente
         eliminar_cliente(cid)
         return jsonify({"ok": True, "message": "Cliente y sus remitos eliminados con éxito (stock restituido)"})
@@ -642,11 +656,9 @@ def api_eliminar_cliente_endpoint(cid: int):
 @api_bp.route("/remitos/<int:rid>", methods=["DELETE"])
 def api_eliminar_remito_endpoint(rid: int):
     try:
-        d = request.get_json(silent=True) or {}
-        password = d.get("password") or request.args.get("password")
-        if password != "2094":
-            return jsonify({"error": "Contraseña maestra incorrecta"}), 403
-            
+        guard = _guard_master_admin()
+        if guard:
+            return guard
         from app.services.remitos import eliminar_remito
         cliente_id = eliminar_remito(rid)
         return jsonify({"ok": True, "cliente_id": cliente_id, "message": "Remito eliminado con éxito (stock restituido)"})
@@ -660,11 +672,9 @@ def api_eliminar_remito_endpoint(rid: int):
 @api_bp.route("/pagos/<int:pago_id>", methods=["DELETE"])
 def api_eliminar_pago_endpoint(pago_id: int):
     try:
-        d = request.get_json(silent=True) or {}
-        password = d.get("password") or request.args.get("password")
-        if password != "2094":
-            return jsonify({"error": "Contraseña maestra incorrecta"}), 403
-            
+        guard = _guard_master_admin()
+        if guard:
+            return guard
         from app.services.clientes import eliminar_pago_cliente
         eliminar_pago_cliente(pago_id)
         return jsonify({"ok": True, "message": "Pago eliminado con éxito (deuda restituida)"})
@@ -677,11 +687,9 @@ def api_eliminar_pago_endpoint(pago_id: int):
 @api_bp.route("/remitos/<int:rid>/reset-pago", methods=["POST"])
 def api_remito_reset_pago_endpoint(rid: int):
     try:
-        d = request.get_json(silent=True) or {}
-        password = d.get("password")
-        if password != "2094":
-            return jsonify({"error": "Contraseña maestra incorrecta"}), 403
-            
+        guard = _guard_master_admin()
+        if guard:
+            return guard
         from app.services.clientes import recalcular_saldo_cliente
         with get_db() as conn:
             row = conn.execute("SELECT cliente_id FROM remitos_carga WHERE id = ?", (rid,)).fetchone()
@@ -702,3 +710,59 @@ def api_remito_reset_pago_endpoint(rid: int):
     except Exception as e:
         return jsonify({"error": f"Error al restablecer pago: {str(e)}"}), 500
 
+
+@api_bp.route("/export")
+def api_export():
+    if not role_at_least("admin"):
+        return jsonify({"error": "Permiso denegado"}), 403
+    log_audit("EXPORT", entidad="sistema", detalle="exportacion_completa")
+    return jsonify(export_all_data())
+
+
+@api_bp.route("/empresa", methods=["GET", "PUT"])
+def api_empresa():
+    if request.method == "GET":
+        return jsonify(get_empresa_config())
+    if not role_at_least("admin"):
+        return jsonify({"error": "Permiso denegado"}), 403
+    d = request.get_json(silent=True) or {}
+    saved = save_empresa_config(d)
+    log_audit("CONFIG", entidad="empresa", detalle="actualizacion_datos")
+    return jsonify(saved)
+
+
+@api_bp.route("/usuarios", methods=["GET", "POST"])
+def api_usuarios():
+    if not role_at_least("admin"):
+        return jsonify({"error": "Permiso denegado"}), 403
+    if request.method == "GET":
+        return jsonify(list_users())
+    d = request.get_json(silent=True) or {}
+    try:
+        uid = create_user(
+            d.get("username", ""),
+            d.get("password", ""),
+            d.get("role", "operador"),
+            d.get("nombre", ""),
+        )
+        return jsonify({"id": uid, "ok": True}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@api_bp.route("/usuarios/<int:user_id>", methods=["PATCH"])
+def api_usuario_update(user_id: int):
+    if not role_at_least("admin"):
+        return jsonify({"error": "Permiso denegado"}), 403
+    d = request.get_json(silent=True) or {}
+    try:
+        user = update_user(
+            user_id,
+            role=d.get("role"),
+            activo=d.get("activo") if "activo" in d else None,
+            nombre=d.get("nombre"),
+        )
+        log_audit("CONFIG", entidad="usuario", entidad_id=user_id, detalle=f"rol={user['role']}")
+        return jsonify(user)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400

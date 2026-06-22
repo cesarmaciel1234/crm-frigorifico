@@ -37,12 +37,25 @@ Copiá `.env.example` a `.env` y definí:
 |----------|-----|
 | `SECRET_KEY` | Sesiones Flask (obligatoria en producción) |
 | `MT_API_KEY` | Clave de acceso al panel y API |
-| `AUDIT_DELETE_PASSWORD` | Clave para borrar registros de auditoría |
+| `MASTER_PASSWORD` | Clave para borrar datos y acciones destructivas |
+| `AUDIT_DELETE_PASSWORD` | Alias retrocompatible de `MASTER_PASSWORD` |
+| `ADMIN_INITIAL_PASSWORD` | Contraseña del usuario `admin` al primer arranque |
 | `DATABASE_URL` | PostgreSQL (Render lo genera automáticamente) |
+| `REDIS_URL` | Rate limiting distribuido (opcional) |
 
 En Render, `render.yaml` provisiona PostgreSQL y genera las claves. Recuperá `MT_API_KEY` desde el dashboard de Render → Environment.
 
-Acceso: visitá `/login` e ingresá la clave. La sesión se mantiene 7 días.
+Acceso: visitá `/login` con usuario/contraseña o clave API. La sesión se mantiene 7 días.
+
+La API está disponible en `/api/...` y `/api/v1/...` (mismos endpoints, versión estable).
+
+## Backup
+
+```powershell
+python scripts/backup_db.py -o backups
+```
+
+En PostgreSQL requiere `pg_dump` instalado. Programá este comando diariamente (cron o Task Scheduler).
 
 ## Tests
 

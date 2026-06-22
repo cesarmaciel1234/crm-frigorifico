@@ -1,4 +1,4 @@
-"""Autenticación, headers de seguridad y utilidades de hardening."""
+"""Autenticación, roles, headers de seguridad y utilidades de hardening."""
 import hmac
 import secrets
 from functools import wraps
@@ -6,6 +6,8 @@ from functools import wraps
 from flask import jsonify, redirect, request, session, url_for
 
 from app.config import Config
+
+PUBLIC_PATHS = frozenset({"/login", "/auth/login", "/health", "/health/ready", "/manifest.json", "/sw.js"})
 
 
 def auth_enabled() -> bool:
@@ -30,6 +32,17 @@ def verify_api_key(value: str | None) -> bool:
     return hmac.compare_digest(value, Config.MT_API_KEY)
 
 
+def verify_master_password(value: str | None) -> bool:
+    pwd = Config.master_password()
+    if not pwd or not value:
+        return False
+    return hmac.compare_digest(str(value), pwd)
+
+
+def verify_audit_password(value: str | None) -> bool:
+    return verify_master_password(value)
+
+
 def is_authenticated() -> bool:
     if not auth_enabled():
         return True
@@ -38,15 +51,54 @@ def is_authenticated() -> bool:
     return verify_api_key(_api_key_from_request())
 
 
-def verify_audit_password(value: str | None) -> bool:
-    if not Config.AUDIT_DELETE_PASSWORD:
-        return False
-    if not value:
-        return False
-    return hmac.compare_digest(value, Config.AUDIT_DELETE_PASSWORD)
+def current_role() -> str:
+    if not auth_enabled():
+        return "admin"
+    role = session.get("role")
+    if role:
+        return role
+    if session.get("authenticated") or verify_api_key(_api_key_from_request()):
+        return session.get("role") or "admin"
+    return ""
 
 
-PUBLIC_PATHS = frozenset({"/login", "/auth/login", "/health", "/manifest.json", "/sw.js"})
+def role_at_least(required: str) -> bool:
+    from app.services.users import ROLE_RANK
+
+    have = ROLE_RANK.get(current_role(), -1)
+    need = ROLE_RANK.get(required, 99)
+    return have >= need
+
+
+def set_session_user(user: dict, *, auth_method: str = "password") -> None:
+    session.permanent = True
+    session["authenticated"] = True
+    session["user_id"] = user["id"]
+    session["username"] = user["username"]
+    session["role"] = user["role"]
+    session["auth_method"] = auth_method
+
+
+def set_session_api_key() -> None:
+    session.permanent = True
+    session["authenticated"] = True
+    session["user_id"] = None
+    session["username"] = "api_key"
+    session["role"] = "admin"
+    session["auth_method"] = "api_key"
+
+
+def require_master_password_in_request() -> tuple[bool, str]:
+    d = request.get_json(silent=True) or {}
+    pwd = (
+        d.get("password")
+        or d.get("master_password")
+        or request.args.get("password")
+        or request.headers.get("X-Master-Password")
+    )
+    if not verify_master_password(pwd):
+        return False, "Contraseña maestra incorrecta"
+    return True, ""
 
 
 def register_security(app):
@@ -64,6 +116,16 @@ def register_security(app):
         if path.startswith("/api/"):
             return jsonify({"error": "No autorizado"}), 401
         return redirect(url_for("views.login", next=path))
+
+    @app.before_request
+    def _enforce_role_writes():
+        if not auth_enabled() or request.method in ("GET", "HEAD", "OPTIONS"):
+            return None
+        if not request.path.startswith("/api/"):
+            return None
+        if current_role() == "visor":
+            return jsonify({"error": "Tu rol es solo lectura"}), 403
+        return None
 
     @app.after_request
     def _security_headers(response):
@@ -86,12 +148,47 @@ def register_security(app):
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
+    @app.errorhandler(500)
+    def _generic_500(e):
+        app.logger.exception("Error interno: %s", e)
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Error interno del servidor"}), 500
+        return "Error interno", 500
+
 
 def require_auth_json(f):
     @wraps(f)
     def wrapped(*args, **kwargs):
         if not is_authenticated():
             return jsonify({"error": "No autorizado"}), 401
+        return f(*args, **kwargs)
+
+    return wrapped
+
+
+def require_role(min_role: str):
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            if not is_authenticated():
+                return jsonify({"error": "No autorizado"}), 401
+            if not role_at_least(min_role):
+                return jsonify({"error": "Permiso denegado"}), 403
+            return f(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
+def require_master_password(f):
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        ok, msg = require_master_password_in_request()
+        if not ok:
+            return jsonify({"error": msg}), 403
+        if not role_at_least("admin"):
+            return jsonify({"error": "Solo administradores pueden realizar esta acción"}), 403
         return f(*args, **kwargs)
 
     return wrapped

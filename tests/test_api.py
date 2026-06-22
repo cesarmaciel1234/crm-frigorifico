@@ -131,7 +131,7 @@ class TestAPI:
         r_saldo_fail = client.post(f"/api/clientes/{cid}/saldo-inicial", json={"saldo_inicial": 10000, "password": "wrong"})
         assert r_saldo_fail.status_code == 403
 
-        r_saldo_ok = client.post(f"/api/clientes/{cid}/saldo-inicial", json={"saldo_inicial": 10000, "password": "2094"})
+        r_saldo_ok = client.post(f"/api/clientes/{cid}/saldo-inicial", json={"saldo_inicial": 10000, "password": "test-master-pw"})
         assert r_saldo_ok.status_code == 200
         assert r_saldo_ok.get_json()["saldo_actual"] == 10000
 
@@ -159,7 +159,7 @@ class TestAPI:
         r_reset_fail = client.post(f"/api/remitos/{rid}/reset-pago", json={"password": "wrong"})
         assert r_reset_fail.status_code == 403
 
-        r_reset_ok = client.post(f"/api/remitos/{rid}/reset-pago", json={"password": "2094"})
+        r_reset_ok = client.post(f"/api/remitos/{rid}/reset-pago", json={"password": "test-master-pw"})
         assert r_reset_ok.status_code == 200
         r_cli_det3 = client.get(f"/api/clientes/{cid}").get_json()
         assert r_cli_det3["saldo_actual"] == 30000
@@ -167,7 +167,7 @@ class TestAPI:
         r_del_rem_fail = client.delete(f"/api/remitos/{rid}", json={"password": "wrong"})
         assert r_del_rem_fail.status_code == 403
 
-        r_del_rem_ok = client.delete(f"/api/remitos/{rid}", json={"password": "2094"})
+        r_del_rem_ok = client.delete(f"/api/remitos/{rid}", json={"password": "test-master-pw"})
         assert r_del_rem_ok.status_code == 200
         
         r_cli_det4 = client.get(f"/api/clientes/{cid}").get_json()
@@ -175,7 +175,7 @@ class TestAPI:
         r_bulk2 = client.get("/api/bulk").get_json()
         assert r_bulk2[0]["kg_remanentes"] == 100
 
-        r_del_cli = client.delete(f"/api/clientes/{cid}", json={"password": "2094"})
+        r_del_cli = client.delete(f"/api/clientes/{cid}", json={"password": "test-master-pw"})
         assert r_del_cli.status_code == 200
         r_cli_det5 = client.get(f"/api/clientes/{cid}")
         assert r_cli_det5.status_code == 404

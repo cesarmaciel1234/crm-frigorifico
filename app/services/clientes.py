@@ -53,7 +53,7 @@ def registrar_cliente(
     # 4. Le devuelve al Mozo el "número de cliente" para que le entregue su tarjeta
     return cliente_id
 
-def list_clientes() -> list[dict]:
+def list_clientes(limit: int | None = None, offset: int = 0) -> list[dict]:
     import datetime
     with get_db() as conn:
         # Consulta compatible con PostgreSQL (GROUP BY ANSI y sin aritmética de fecha nativa compleja)
@@ -132,6 +132,10 @@ def list_clientes() -> list[dict]:
             "en_mora": en_mora,
             "inrecuperable": inrecuperable
         })
+    if limit is not None:
+        offset = max(0, int(offset))
+        limit = max(1, min(int(limit), 10_000))
+        return out[offset : offset + limit]
     return out
 
 def recalcular_saldo_cliente(conn, cliente_id: int) -> float:

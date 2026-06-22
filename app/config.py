@@ -1,6 +1,9 @@
 import os
 
 
+FORBIDDEN_SECRETS = frozenset({"2094", "changeme", "admin", "password", ""})
+
+
 class Config:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     DB_PATH = os.path.join(BASE_DIR, "master_total.db")
@@ -13,7 +16,10 @@ class Config:
 
     SECRET_KEY = os.environ.get("SECRET_KEY", "")
     MT_API_KEY = os.environ.get("MT_API_KEY", "")
-    AUDIT_DELETE_PASSWORD = os.environ.get("AUDIT_DELETE_PASSWORD", "2094")
+    MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD", "") or os.environ.get("AUDIT_DELETE_PASSWORD", "")
+    AUDIT_DELETE_PASSWORD = MASTER_PASSWORD  # alias retrocompatible
+    ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+    ADMIN_INITIAL_PASSWORD = os.environ.get("ADMIN_INITIAL_PASSWORD", "")
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
@@ -22,3 +28,27 @@ class Config:
         and os.environ.get("RENDER") == "true"
     )
     PERMANENT_SESSION_LIFETIME = 86400 * 7  # 7 días
+
+    @classmethod
+    def master_password(cls) -> str:
+        return cls.MASTER_PASSWORD or ""
+
+    @classmethod
+    def is_production(cls) -> bool:
+        return not cls.TESTING and not cls.DEBUG and (
+            os.environ.get("RENDER") == "true" or bool(cls.DATABASE_URL)
+        )
+
+    @classmethod
+    def validate_production(cls) -> list[str]:
+        """Devuelve lista de errores de configuración en producción."""
+        if not cls.is_production():
+            return []
+        errors = []
+        if not cls.SECRET_KEY or cls.SECRET_KEY in FORBIDDEN_SECRETS:
+            errors.append("SECRET_KEY debe estar definida y ser aleatoria")
+        if not cls.MT_API_KEY or cls.MT_API_KEY in FORBIDDEN_SECRETS:
+            errors.append("MT_API_KEY debe estar definida y ser aleatoria")
+        if not cls.master_password() or cls.master_password() in FORBIDDEN_SECRETS:
+            errors.append("MASTER_PASSWORD (o AUDIT_DELETE_PASSWORD) debe estar definida")
+        return errors

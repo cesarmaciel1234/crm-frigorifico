@@ -260,7 +260,7 @@
             </button>
             
             <div class="nav-label" style="margin-top:12px">Comercial</div>
-            <button type="button" class="nav-item" data-view="ventas-express">
+            <button type="button" class="nav-item" data-view="ventas-express" data-write-only>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>
                 Ventas express
             </button>
@@ -274,7 +274,7 @@
             </button>
             
             <div class="nav-label" style="margin-top:12px">Operaciones</div>
-            <button type="button" class="nav-item" data-view="compra-bulk">
+            <button type="button" class="nav-item" data-view="compra-bulk" data-write-only>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M3 13l5-5 5 5 8-8"/></svg>
                 Compra bulk
             </button>
@@ -288,7 +288,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h2M10 15h4"/></svg>
                 Pago centralizado
             </button>
-            <button type="button" class="nav-item" data-view="registro">
+            <button type="button" class="nav-item" data-view="registro" data-write-only>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
                 Nueva deuda
             </button>
@@ -301,6 +301,10 @@
             <button type="button" class="nav-item" data-view="auditoria">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                 Auditoría (Historial)
+            </button>
+            <button type="button" class="nav-item" data-view="usuarios" data-admin-only style="display:none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                Usuarios y acceso
             </button>
 
             
@@ -317,7 +321,8 @@
         </div>
         <div class="sidebar-foot">
             <span>Distribuidora de carne</span>
-            <span class="version-tag">v3.0 PRO</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnLogoutSidebar" style="margin-top:8px;width:100%;">Cerrar sesión</button>
+            <span class="version-tag">v3.1 PRO</span>
         </div>
     </aside>
     <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
@@ -355,6 +360,7 @@
                 <div class="weather-widget hide-mobile" id="weatherWidget" style="display: inline-flex; align-items: center; justify-content: center; background: rgba(50,50,50,0.9); color: #fff; font-size: 14px; font-family: sans-serif; font-weight: 700; padding: 0 10px; height: 38px; border-radius: 10px; line-height: 1; box-shadow: 0 2px 5px rgba(0,0,0,0.15); letter-spacing: 0.5px;">
                     10°
                 </div>
+                <button type="button" class="btn btn-ghost" id="btnLogout" style="color:#64748b; background:#f1f5f9; border-radius: 10px; padding: 0 10px; height: 38px; font-size: 12px; font-weight: 600;" title="Cerrar sesión">Salir</button>
                 <button type="button" class="btn btn-ghost" id="btnTogglePro" style="color:#111827; background:#e2e8f0; border-radius: 10px; padding: 0; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;" title="Modo PRO">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                 </button>
@@ -721,6 +727,37 @@
                                 </tr>
                             </thead>
                             <tbody id="tblAuditoria"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: Usuarios (admin) -->
+            <div class="view" id="view-usuarios">
+                <div class="card">
+                    <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                        <div>
+                            <h2>Usuarios y acceso</h2>
+                            <span id="usuariosCount" style="font-size:0.85rem;color:var(--text-secondary);">0 usuarios</span>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-ghost btn-sm" id="btnExportData">Exportar datos</button>
+                            <button type="button" class="btn btn-primary btn-sm" id="btnNuevoUsuario">+ Nuevo usuario</button>
+                        </div>
+                    </div>
+                    <div class="table-wrap xls-wrap">
+                        <table class="data-table home-table">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Nombre</th>
+                                    <th>Rol</th>
+                                    <th>Estado</th>
+                                    <th>Creado</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblUsuarios"></tbody>
                         </table>
                     </div>
                 </div>
@@ -1235,6 +1272,41 @@
         #cobBarCapitalTotal { color: #2563eb; }
     </style>
 
+    <div class="modal-overlay" id="modalNuevoUsuario">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <h2>Nuevo usuario</h2>
+                <button type="button" class="modal-close" id="btnCerrarModalUsuario">&times;</button>
+            </div>
+            <form id="formNuevoUsuario" class="modal-body" style="padding:20px;display:flex;flex-direction:column;gap:12px;">
+                <div class="field">
+                    <label for="inpUsuarioUsername">Usuario</label>
+                    <input type="text" id="inpUsuarioUsername" required minlength="3" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label for="inpUsuarioNombre">Nombre visible</label>
+                    <input type="text" id="inpUsuarioNombre" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label for="inpUsuarioPassword">Contraseña (mín. 8)</label>
+                    <input type="password" id="inpUsuarioPassword" required minlength="8" autocomplete="new-password">
+                </div>
+                <div class="field">
+                    <label for="inpUsuarioRole">Rol</label>
+                    <select id="inpUsuarioRole">
+                        <option value="operador">Operador</option>
+                        <option value="visor">Visor (solo lectura)</option>
+                        <option value="admin">Administrador</option>
+                    </select>
+                </div>
+                <div class="modal-footer" style="padding:0;margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" class="btn btn-ghost" id="btnCancelarModalUsuario">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Crear usuario</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="modalMasterPassword">
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
@@ -1257,6 +1329,6 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/app.js?v=2.37"></script>
+    <script src="/static/js/app.js?v=2.39"></script>
 </body>
 </html>

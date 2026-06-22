@@ -8,11 +8,14 @@ Uso:
 Variables obligatorias en producción:
   SECRET_KEY          clave de sesión Flask
   MT_API_KEY          clave de acceso a la API / panel
+  MASTER_PASSWORD     clave para acciones destructivas (o AUDIT_DELETE_PASSWORD)
 
 Variables opcionales:
   MT_HOST=0.0.0.0     escuchar en la red local
   MT_PORT=5005        puerto (default: 5005)
   DATABASE_URL        PostgreSQL (recomendado en Render)
+  ADMIN_INITIAL_PASSWORD  contraseña del usuario admin inicial
+  REDIS_URL           rate limiting distribuido (opcional)
 """
 import sys
 
@@ -20,6 +23,13 @@ from app.config import Config
 
 
 def main():
+    errors = Config.validate_production()
+    if errors:
+        print("ERROR: configuración de producción inválida:", file=sys.stderr)
+        for err in errors:
+            print(f"  - {err}", file=sys.stderr)
+        sys.exit(1)
+
     if not Config.SECRET_KEY:
         print("AVISO: SECRET_KEY no configurada. Generando una temporal. Las sesiones se perderán al reiniciar.", file=sys.stderr)
         from app.security import generate_secret

@@ -132,10 +132,11 @@ const $ = id => document.getElementById(id);
         let cobranzaClienteActual = null;
         let pagoCentralDeudaActual = null;
 
-        let data = { enemigos: [], remitos: [], estrategia: {}, bancos: [], historial: [], historialPagos: [], bulk: [], clientes: [], auditoria: [] };
+        let data = { enemigos: [], remitos: [], estrategia: {}, bancos: [], historial: [], historialPagos: [], bulk: [], clientes: [], auditoria: [], usuarios: [] };
         let isProMode = true;
         let selectedDeuda = null;
         let selectedAuditId = null;
+        let sessionUser = { role: 'admin', username: 'jefe' };
         let histPagosFiltro = '';
         let activeRowIndex = -1;
 
@@ -152,6 +153,7 @@ const $ = id => document.getElementById(id);
             cobranzas: ['Central de Cobranzas', 'Clientes con saldo pendiente', 'Cobranzas'],
             'pago-central': ['Pago Centralizado Empresarial', 'Obligaciones pendientes de pago', 'Pagos'],
             auditoria: ['Auditoría', 'Historial completo de acciones', 'Historial'],
+            usuarios: ['Usuarios', 'Gestión de accesos y roles', 'Usuarios'],
             'cliente-detalle': ['Perfil de Cliente', 'Detalle corporativo y facturación', 'Perfil'],
             'nueva-venta': ['Registrar Venta', 'Emitir remito o factura a cuenta corriente', 'Ventas']
         };
@@ -1097,15 +1099,92 @@ const $ = id => document.getElementById(id);
         function renderAuditoria() {
             const arr = data.auditoria || [];
             $('auditoriaCount').textContent = arr.length + ' registros';
+            const showDelete = sessionUser.role === 'admin';
             $('tblAuditoria').innerHTML = arr.length ? arr.map(a => `
                 <tr>
                     <td>${fmtFecha(a.fecha, true)}</td>
-                    <td><strong>${esc(a.alias || 'Registro')}</strong><br><small style="color:var(--text-light)">Op ID: ${a.operacion_id}</small></td>
+                    <td><strong>${esc(a.alias || 'Registro')}</strong><br><small style="color:var(--text-light)">Op ID: ${a.operacion_id || '—'}${a.usuario ? ' · ' + esc(a.usuario) : ''}</small></td>
                     <td><span class="badge ${a.accion === 'ELIMINADO' ? 'badge-danger' : 'badge-success'}">${esc(a.accion)}</span></td>
                     <td class="money">$${fmt(a.monto)}</td>
-                    <td><button class="btn btn-ghost btn-sm" onclick="promptDeleteAuditoria(${a.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button></td>
+                    <td>${showDelete ? `<button class="btn btn-ghost btn-sm" onclick="promptDeleteAuditoria(${a.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>` : ''}</td>
                 </tr>
             `).join('') : '<tr><td colspan="5" class="empty-state">No hay registros de auditoría</td></tr>';
+        }
+
+        async function renderUsuarios() {
+            try {
+                data.usuarios = await api('/api/usuarios');
+            } catch (e) {
+                toast(e.message || 'No se pudieron cargar usuarios', true);
+                data.usuarios = [];
+            }
+            const arr = data.usuarios || [];
+            $('usuariosCount').textContent = arr.length + ' usuario' + (arr.length === 1 ? '' : 's');
+            const roleLabel = { admin: 'Administrador', operador: 'Operador', visor: 'Visor' };
+            $('tblUsuarios').innerHTML = arr.length ? arr.map(u => `
+                <tr>
+                    <td><strong>${esc(u.username)}</strong></td>
+                    <td>${esc(u.nombre || u.username)}</td>
+                    <td>
+                        <select class="inp-usuario-role" data-uid="${u.id}" ${u.username === sessionUser.username ? 'disabled' : ''}>
+                            <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrador</option>
+                            <option value="operador" ${u.role === 'operador' ? 'selected' : ''}>Operador</option>
+                            <option value="visor" ${u.role === 'visor' ? 'selected' : ''}>Visor</option>
+                        </select>
+                    </td>
+                    <td><span class="badge ${u.activo ? 'badge-success' : 'badge-neutral'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+                    <td>${fmtFecha(u.created_at)}</td>
+                    <td>
+                        ${u.username !== sessionUser.username ? `<button type="button" class="btn btn-ghost btn-sm btn-toggle-user" data-uid="${u.id}" data-activo="${u.activo ? '0' : '1'}">${u.activo ? 'Desactivar' : 'Activar'}</button>` : '<small style="color:var(--text-muted)">Tú</small>'}
+                    </td>
+                </tr>
+            `).join('') : '<tr><td colspan="6" class="empty-state">Sin usuarios registrados</td></tr>';
+
+            document.querySelectorAll('.inp-usuario-role').forEach(sel => {
+                sel.addEventListener('change', async () => {
+                    const uid = parseInt(sel.dataset.uid, 10);
+                    try {
+                        await api('/api/usuarios/' + uid, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ role: sel.value })
+                        });
+                        toast('Rol actualizado');
+                        await renderUsuarios();
+                    } catch (e) {
+                        toast(e.message, true);
+                        await renderUsuarios();
+                    }
+                });
+            });
+            document.querySelectorAll('.btn-toggle-user').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const uid = parseInt(btn.dataset.uid, 10);
+                    const activo = btn.dataset.activo === '1';
+                    try {
+                        await api('/api/usuarios/' + uid, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ activo })
+                        });
+                        toast(activo ? 'Usuario activado' : 'Usuario desactivado');
+                        await renderUsuarios();
+                    } catch (e) {
+                        toast(e.message, true);
+                    }
+                });
+            });
+        }
+
+        function applyRoleUi() {
+            const isAdmin = sessionUser.role === 'admin';
+            const isVisor = sessionUser.role === 'visor';
+            document.querySelectorAll('[data-admin-only]').forEach(el => {
+                el.style.display = isAdmin ? '' : 'none';
+            });
+            document.querySelectorAll('[data-write-only]').forEach(el => {
+                el.style.display = isVisor ? 'none' : '';
+            });
         }
 
         window.promptDeleteAuditoria = (id) => {
@@ -1594,14 +1673,16 @@ const $ = id => document.getElementById(id);
                         </div>
                         ` : ''}
                         
+                        ${sessionUser.role === 'admin' ? `
                         <!-- CARD DE ADMINISTRACIÓN -->
                         <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05); display:flex; flex-direction:column; gap:10px;">
-                            <div style="font-size:11px; color:#e11d48; font-weight:800; letter-spacing:0.5px; margin-bottom:2px;">ADMINISTRACIÓN (Clave 2094)</div>
+                            <div style="font-size:11px; color:#e11d48; font-weight:800; letter-spacing:0.5px; margin-bottom:2px;">ADMINISTRACIÓN</div>
                             <div style="display:grid; grid-template-columns: 1fr; gap:8px;">
                                 <button class="btn btn-ghost btn-sm" onclick="cargarSaldoViejo(${c.id})" style="border: 1px solid #cbd5e1; padding:8px; font-size:11px; font-weight:bold; color:#475569; border-radius:8px; cursor:pointer; background:#ffffff;">⚙️ Cargar Saldo Viejo</button>
                                 <button class="btn btn-danger btn-sm" onclick="eliminarCliente(${c.id})" style="padding:8px; font-size:11px; font-weight:bold; border-radius:8px; cursor:pointer;">❌ Eliminar Cliente</button>
                             </div>
                         </div>
+                        ` : ''}
                     </div>
 
                     <!-- History and Filters -->
@@ -1770,6 +1851,88 @@ const $ = id => document.getElementById(id);
             renderHistorialSidebar();
         }
 
+        async function syncEmpresaFromServer() {
+            try {
+                const emp = await api('/api/empresa');
+                if (emp && (emp.razon_social || emp.nombre)) {
+                    localStorage.setItem('empresa_datos', JSON.stringify({
+                        nombre: emp.razon_social || emp.nombre || 'Master Total',
+                        cuit: emp.cuit || '',
+                        direccion: emp.direccion || '',
+                        telefono: emp.telefono || '',
+                        email: emp.email || ''
+                    }));
+                }
+            } catch (_) {}
+        }
+
+        async function loadSession() {
+            try {
+                const s = await api('/auth/session');
+                sessionUser = { role: s.role || 'admin', username: s.username || 'jefe' };
+                const nameEl = document.querySelector('.topbar-greeting-block div div:last-child');
+                if (nameEl) nameEl.textContent = sessionUser.username;
+            } catch (_) {
+                sessionUser = { role: 'admin', username: 'jefe' };
+            }
+            await syncEmpresaFromServer();
+            applyRoleUi();
+        }
+
+        async function logout() {
+            try {
+                await api('/auth/logout', { method: 'POST' });
+            } catch (_) {}
+            window.location.href = '/login';
+        }
+
+        $('btnLogout')?.addEventListener('click', logout);
+        $('btnLogoutSidebar')?.addEventListener('click', logout);
+
+        $('btnNuevoUsuario')?.addEventListener('click', () => {
+            $('formNuevoUsuario')?.reset();
+            $('modalNuevoUsuario')?.classList.add('open');
+        });
+        $('btnCerrarModalUsuario')?.addEventListener('click', () => $('modalNuevoUsuario')?.classList.remove('open'));
+        $('btnCancelarModalUsuario')?.addEventListener('click', () => $('modalNuevoUsuario')?.classList.remove('open'));
+        $('modalNuevoUsuario')?.addEventListener('click', ev => { if (ev.target === $('modalNuevoUsuario')) $('modalNuevoUsuario').classList.remove('open'); });
+        $('formNuevoUsuario')?.addEventListener('submit', async ev => {
+            ev.preventDefault();
+            try {
+                await api('/api/usuarios', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: $('inpUsuarioUsername').value.trim(),
+                        nombre: $('inpUsuarioNombre').value.trim(),
+                        password: $('inpUsuarioPassword').value,
+                        role: $('inpUsuarioRole').value
+                    })
+                });
+                toast('Usuario creado');
+                $('modalNuevoUsuario')?.classList.remove('open');
+                await renderUsuarios();
+            } catch (e) {
+                toast(e.message, true);
+            }
+        });
+
+        $('btnExportData')?.addEventListener('click', async () => {
+            try {
+                const payload = await api('/api/export');
+                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'master-total-export-' + new Date().toISOString().slice(0, 10) + '.json';
+                a.click();
+                URL.revokeObjectURL(url);
+                toast('Exportación descargada');
+            } catch (e) {
+                toast(e.message || 'Error al exportar', true);
+            }
+        });
+
         async function loadAll() {
             setLoading(true);
             try {
@@ -1888,6 +2051,10 @@ const $ = id => document.getElementById(id);
         }
 
         function switchView(name) {
+            if (name === 'usuarios' && sessionUser.role !== 'admin') {
+                toast('Solo administradores pueden gestionar usuarios', true);
+                return;
+            }
             if (activeRowIndex >= 0) {
                 const trs = Array.from(document.querySelectorAll('#tblHome tr.clickable'));
                 const el = trs[activeRowIndex];
@@ -1949,6 +2116,7 @@ const $ = id => document.getElementById(id);
             if (name === 'cobranzas') renderCobranzas();
             if (name === 'pago-central') renderPagosCentral();
             if (name === 'auditoria') renderAuditoria();
+            if (name === 'usuarios') renderUsuarios();
             if (name === 'registro') volverMenuRegistro();
             setSidebarOpen(false);
         }
@@ -1980,6 +2148,7 @@ const $ = id => document.getElementById(id);
             if (v === 'remitos') await renderRemitosFull();
             if (v === 'historial-pagos') renderHistorialPagos();
             if (v === 'auditoria') renderAuditoria();
+            if (v === 'usuarios') renderUsuarios();
             toast('Panel actualizado');
         });
 
@@ -2033,13 +2202,14 @@ const $ = id => document.getElementById(id);
         $('drawerPagar').addEventListener('click', abrirModalPago);
         $('drawerDelete').addEventListener('click', async () => {
             if (!selectedDeuda) return;
-            const pw = prompt('Ingrese la contraseña para eliminar la deuda:');
-            if (pw !== '2094') {
-                toast('Contraseña incorrecta', true);
-                return;
-            }
+            const pw = await window.promptMasterPasswordAsync('Ingrese la contraseña maestra para eliminar la deuda:');
+            if (!pw) return;
             if (!confirm('¿Eliminar ' + selectedDeuda.alias + '?')) return;
-            await api('/api/operaciones/' + selectedDeuda.id, { method: 'DELETE' });
+            await api('/api/operaciones/' + selectedDeuda.id, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pw })
+            });
             toast('Obligación eliminada');
             closeDrawer();
             await loadAll();
@@ -2047,13 +2217,14 @@ const $ = id => document.getElementById(id);
 
         $('btnConfirmDeleteAuditoria')?.addEventListener('click', async () => {
             if (!selectedAuditId) return;
-            const pw = prompt('Ingrese la contraseña para borrar el registro del historial:');
-            if (pw !== '2094') {
-                toast('Contraseña incorrecta', true);
-                return;
-            }
+            const pw = await window.promptMasterPasswordAsync('Ingrese la contraseña maestra para borrar el registro del historial:');
+            if (!pw) return;
             if (!confirm('¿Borrar definitivamente este registro de auditoría?')) return;
-            await api('/api/auditoria/' + selectedAuditId, { method: 'DELETE' });
+            await api('/api/auditoria/' + selectedAuditId, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pw })
+            });
             toast('Registro eliminado');
             $('modalConfirmDeleteAuditoria').classList.remove('show');
             await loadAll();
@@ -2080,7 +2251,7 @@ const $ = id => document.getElementById(id);
         $('inpMontoPagoGlobal')?.addEventListener('keydown', ev => { if (ev.key === 'Enter') confirmarPagoGlobal(); });
         $('modalEmpresa')?.addEventListener('click', ev => { if (ev.target === $('modalEmpresa')) cerrarModalEmpresa(); });
         $('modalFacturaOriginal')?.addEventListener('click', ev => { if (ev.target === $('modalFacturaOriginal')) cerrarModalFacturaOriginal(); });
-        $('formEmpresa')?.addEventListener('submit', ev => {
+        $('formEmpresa')?.addEventListener('submit', async ev => {
             ev.preventDefault();
             const data = {
                 nombre: $('inpEmpresaNombre').value.trim() || "Master Total",
@@ -2090,6 +2261,24 @@ const $ = id => document.getElementById(id);
                 email: $('inpEmpresaEmail').value.trim()
             };
             localStorage.setItem('empresa_datos', JSON.stringify(data));
+            if (sessionUser.role === 'admin') {
+                try {
+                    await api('/api/empresa', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            razon_social: data.nombre,
+                            cuit: data.cuit,
+                            direccion: data.direccion,
+                            telefono: data.telefono,
+                            email: data.email
+                        })
+                    });
+                } catch (e) {
+                    toast(e.message || 'No se pudo guardar en servidor', true);
+                    return;
+                }
+            }
             toast('Datos de la empresa guardados con éxito');
             cerrarModalEmpresa();
         });
@@ -3126,6 +3315,16 @@ const $ = id => document.getElementById(id);
         registerServiceWorker();
         initIosInstallHint();
 
+        async function boot() {
+            await loadSession();
+            await loadAll();
+            if (new URLSearchParams(window.location.search).get('view')) {
+                applyPwaDeepLink();
+            } else {
+                switchView('home');
+            }
+        }
+
         async function updateWeather() {
             function fetchW(lat, lon) {
                 fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`)
@@ -3152,10 +3351,5 @@ const $ = id => document.getElementById(id);
         updateWeather();
         setInterval(updateWeather, 1800000); // 30 mins
 
-        loadAll();
-        if (new URLSearchParams(window.location.search).get('view')) {
-            applyPwaDeepLink();
-        } else {
-            switchView('home');
-        }
+        boot();
         setInterval(loadAll, 60000);

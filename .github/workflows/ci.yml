@@ -7,7 +7,7 @@ on:
     branches: [main, master]
 
 jobs:
-  test:
+  test-sqlite:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,11 +16,55 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run tests
+      - name: Run tests (SQLite)
+        env:
+          MASTER_PASSWORD: test-master-pw
+          AUDIT_DELETE_PASSWORD: test-master-pw
         run: python -m pytest tests -v --tb=short
+      - name: Dependency audit
+        run: |
+          pip install pip-audit
+          python -m pip_audit -r requirements.txt
+      - name: Static security scan
+        run: |
+          pip install bandit
+          python -m bandit -r app -ll -q -x app_v3_old,tests,scripts -s B104,B608
       - name: Security smoke (auth enabled)
         env:
           MT_API_KEY: ci-test-key-not-for-production
           SECRET_KEY: ci-secret-key
+          MASTER_PASSWORD: ci-audit-pw
           AUDIT_DELETE_PASSWORD: ci-audit-pw
         run: python -m pytest tests/test_security.py -v --tb=short
+
+  test-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: crm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/crm_test
+      MASTER_PASSWORD: test-master-pw
+      AUDIT_DELETE_PASSWORD: test-master-pw
+      MT_API_KEY: ""
+      SECRET_KEY: test-secret-key
+      TESTING: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests (PostgreSQL)
+        run: python -m pytest tests -v --tb=short -x
