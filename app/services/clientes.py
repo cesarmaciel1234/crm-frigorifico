@@ -22,7 +22,8 @@ def registrar_cliente(
     telefono: str = None,
     cuit: str = None,
     direccion: str = None,
-    email: str = None
+    email: str = None,
+    saldo_inicial: float = 0.0
 ) -> int:
     nombre = nombre.strip()
     # 1. El experto es estricto: ¡No puedes abrir una cuenta sin decir tu nombre!
@@ -36,14 +37,16 @@ def registrar_cliente(
     if scoring not in ("A", "B", "C", "D"):
         raise ValueError("Scoring inválido. Debe ser A, B, C o D")
 
+    saldo_inicial = float(saldo_inicial)
+
     # 3. Va a la bóveda y anota al cliente nuevo en el cajón de "clientes"
     with get_db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO clientes (nombre, scoring, techo_deuda, saldo_actual, telefono, cuit, direccion, email)
-            VALUES (?, ?, ?, 0, ?, ?, ?, ?)
+            INSERT INTO clientes (nombre, scoring, techo_deuda, saldo_actual, saldo_inicial, telefono, cuit, direccion, email)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (nombre, scoring, techo_deuda, telefono, cuit, direccion, email)
+            (nombre, scoring, techo_deuda, saldo_inicial, saldo_inicial, telefono, cuit, direccion, email)
         )
         cliente_id = cur.lastrowid
         
@@ -179,6 +182,11 @@ def get_cliente_detalle(cliente_id: int) -> dict:
             (cliente_id,)
         ).fetchall()
         
+        pagos = conn.execute(
+            "SELECT id, monto, fecha FROM pagos_clientes WHERE cliente_id = ? ORDER BY fecha DESC",
+            (cliente_id,)
+        ).fetchall()
+        
     list_rem = []
     for rem in remitos:
         r = dict(rem)
@@ -202,6 +210,8 @@ def get_cliente_detalle(cliente_id: int) -> dict:
             "created_at": r["created_at"]
         })
         
+    list_pagos = [{"id": p["id"], "monto": p["monto"], "fecha": p["fecha"]} for p in pagos]
+        
     limite_superado = r_cli["saldo_actual"] > r_cli["techo_deuda"]
     return {
         "id": r_cli["id"],
@@ -212,7 +222,8 @@ def get_cliente_detalle(cliente_id: int) -> dict:
         "saldo_inicial": r_cli.get("saldo_inicial", 0.0),
         "limite_superado": limite_superado,
         "created_at": r_cli["created_at"],
-        "remitos": list_rem
+        "remitos": list_rem,
+        "pagos": list_pagos
     }
 
 
@@ -283,6 +294,19 @@ def registrar_pago_cliente_global(cliente_id: int, monto: float) -> dict:
 
         if not aplicaciones:
             raise ValueError("No se pudo aplicar el pago a ninguna factura pendiente")
+
+        # Insertar pago global
+        cur_pago = conn.execute(
+            "INSERT INTO pagos_clientes (cliente_id, monto) VALUES (?, ?)",
+            (cliente_id, monto)
+        )
+        pago_id = cur_pago.lastrowid
+
+        for app in aplicaciones:
+            conn.execute(
+                "INSERT INTO aplicacion_pagos (pago_id, remito_id, monto_aplicado) VALUES (?, ?, ?)",
+                (pago_id, app["remito_id"], app["monto"])
+            )
 
         conn.execute(
             "UPDATE clientes SET fecha_ultimo_pago = date('now', 'localtime') WHERE id = ?",
@@ -422,9 +446,36 @@ def eliminar_cliente(cliente_id: int):
         for rem in remitos:
             eliminar_remito_logic(conn, rem["id"])
             
-        # 3. Eliminar pérdidas acumuladas del cliente (si las hay)
+        # 3. Eliminar pagos y sus aplicaciones (por CASCADE o manualmente)
+        conn.execute("DELETE FROM pagos_clientes WHERE cliente_id = ?", (cliente_id,))
+        
+        # 4. Eliminar pérdidas acumuladas del cliente (si las hay)
         conn.execute("DELETE FROM perdidas_acumuladas WHERE cliente_id = ?", (cliente_id,))
         
-        # 4. Eliminar el cliente
+        # 5. Eliminar el cliente
         conn.execute("DELETE FROM clientes WHERE id = ?", (cliente_id,))
+
+def eliminar_pago_cliente(pago_id: int):
+    with get_db() as conn:
+        row = conn.execute("SELECT cliente_id FROM pagos_clientes WHERE id = ?", (pago_id,)).fetchone()
+        if not row:
+            raise ValueError("Pago no encontrado")
+        cliente_id = row["cliente_id"]
+
+        # Revertir los montos aplicados a los remitos
+        aplicaciones = conn.execute("SELECT remito_id, monto_aplicado FROM aplicacion_pagos WHERE pago_id = ?", (pago_id,)).fetchall()
+        for app in aplicaciones:
+            remito_id = app["remito_id"]
+            monto_aplicado = app["monto_aplicado"]
+            conn.execute(
+                "UPDATE remitos_carga SET monto_pagado = COALESCE(monto_pagado, 0) - ?, pagado = 0 WHERE id = ?",
+                (monto_aplicado, remito_id)
+            )
+            # Asegurar que no quede negativo por errores de redondeo
+            conn.execute("UPDATE remitos_carga SET monto_pagado = 0 WHERE monto_pagado < 0 AND id = ?", (remito_id,))
+
+        # Eliminar el pago (sus aplicaciones se borran por CASCADE en BD, pero lo hacemos explícito si es necesario, o lo asume)
+        conn.execute("DELETE FROM pagos_clientes WHERE id = ?", (pago_id,))
+        
+        recalcular_saldo_cliente(conn, cliente_id)
 

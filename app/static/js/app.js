@@ -14,9 +14,10 @@ const $ = id => document.getElementById(id);
         // --- OFFLINE SYNC ENGINE (Dexie) ---
         const MODO_PRUEBA = false; // Cambiar a false para enviar datos a la nube
         const db = new Dexie('CarniceriaContableDB');
-        db.version(2).stores({
+        db.version(3).stores({
             transacciones: '++id, uuid, tipo, monto, fecha, status, updated_at',
-            cache: 'key, updated_at'
+            cache: 'key, updated_at',
+            solicitudes_pendientes: '++id, url, method, body, created_at'
         });
 
         async function registrarTransaccion(datos) {
@@ -171,10 +172,251 @@ const $ = id => document.getElementById(id);
             opts = opts || {};
             opts.credentials = 'same-origin';
             opts.headers = Object.assign({ Accept: 'application/json' }, opts.headers || {});
-            const r = await (window.CrmSafe?.apiFetch || fetch)(url, opts);
-            const d = await r.json().catch(() => ({}));
-            if (!r.ok) throw new Error(d.error || 'Error en la operación');
-            return d;
+            
+            const method = (opts.method || 'GET').toUpperCase();
+            const isGet = method === 'GET';
+            
+            try {
+                const r = await (window.CrmSafe?.apiFetch || fetch)(url, opts);
+                const d = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(d.error || 'Error en la operación');
+                return d;
+            } catch (error) {
+                if (isGet) throw error;
+                
+                const isNetworkError = !navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('network error');
+                if (isNetworkError) {
+                    await db.solicitudes_pendientes.add({
+                        url,
+                        method,
+                        body: opts.body || null,
+                        created_at: new Date().toISOString()
+                    });
+                    
+                    toast('⚠️ Sin conexión. Registrado localmente.', false);
+                    aplicarCambioOptimista(url, method, opts.body);
+                    actualizarUIOffline();
+                    
+                    return { ok: true, offline: true, message: 'Operación guardada localmente' };
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        async function actualizarUIOffline() {
+            const count = await db.solicitudes_pendientes.count();
+            const badge = document.getElementById('offlineBadge');
+            const cntSpan = document.getElementById('offlinePendingCount');
+            if (badge && cntSpan) {
+                if (count > 0 || !navigator.onLine) {
+                    badge.style.display = 'inline-flex';
+                    cntSpan.textContent = count;
+                    if (!navigator.onLine) {
+                        badge.style.backgroundColor = '#fee2e2';
+                        badge.style.color = '#991b1b';
+                        badge.title = `Sin conexión a Internet. ${count} acciones pendientes de subir.`;
+                    } else {
+                        badge.style.backgroundColor = '#fef3c7';
+                        badge.style.color = '#92400e';
+                        badge.title = `${count} acciones pendientes de subir al servidor. Haz clic para sincronizar ahora.`;
+                    }
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        }
+
+        async function sincronizarSolicitudesPendientes() {
+            if (!navigator.onLine) return;
+            const pendientes = await db.solicitudes_pendientes.orderBy('id').toArray();
+            if (!pendientes.length) return;
+            
+            let exitoCount = 0;
+            let falloCount = 0;
+            
+            for (const item of pendientes) {
+                try {
+                    const response = await (window.CrmSafe?.apiFetch || fetch)(item.url, {
+                        method: item.method,
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: item.body
+                    });
+                    
+                    if (response.ok) {
+                        await db.solicitudes_pendientes.delete(item.id);
+                        exitoCount++;
+                    } else {
+                        const d = await response.json().catch(() => ({}));
+                        console.error("Error al sincronizar operación:", d.error || response.statusText);
+                        await db.solicitudes_pendientes.delete(item.id);
+                        falloCount++;
+                    }
+                } catch (error) {
+                    console.warn("Fallo de red en sincronización, deteniendo cola:", error);
+                    break;
+                }
+            }
+            
+            if (exitoCount > 0 || falloCount > 0) {
+                toast(`🔄 Sincronización completa: ${exitoCount} éxito, ${falloCount} error.`);
+                await loadAll();
+            }
+            actualizarUIOffline();
+        }
+
+        function aplicarCambioOptimista(url, method, body) {
+            try {
+                if (!data) return;
+                const parsedBody = body ? JSON.parse(body) : {};
+                
+                // 1. Crear cliente
+                if (url.includes('/api/clientes') && method === 'POST' && !url.includes('/cobrar') && !url.includes('/saldo-inicial') && !url.includes('/incobrable')) {
+                    const newCli = {
+                        id: 'temp_' + Date.now(),
+                        nombre: parsedBody.nombre || 'Nuevo Cliente (Offline)',
+                        techo_deuda: parseFloat(parsedBody.techo_deuda || 0),
+                        scoring: parseFloat(parsedBody.scoring || 5),
+                        telefono: parsedBody.telefono || '',
+                        cuit: parsedBody.cuit || '',
+                        direccion: parsedBody.direccion || '',
+                        email: parsedBody.email || '',
+                        saldo_inicial: parseFloat(parsedBody.saldo_inicial || 0),
+                        saldo_actual: parseFloat(parsedBody.saldo_inicial || 0),
+                        remitos: [],
+                        pagos: []
+                    };
+                    data.clientes = data.clientes || [];
+                    data.clientes.push(newCli);
+                }
+                
+                // 2. Crear Remito
+                if (url.includes('/api/remitos') && method === 'POST' && !url.includes('/reset-pago')) {
+                    const clientVal = parsedBody.cliente;
+                    const c = data.clientes.find(cli => cli.nombre === clientVal || String(cli.id) === String(clientVal));
+                    const precio = parseFloat(parsedBody.precio_por_kg || 0);
+                    const kg = parseFloat(parsedBody.kg || 0);
+                    const total = precio * kg;
+                    
+                    const newRemito = {
+                        id: 'temp_' + Date.now(),
+                        cliente: c ? c.nombre : clientVal,
+                        tipo_corte: parsedBody.tipo_corte || '',
+                        cantidad: parseInt(parsedBody.cantidad || 1, 10),
+                        kg: kg,
+                        precio_por_kg: precio,
+                        precio_venta_total: total,
+                        pagado: 0,
+                        monto_pagado: 0,
+                        fecha: new Date().toISOString().split('T')[0]
+                    };
+                    
+                    if (c) {
+                        c.remitos = c.remitos || [];
+                        c.remitos.push(newRemito);
+                        c.saldo_actual = (c.saldo_actual || 0) + total;
+                    }
+                }
+                
+                // 3. Cobro a cliente
+                if (url.includes('/api/clientes/') && url.includes('/cobrar') && method === 'POST') {
+                    const match = url.match(/\/api\/clientes\/([^\/]+)\/cobrar/);
+                    if (match) {
+                        const clientId = match[1];
+                        const c = data.clientes.find(cli => String(cli.id) === String(clientId));
+                        const monto = parseFloat(parsedBody.monto_pagado || 0);
+                        if (c) {
+                            c.saldo_actual = (c.saldo_actual || 0) - monto;
+                            c.pagos = c.pagos || [];
+                            c.pagos.push({
+                                id: 'temp_' + Date.now(),
+                                monto: monto,
+                                fecha: new Date().toISOString().split('T')[0],
+                                tipo: 'COBRO'
+                            });
+                        }
+                    }
+                }
+                
+                // 4. Cobro a Remito
+                if (url.includes('/api/remitos/') && url.includes('/cobrar') && method === 'POST') {
+                    const match = url.match(/\/api\/remitos\/([^\/]+)\/cobrar/);
+                    if (match) {
+                        const remitoId = match[1];
+                        const monto = parseFloat(parsedBody.monto_pagado || 0);
+                        for (const c of (data.clientes || [])) {
+                            const r = (c.remitos || []).find(rem => String(rem.id) === String(remitoId));
+                            if (r) {
+                                r.monto_pagado = (r.monto_pagado || 0) + monto;
+                                if (r.monto_pagado >= r.precio_venta_total - 0.01) {
+                                    r.pagado = 1;
+                                }
+                                c.saldo_actual = (c.saldo_actual || 0) - monto;
+                                c.pagos = c.pagos || [];
+                                c.pagos.push({
+                                    id: 'temp_' + Date.now(),
+                                    monto: monto,
+                                    fecha: new Date().toISOString().split('T')[0],
+                                    tipo: 'COBRO'
+                                });
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // 5. Eliminar Remito
+                if (url.includes('/api/remitos/') && method === 'DELETE') {
+                    const match = url.match(/\/api\/remitos\/([^\/]+)/);
+                    if (match) {
+                        const remitoId = match[1];
+                        for (const c of (data.clientes || [])) {
+                            const rIndex = (c.remitos || []).findIndex(rem => String(rem.id) === String(remitoId));
+                            if (rIndex !== -1) {
+                                const r = c.remitos[rIndex];
+                                c.saldo_actual = (c.saldo_actual || 0) - (r.precio_venta_total - (r.monto_pagado || 0));
+                                c.remitos.splice(rIndex, 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // 6. Eliminar Pago
+                if (url.includes('/api/pagos/') && method === 'DELETE') {
+                    const match = url.match(/\/api\/pagos\/([^\/]+)/);
+                    if (match) {
+                        const pagoId = match[1];
+                        for (const c of (data.clientes || [])) {
+                            const pIndex = (c.pagos || []).findIndex(p => String(p.id) === String(pagoId));
+                            if (pIndex !== -1) {
+                                const p = c.pagos[pIndex];
+                                c.saldo_actual = (c.saldo_actual || 0) + p.monto;
+                                c.pagos.splice(pIndex, 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // 7. Eliminar Cliente
+                if (url.includes('/api/clientes/') && method === 'DELETE') {
+                    const match = url.match(/\/api\/clientes\/([^\/]+)/);
+                    if (match) {
+                        const clientId = match[1];
+                        const cIndex = (data.clientes || []).findIndex(cli => String(cli.id) === String(clientId));
+                        if (cIndex !== -1) {
+                            data.clientes.splice(cIndex, 1);
+                        }
+                    }
+                }
+
+                db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
+                renderAll();
+            } catch (err) {
+                console.error("Error al aplicar cambio optimista:", err);
+            }
         }
 
         function plazoTexto(e) {
@@ -1283,6 +1525,40 @@ const $ = id => document.getElementById(id);
             } else {
                 remitosHtml = `<div style="color:#6b7280;text-align:center;padding:30px;font-size:0.9rem;background:#f9fafb;border-radius:12px;">No se encontraron facturas/remitos para este filtro.</div>`;
             }
+
+            // SECCIÓN PAGOS
+            let pagosHtml = '';
+            const pagos = c.pagos || [];
+            if (pagos.length > 0) {
+                pagosHtml = `
+                <div style="background:#ffffff; border-radius:16px; border:1px solid #e5e7eb; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-top:20px;">
+                    <div style="padding:16px 20px; border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+                        <h3 style="margin:0; font-size:14px; color:#111827;">Historial de Pagos Globales</h3>
+                    </div>
+                    <table class="data-table" style="font-size:0.85rem; width:100%; min-width: 600px; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background:var(--bg);position:sticky;top:0;z-index:10;">
+                                <th style="text-align:left;padding:8px;">ID Pago</th>
+                                <th style="text-align:left;padding:8px;">Fecha</th>
+                                <th style="text-align:right;padding:8px;">Monto</th>
+                                <th style="text-align:center;padding:8px;">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${pagos.map(p => {
+                                return `<tr style="border-bottom:1px solid #e5e7eb;">
+                                    <td style="padding:8px;font-weight:600;color:#111827;">#${p.id}</td>
+                                    <td style="padding:8px;color:#6b7280;">${p.fecha}</td>
+                                    <td style="text-align:right;padding:8px;color:#10b981;font-weight:bold;">$${fmt(p.monto)}</td>
+                                    <td style="text-align:center;padding:8px;">
+                                        <button class="btn btn-danger btn-sm" onclick="eliminarPagoCliente(${p.id})" style="padding:4px 8px; font-size:10px; font-weight:bold; border-radius:6px; cursor:pointer;">❌ Eliminar Pago</button>
+                                    </td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+            }
             
             const btnStyle = (filter) => currentClientFilter === filter 
                 ? 'background:var(--brand); color:white; border-color:var(--brand); padding:6px 12px; border-radius:20px; font-size:11px; font-weight:bold; cursor:pointer; border:1px solid transparent;'
@@ -1674,7 +1950,7 @@ const $ = id => document.getElementById(id);
             if (name === 'pago-central') renderPagosCentral();
             if (name === 'auditoria') renderAuditoria();
             if (name === 'registro') volverMenuRegistro();
-            $('sidebar').classList.remove('open');
+            setSidebarOpen(false);
         }
 
         document.querySelectorAll('.nav-item').forEach(btn => {
@@ -1707,14 +1983,26 @@ const $ = id => document.getElementById(id);
             toast('Panel actualizado');
         });
 
-        $('menuToggle').addEventListener('click', () => $('sidebar').classList.toggle('open'));
-        if($('sidebarCloseMobile')) $('sidebarCloseMobile').addEventListener('click', () => $('sidebar').classList.remove('open'));
+        function setSidebarOpen(open) {
+            const sidebar = $('sidebar');
+            const backdrop = $('sidebarBackdrop');
+            if (sidebar) sidebar.classList.toggle('open', open);
+            if (backdrop) {
+                backdrop.classList.toggle('active', open);
+                backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+            }
+            document.body.classList.toggle('sidebar-open', open);
+        }
+
+        $('menuToggle').addEventListener('click', () => setSidebarOpen(!$('sidebar').classList.contains('open')));
+        if ($('sidebarCloseMobile')) $('sidebarCloseMobile').addEventListener('click', () => setSidebarOpen(false));
+        $('sidebarBackdrop')?.addEventListener('click', () => setSidebarOpen(false));
         document.addEventListener('click', ev => {
             const sidebar = $('sidebar');
             const toggle = $('menuToggle');
             if (sidebar && toggle && sidebar.classList.contains('open')) {
                 if (!sidebar.contains(ev.target) && !toggle.contains(ev.target)) {
-                    sidebar.classList.remove('open');
+                    setSidebarOpen(false);
                 }
             }
         });
@@ -2222,18 +2510,70 @@ const $ = id => document.getElementById(id);
             }
         };
 
+        window.promptMasterPasswordAsync = function(text) {
+            return new Promise(resolve => {
+                const textEl = document.getElementById('masterPasswordText');
+                const inpEl = document.getElementById('inputMasterPassword');
+                const modalEl = document.getElementById('modalMasterPassword');
+                const btnConfirm = document.getElementById('btnConfirmMasterPassword');
+                
+                textEl.textContent = text;
+                inpEl.value = '';
+                modalEl.classList.add('active');
+                inpEl.focus();
+                
+                const cleanup = () => {
+                    const newBtn = btnConfirm.cloneNode(true);
+                    btnConfirm.replaceWith(newBtn);
+                    modalEl.classList.remove('active');
+                };
+                
+                document.getElementById('btnConfirmMasterPassword').addEventListener('click', () => {
+                    resolve(document.getElementById('inputMasterPassword').value);
+                    cleanup();
+                });
+                
+                modalEl.querySelector('.modal-close').addEventListener('click', () => {
+                    resolve(null);
+                    cleanup();
+                });
+                
+                modalEl.querySelector('.btn-ghost').addEventListener('click', () => {
+                    resolve(null);
+                    cleanup();
+                });
+            });
+        };
+
         window.eliminarCliente = async function(clientId) {
-            if (!confirm("⚠️ ¿ESTÁ SEGURO DE ELIMINAR ESTE CLIENTE?\nSe borrarán todas sus facturas/remitos y se devolverán los kilos al stock.")) return;
-            const pass = prompt("Ingrese la contraseña maestra:");
-            if (pass === null) return;
+            const pass = await window.promptMasterPasswordAsync("⚠️ Se borrarán permanentemente este cliente, TODAS sus facturas/remitos (se devolverán los kilos al stock) y TODOS sus pagos.");
+            if (!pass) return;
             try {
                 const res = await api('/api/clientes/' + clientId, {
                     method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password: pass })
                 });
-                toast(res.message || "Cliente eliminado");
+                toast(res.message || "Cliente eliminado permanentemente");
                 await loadAll();
                 switchView('clientes');
+            } catch(e) {
+                toast(e.message, true);
+            }
+        };
+
+        window.eliminarPagoCliente = async function(pagoId) {
+            const pass = await window.promptMasterPasswordAsync("⚠️ Se eliminará este pago. La deuda de las facturas cobradas con este pago se restablecerá.");
+            if (!pass) return;
+            try {
+                const res = await api('/api/pagos/' + pagoId, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pass })
+                });
+                toast(res.message || "Pago eliminado y deuda restablecida");
+                await loadAll();
+                if (selectedClienteId) await openClientDrawer(selectedClienteId);
             } catch(e) {
                 toast(e.message, true);
             }
@@ -2260,15 +2600,15 @@ const $ = id => document.getElementById(id);
         };
 
         window.eliminarFactura = async function(remitoId) {
-            if (!confirm("⚠️ ¿Está seguro de eliminar esta factura?\nSe descontará de la deuda del cliente y los kilos volverán a estar disponibles en compras_bulk.")) return;
-            const pass = prompt("Ingrese la contraseña maestra:");
-            if (pass === null) return;
+            const pass = await window.promptMasterPasswordAsync("⚠️ Se eliminará esta factura permanentemente. Los kilos volverán a estar disponibles en el stock.");
+            if (!pass) return;
             try {
                 const res = await api('/api/remitos/' + remitoId, {
                     method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password: pass })
                 });
-                toast(res.message || "Factura eliminada");
+                toast(res.message || "Factura eliminada. Stock repuesto.");
                 cerrarModalFacturaOriginal();
                 await loadAll();
                 if (selectedClienteId) {
@@ -2655,9 +2995,12 @@ const $ = id => document.getElementById(id);
 
         // Connection status monitoring
         function updateConnectionStatus() {
+            const online = navigator.onLine;
             const pill = $('statusPill');
+            const mobilePill = $('mobileConnPill');
+            const mobileText = $('mobileConnText');
             if (pill) {
-                if (navigator.onLine) {
+                if (online) {
                     pill.innerHTML = '<span class="pulse"></span> En línea';
                     pill.style.background = 'var(--success-muted)';
                     pill.style.color = 'var(--success)';
@@ -2670,9 +3013,20 @@ const $ = id => document.getElementById(id);
                     toast('Sin conexión: mostrando datos del panel local', true);
                 }
             }
+            if (mobilePill) {
+                mobilePill.classList.toggle('online', online);
+                mobilePill.classList.toggle('offline', !online);
+                if (mobileText) mobileText.textContent = online ? 'En línea' : 'Sin red';
+            }
         }
-        window.addEventListener('online', updateConnectionStatus);
+        window.addEventListener('online', () => {
+            updateConnectionStatus();
+            sincronizarSolicitudesPendientes();
+        });
         window.addEventListener('offline', updateConnectionStatus);
+        
+        document.getElementById('offlineBadge')?.addEventListener('click', sincronizarSolicitudesPendientes);
+        actualizarUIOffline();
         window.abrirNuevaVenta = function() {
             $('formRemito').reset();
             switchView('ventas-express');
@@ -2716,12 +3070,61 @@ const $ = id => document.getElementById(id);
             const sect = $('installSection');
             if (btn) btn.style.display = 'none';
             if (sect) sect.style.display = 'none';
+            localStorage.setItem('pwa_ios_hint_dismissed', '1');
+            $('iosInstallBanner')?.classList.add('field-hidden');
         });
 
-        // Register Service Worker
-        if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("/sw.js").catch(e => console.warn("PWA SW err:", e));
+        function registerServiceWorker() {
+            if (!('serviceWorker' in navigator)) return;
+            navigator.serviceWorker.register('/sw.js').then((reg) => {
+                reg.addEventListener('updatefound', () => {
+                    const nw = reg.installing;
+                    nw?.addEventListener('statechange', () => {
+                        if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                            showPwaUpdateBanner(reg);
+                        }
+                    });
+                });
+            }).catch(e => console.warn('PWA SW err:', e));
         }
+
+        function showPwaUpdateBanner(reg) {
+            if (document.getElementById('pwaUpdateBanner')) return;
+            const el = document.createElement('div');
+            el.id = 'pwaUpdateBanner';
+            el.className = 'pwa-update-toast';
+            el.innerHTML = '<span>Nueva versión disponible</span><button type="button">Actualizar</button>';
+            el.querySelector('button')?.addEventListener('click', () => {
+                reg.waiting?.postMessage('SKIP_WAITING');
+                window.location.reload();
+            });
+            document.body.appendChild(el);
+        }
+
+        function initIosInstallHint() {
+            const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+            const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+            const dismissed = localStorage.getItem('pwa_ios_hint_dismissed');
+            const banner = $('iosInstallBanner');
+            if (isIos && !standalone && !dismissed && banner) {
+                banner.classList.remove('field-hidden');
+            }
+            $('iosInstallDismiss')?.addEventListener('click', () => {
+                localStorage.setItem('pwa_ios_hint_dismissed', '1');
+                banner?.classList.add('field-hidden');
+            });
+        }
+
+        function applyPwaDeepLink() {
+            const params = new URLSearchParams(window.location.search);
+            const view = params.get('view');
+            if (view && titles[view]) {
+                switchView(view);
+            }
+        }
+
+        registerServiceWorker();
+        initIosInstallHint();
 
         async function updateWeather() {
             function fetchW(lat, lon) {
@@ -2750,5 +3153,9 @@ const $ = id => document.getElementById(id);
         setInterval(updateWeather, 1800000); // 30 mins
 
         loadAll();
-        switchView('home');
+        if (new URLSearchParams(window.location.search).get('view')) {
+            applyPwaDeepLink();
+        } else {
+            switchView('home');
+        }
         setInterval(loadAll, 60000);

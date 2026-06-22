@@ -485,11 +485,12 @@ def api_clientes_endpoint():
         email = d.get("email")
         if email is not None:
             email = str(email).strip() or None
+        saldo_inicial = _f(d.get("saldo_inicial") or 0.0, "saldo_inicial")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
     try:
-        cid = registrar_cliente(nombre, techo_deuda, scoring, telefono, cuit, direccion, email)
+        cid = registrar_cliente(nombre, techo_deuda, scoring, telefono, cuit, direccion, email, saldo_inicial)
         return jsonify({
             "id": cid,
             "nombre": nombre,
@@ -507,6 +508,16 @@ def api_clientes_endpoint():
         if "unique constraint" in err_msg or "already exists" in err_msg or "constraint failed" in err_msg:
             return jsonify({"error": "¡Epa! Ese cliente ya está en la lista. ¡Probá con otro nombre!"}), 400
         return jsonify({"error": f"Error al registrar cliente: {str(e)}"}), 500
+
+# ------------------------------------------------------------------------------
+# 🗑️ RUTAS DE ELIMINACIÓN CON CONTRASEÑA MAESTRA
+# ------------------------------------------------------------------------------
+def _check_master_password(req):
+    d = req.get_json(silent=True) or {}
+    pwd = d.get("password") or req.headers.get("X-Master-Password")
+    if str(pwd) != "2094":
+        raise ValueError("Contraseña maestra incorrecta")
+
 
 @api_bp.route("/clientes/<int:cid>", methods=["GET"])
 def api_cliente_detalle_endpoint(cid: int):
@@ -643,6 +654,24 @@ def api_eliminar_remito_endpoint(rid: int):
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Error al eliminar remito: {str(e)}"}), 500
+
+
+
+@api_bp.route("/pagos/<int:pago_id>", methods=["DELETE"])
+def api_eliminar_pago_endpoint(pago_id: int):
+    try:
+        d = request.get_json(silent=True) or {}
+        password = d.get("password") or request.args.get("password")
+        if password != "2094":
+            return jsonify({"error": "Contraseña maestra incorrecta"}), 403
+            
+        from app.services.clientes import eliminar_pago_cliente
+        eliminar_pago_cliente(pago_id)
+        return jsonify({"ok": True, "message": "Pago eliminado con éxito (deuda restituida)"})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al eliminar pago: {str(e)}"}), 500
 
 
 @api_bp.route("/remitos/<int:rid>/reset-pago", methods=["POST"])

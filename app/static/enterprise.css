@@ -46,6 +46,13 @@
     --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --mono: 'SF Mono', 'Consolas', 'Liberation Mono', monospace;
 
+    /* PWA safe areas (notch / home indicator) */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --mobile-bar-h: 0px;
+
     /* legacy aliases */
     --bg: var(--bg-canvas);
     --surface: var(--bg-surface);
@@ -765,8 +772,8 @@ table:not(.data-table):not(.xls-table) tr:hover td { background: var(--bg-hover)
     .status-pill, .breadcrumb, .topbar-sub, .clock { display: none !important; }
     .topbar { padding: 0 12px; height: 54px; }
     .topbar-title { font-size: 15px !important; }
-    .content { padding: 12px 12px 120px 12px; }
-    body { font-size: 11px; }
+    .content { padding: 12px 12px calc(120px + var(--safe-bottom)) 12px; }
+    body { font-size: 13px; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; }
     .kpi-value { font-size: 18px; }
     table:not(.data-table):not(.xls-table) th, .home-table th { padding: 6px 8px !important; font-size: 9px !important; }
     table:not(.data-table):not(.xls-table) td, .home-table td { padding: 8px 10px !important; font-size: 11px !important; }
@@ -1047,5 +1054,191 @@ table:not(.data-table):not(.xls-table) tr:hover td { background: var(--bg-hover)
     .client-kpi-grid {
         grid-template-columns: 1fr !important;
     }
+    
+    /* Make tables horizontally scrollable */
+    .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-bottom: 1rem;
+        border-radius: 8px;
+        box-shadow: inset 0 0 5px rgba(0,0,0,0.02);
+    }
+    
+    /* Increase touch targets for mobile */
+    .btn, button {
+        min-height: 44px; /* Apple Human Interface Guidelines minimum touch target */
+        padding: 10px 16px !important;
+        font-size: 14px !important;
+    }
+    
+    input, select, textarea {
+        min-height: 44px;
+        font-size: 16px !important; /* Prevents iOS auto-zoom */
+    }
+    
+    /* Modals need to fit better on small screens */
+    .modal-content {
+        width: 95% !important;
+        margin: 10px auto;
+        border-radius: 12px;
+    }
+    
+    .modal-footer {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .modal-footer .btn {
+        width: 100%;
+        margin: 0 !important;
+    }
+    
+    /* Better spacing on the main container */
+    .main-content {
+        padding: 10px !important;
+    }
+}
+
+/* ─── PWA & Smartphone ───────────────────────────────────── */
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
+}
+
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 199;
+    opacity: 0;
+    transition: opacity 0.25s var(--ease);
+    -webkit-tap-highlight-color: transparent;
+}
+.sidebar-backdrop.active {
+    display: block;
+    opacity: 1;
+}
+
+.ios-install-banner {
+    position: fixed;
+    left: max(12px, var(--safe-left));
+    right: max(12px, var(--safe-right));
+    bottom: calc(12px + var(--safe-bottom));
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: #0f172a;
+    color: #f8fafc;
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.35;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.ios-install-banner button {
+    flex-shrink: 0;
+    min-width: 36px;
+    min-height: 36px;
+    border: none;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+}
+.ios-install-banner p { margin: 0; flex: 1; }
+
+.mobile-conn-pill {
+    display: none;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 0 8px;
+    height: 32px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.mobile-conn-pill .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+}
+.mobile-conn-pill.online {
+    background: var(--success-muted);
+    color: var(--success);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.mobile-conn-pill.offline {
+    background: var(--danger-muted);
+    color: var(--danger);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.pwa-update-toast {
+    position: fixed;
+    top: calc(12px + var(--safe-top));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10002;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #1e293b;
+    color: #f8fafc;
+    border-radius: 12px;
+    font-size: 13px;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    max-width: min(420px, calc(100vw - 24px));
+}
+.pwa-update-toast button {
+    border: none;
+    background: var(--brand);
+    color: #fff;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    min-height: 36px;
+}
+
+@media (max-width: 768px) {
+    .mobile-conn-pill { display: inline-flex; }
+    .topbar { padding-top: var(--safe-top); height: calc(54px + var(--safe-top)); }
+    .nav-item { min-height: 48px; }
+    .sidebar { padding-top: var(--safe-top); }
+    .toast {
+        bottom: calc(80px + var(--safe-bottom)) !important;
+        left: max(12px, var(--safe-left)) !important;
+        right: max(12px, var(--safe-right)) !important;
+        max-width: none !important;
+    }
+    .terminal-footer {
+        bottom: calc(15px + var(--safe-bottom)) !important;
+    }
+    .modal-overlay { padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
+}
+
+@media (display-mode: standalone) {
+    body { user-select: none; -webkit-user-select: none; }
+    input, textarea, select, [contenteditable] { user-select: text; -webkit-user-select: text; }
+}
+
+@media (max-width: 480px) {
+    .cards-grid { grid-template-columns: 1fr; gap: 12px; }
+    .debt-card { padding: 16px; }
+    .topbar-greeting-block { display: none !important; }
 }
 

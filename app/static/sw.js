@@ -1,23 +1,117 @@
-const CACHE_NAME = 'crm-frigorifico-static-v5';
-const API_CACHE_NAME = 'crm-frigorifico-api-v5';
+/* Master Total PWA — network-first shell, offline fallback */
+const CACHE_VERSION = 'crm-frigorifico-v7';
+const SHELL_ASSETS = [
+  '/',
+  '/login',
+  '/pos',
+  '/manifest.json',
+  '/static/enterprise.css',
+  '/static/js/crm-safe.js',
+  '/static/js/app.js',
+  '/static/vendor/dexie.min.js',
+  '/static/js/pos-offline.js',
+  '/static/icons/icon-180.png',
+  '/static/icons/icon-192.png',
+  '/static/icons/icon-512.png',
+];
+
+const API_CACHE_PREFIXES = [
+  '/api/dashboard',
+  '/api/clientes',
+  '/api/bulk',
+  '/api/historial-pagos',
+  '/api/auditoria',
+  '/api/remitos',
+];
+
+function cacheKey(request) {
+  const url = new URL(request.url);
+  if (url.pathname.startsWith('/static/')) {
+    return url.origin + url.pathname;
+  }
+  return request.url;
+}
+
+function isApiCacheable(pathname) {
+  return API_CACHE_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_VERSION)
+      .then((cache) => cache.addAll(SHELL_ASSETS))
+      .then(() => self.skipWaiting())
+      .catch((err) => console.warn('SW precache partial:', err))
+  );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((names) => {
-      return Promise.all(names.map(name => caches.delete(name)));
-    }).then(() => {
-      return self.clients.claim();
-    })
+    caches.keys()
+      .then((names) => Promise.all(
+        names.filter((n) => n !== CACHE_VERSION).map((n) => caches.delete(n))
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
-  // Siempre ir a la red primero para asegurar que vemos los cambios locales de inmediato
-  event.respondWith(fetch(event.request).catch(() => {
-      return caches.match(event.request);
-  }));
+  if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (url.pathname.startsWith('/api/') && !isApiCacheable(url.pathname)) {
+    return;
+  }
+
+  const isNavigate = event.request.mode === 'navigate';
+  const isStatic = url.pathname.startsWith('/static/');
+
+  if (isStatic) {
+    event.respondWith(staleWhileRevalidate(event.request));
+    return;
+  }
+
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_VERSION).then((cache) => {
+            cache.put(cacheKey(event.request), clone);
+          });
+        }
+        return response;
+      })
+      .catch(async () => {
+        const cached = await caches.match(cacheKey(event.request));
+        if (cached) return cached;
+        if (isNavigate) {
+          const shell = await caches.match('/');
+          if (shell) return shell;
+        }
+        return new Response(
+          JSON.stringify({ error: 'Sin conexión', offline: true }),
+          { status: 503, headers: { 'Content-Type': 'application/json' } }
+        );
+      })
+  );
+});
+
+async function staleWhileRevalidate(request) {
+  const key = cacheKey(request);
+  const cache = await caches.open(CACHE_VERSION);
+  const cached = await cache.match(key);
+
+  const networkPromise = fetch(request).then((response) => {
+    if (response.ok) cache.put(key, response.clone());
+    return response;
+  }).catch(() => null);
+
+  return cached || networkPromise || new Response('', { status: 504 });
+}
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });

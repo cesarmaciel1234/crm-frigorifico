@@ -12,7 +12,8 @@
     <style>
         :root { --brand: #2563eb; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --muted: #94a3b8; --ok: #10b981; --warn: #f59e0b; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 16px; padding-bottom: 80px; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; min-height: 100dvh; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(80px, calc(16px + env(safe-area-inset-bottom))) max(16px, env(safe-area-inset-left)); -webkit-tap-highlight-color: transparent; }
+        input, select, button { min-height: 48px; font-size: 16px; }
         .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
         .badge { font-size: 0.75rem; padding: 4px 10px; border-radius: 99px; font-weight: 600; }
         .badge.on { background: rgba(16,185,129,.2); color: var(--ok); }

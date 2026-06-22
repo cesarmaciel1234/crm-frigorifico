@@ -110,6 +110,23 @@ CREATE TABLE IF NOT EXISTS auditoria_operaciones (
     fecha TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS pagos_clientes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cliente_id INTEGER NOT NULL,
+    monto REAL NOT NULL CHECK(monto > 0),
+    fecha TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+);
+
+CREATE TABLE IF NOT EXISTS aplicacion_pagos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pago_id INTEGER NOT NULL,
+    remito_id INTEGER NOT NULL,
+    monto_aplicado REAL NOT NULL CHECK(monto_aplicado > 0),
+    FOREIGN KEY (pago_id) REFERENCES pagos_clientes(id) ON DELETE CASCADE,
+    FOREIGN KEY (remito_id) REFERENCES remitos_carga(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_op_alias ON operaciones_financieras(alias);
 CREATE INDEX IF NOT EXISTS idx_op_cfr ON operaciones_financieras(recibido, pagar, meses);
 CREATE INDEX IF NOT EXISTS idx_remitos_fecha ON remitos_carga(fecha);

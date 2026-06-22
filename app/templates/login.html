@@ -2,17 +2,34 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Acceso — Master Total</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Master Total">
+    <link rel="apple-touch-icon" href="/static/icons/icon-180.png">
+    <link rel="icon" type="image/png" href="/static/icons/icon-192.png">
     <link rel="stylesheet" href="/static/enterprise.css">
     <style>
-        body { display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: var(--bg-base, #0f172a); }
-        .login-card { width: min(400px, 92vw); padding: 32px; background: var(--bg-surface, #1e293b); border-radius: 16px; border: 1px solid var(--border-subtle, rgba(255,255,255,.08)); }
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            min-height: 100dvh;
+            margin: 0;
+            padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+            background: var(--bg-base, #0f172a);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .login-card { width: min(400px, 100%); padding: 32px; background: var(--bg-surface, #1e293b); border-radius: 16px; border: 1px solid var(--border-subtle, rgba(255,255,255,.08)); }
         h1 { font-size: 1.25rem; margin: 0 0 8px; color: var(--text-primary, #f8fafc); }
         p { color: var(--text-muted, #94a3b8); font-size: 0.875rem; margin: 0 0 24px; }
         label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; }
-        input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: #0f172a; color: #f8fafc; font-size: 1rem; box-sizing: border-box; }
-        button { width: 100%; margin-top: 20px; padding: 14px; border: none; border-radius: 10px; background: #2563eb; color: #fff; font-weight: 600; font-size: 1rem; cursor: pointer; }
+        input { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: #0f172a; color: #f8fafc; font-size: 16px; box-sizing: border-box; min-height: 48px; }
+        button { width: 100%; margin-top: 20px; padding: 14px; border: none; border-radius: 10px; background: #2563eb; color: #fff; font-weight: 600; font-size: 1rem; cursor: pointer; min-height: 48px; }
         .error { color: #f87171; font-size: 0.85rem; margin-top: 12px; }
     </style>
 </head>
@@ -29,5 +46,10 @@
             <button type="submit">Entrar</button>
         </form>
     </div>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+        }
+    </script>
 </body>
 </html>

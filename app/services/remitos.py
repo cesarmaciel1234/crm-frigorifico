@@ -199,6 +199,11 @@ def get_remito_detalle(remito_id: int) -> dict:
 
 
 def eliminar_remito_logic(conn, remito_id: int):
+    # 0. Verificar que no tenga pagos aplicados
+    row = conn.execute("SELECT monto_pagado FROM remitos_carga WHERE id = ?", (remito_id,)).fetchone()
+    if row and float(row["monto_pagado"] or 0) > 0:
+        raise ValueError("Este remito tiene pagos aplicados. Por favor, elimine el pago primero.")
+
     # 1. Obtener las fracciones descontadas por FIFO para este remito
     fracs = conn.execute(
         "SELECT lote_id, kg_descontados FROM remitos_fracciones WHERE remito_id = ?",

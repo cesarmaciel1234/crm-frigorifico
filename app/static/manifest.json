@@ -1,14 +1,19 @@
 {
   "id": "/",
-  "name": "CRM Frigorífico — Master Total",
-  "short_name": "CRM Frigo",
-  "description": "Panel financiero y comercial para distribuidoras de carne.",
-  "start_url": "/",
+  "name": "Master Total — CRM Frigorífico",
+  "short_name": "Master Total",
+  "description": "Panel financiero y comercial para distribuidoras de carne. Cobranzas, ventas y tesorería.",
+  "lang": "es-AR",
+  "dir": "ltr",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "background_color": "#0f172a",
   "theme_color": "#2563eb",
   "orientation": "any",
+  "categories": ["business", "finance", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/static/icons/icon-192.png",
@@ -17,12 +22,6 @@
       "purpose": "any"
     },
     {
-      "src": "/static/icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
       "src": "/static/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
@@ -33,6 +32,29 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ventas Express",
+      "short_name": "Ventas",
+      "description": "Registrar remito rápido",
+      "url": "/?view=ventas-express&source=pwa",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Cobranzas",
+      "short_name": "Cobrar",
+      "description": "Central de cobranzas",
+      "url": "/?view=cobranzas&source=pwa",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "POS Mostrador",
+      "short_name": "POS",
+      "description": "Ventas de mostrador offline",
+      "url": "/pos?source=pwa",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

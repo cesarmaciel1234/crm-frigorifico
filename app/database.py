@@ -173,6 +173,21 @@ def _run_migrations(conn):
         _migrate_pagar_constraint(conn)
     conn.executescript(
         """
+        CREATE TABLE IF NOT EXISTS pagos_clientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            monto REAL NOT NULL CHECK(monto > 0),
+            fecha TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+        );
+        CREATE TABLE IF NOT EXISTS aplicacion_pagos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pago_id INTEGER NOT NULL,
+            remito_id INTEGER NOT NULL,
+            monto_aplicado REAL NOT NULL CHECK(monto_aplicado > 0),
+            FOREIGN KEY (pago_id) REFERENCES pagos_clientes(id) ON DELETE CASCADE,
+            FOREIGN KEY (remito_id) REFERENCES remitos_carga(id) ON DELETE CASCADE
+        );
         CREATE TABLE IF NOT EXISTS pagos_cuotas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             operacion_id INTEGER NOT NULL,
