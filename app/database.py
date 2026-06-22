@@ -15,7 +15,7 @@ def is_postgres():
 def table_exists(conn, name: str) -> bool:
     if type(conn).__name__ == "PostgresConnWrapper":
         row = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = %s",
+            "SELECT 1 FROM information_schema.tables WHERE table_name = %s AND table_schema = current_schema()",
             (name,),
         ).fetchone()
     else:
@@ -42,10 +42,10 @@ class PostgresCursorWrapper:
             if match:
                 table = match.group(1).strip("'\"")
                 # PRAGMA format: (cid, name, type, notnull, dflt_value, pk)
-                query = f"SELECT ordinal_position as cid, column_name as name, data_type as type FROM information_schema.columns WHERE table_name = '{table}'"
+                query = f"SELECT ordinal_position as cid, column_name as name, data_type as type FROM information_schema.columns WHERE table_name = '{table}' AND table_schema = current_schema()"
         elif "sqlite_master" in query.lower():
             if "type='table' AND name=" in query:
-                query = "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=%s"
+                query = "SELECT 1 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=%s"
             else:
                 # Mock sqlite_master check for _migrate_pagar_constraint to return safely
                 query = "SELECT '' as sql FROM information_schema.tables LIMIT 1"
@@ -137,7 +137,42 @@ def get_db(empresa_id=None):
         conn = psycopg2.connect(Config.DATABASE_URL)
         conn.cursor_factory = psycopg2.extras.DictCursor
         try:
-            yield PostgresConnWrapper(conn)
+            wrapper = PostgresConnWrapper(conn)
+            
+            # Resolve company ID if not explicitly specified
+            if empresa_id is None:
+                if has_request_context():
+                    empresa_id = session.get("empresa_id")
+                    if not empresa_id:
+                        hdr = request.headers.get("X-Empresa-ID") or request.headers.get("X-Company-ID")
+                        if hdr and hdr.isdigit():
+                            empresa_id = int(hdr)
+                        else:
+                            arg = request.args.get("empresa_id") or request.args.get("company_id")
+                            if arg and arg.isdigit():
+                                empresa_id = int(arg)
+                if empresa_id is None:
+                    empresa_id = 1
+                    
+            if empresa_id > 0:
+                schema_name = f"empresa_{empresa_id}"
+                cur = conn.cursor()
+                cur.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name = %s", (schema_name,))
+                schema_exists = cur.fetchone() is not None
+                if not schema_exists:
+                    cur.execute(f"CREATE SCHEMA {schema_name}")
+                    conn.commit()
+                    cur.execute(f"SET search_path TO {schema_name}, public")
+                    # Initialize tables in this new schema
+                    with open(Config.SCHEMA_PATH, encoding="utf-8") as f:
+                        sql = f.read()
+                    wrapper.executescript(sql)
+                    _run_migrations(wrapper)
+                    conn.commit()
+                else:
+                    cur.execute(f"SET search_path TO {schema_name}, public")
+                    
+            yield wrapper
             conn.commit()
         except Exception:
             conn.rollback()
@@ -246,6 +281,20 @@ def init_db():
             );
             """
         )
+        
+        # MIGRATION: Agregar columna empresa_id si no existe en la tabla usuarios del registro central
+        if table_exists(conn, "usuarios"):
+            if is_postgres():
+                cols = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'usuarios' AND table_schema = current_schema()")}
+            else:
+                cols = {row[1] for row in conn.execute("PRAGMA table_info(usuarios)")}
+            if "empresa_id" not in cols:
+                conn.execute("ALTER TABLE usuarios ADD COLUMN empresa_id INTEGER")
+                if is_postgres():
+                    try:
+                        conn.execute("ALTER TABLE usuarios ADD CONSTRAINT fk_usuarios_empresa FOREIGN KEY (empresa_id) REFERENCES empresas(id)")
+                    except Exception:
+                        pass
         
         # Ensure company 1 exists (rumaul)
         c1 = conn.execute("SELECT 1 FROM empresas WHERE id = 1").fetchone()
