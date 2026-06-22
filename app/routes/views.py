@@ -102,19 +102,38 @@ def logout():
 
 @views_bp.route("/auth/register", methods=["POST"])
 def auth_register():
-    from app.services.users import create_user, authenticate_user
+    from app.services.users import create_user, authenticate_user, get_db
     from app.security import set_session_user
+    import re
     
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or request.form.get("username") or "").strip()
     password = data.get("password") or request.form.get("password") or ""
     nombre = (data.get("nombre") or request.form.get("nombre") or "").strip()
+    empresa_nombre = (data.get("empresa_nombre") or request.form.get("empresa_nombre") or "").strip()
     
-    if not username or not password:
-        return jsonify({"error": "Usuario y contraseña son requeridos"}), 400
+    if not username or not password or not empresa_nombre:
+        return jsonify({"error": "Usuario, contraseña y nombre de la empresa son requeridos"}), 400
         
     try:
-        create_user(username=username, password=password, role="admin", nombre=nombre)
+        with get_db(empresa_id=0) as conn:
+            # Generate slug
+            slug = re.sub(r'[^a-zA-Z0-9]', '', empresa_nombre.lower())
+            if not slug:
+                slug = "empresa"
+            base_slug = slug
+            counter = 1
+            while conn.execute("SELECT 1 FROM empresas WHERE slug = ?", (slug,)).fetchone():
+                slug = f"{base_slug}{counter}"
+                counter += 1
+                
+            cur_emp = conn.execute(
+                "INSERT INTO empresas (nombre, slug) VALUES (?, ?)",
+                (empresa_nombre, slug)
+            )
+            empresa_id = cur_emp.lastrowid
+            
+        create_user(username=username, password=password, role="admin", nombre=nombre, empresa_id=empresa_id)
         user = authenticate_user(username, password)
         if user:
             set_session_user(user)
@@ -151,7 +170,7 @@ def auth_reset_password():
     if len(new_password) < 8:
         return jsonify({"error": "La contraseña debe tener al menos 8 caracteres"}), 400
         
-    with get_db() as conn:
+    with get_db(empresa_id=0) as conn:
         user = conn.execute("SELECT id FROM usuarios WHERE username = ?", (username,)).fetchone()
         if not user:
             return jsonify({"error": "El usuario no existe"}), 404

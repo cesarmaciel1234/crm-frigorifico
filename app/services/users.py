@@ -21,21 +21,22 @@ def _row_to_user(row) -> dict[str, Any]:
         "nombre": r.get("nombre") or r["username"],
         "role": r["role"],
         "activo": bool(r.get("activo", 1)),
+        "empresa_id": r.get("empresa_id"),
         "created_at": r.get("created_at"),
     }
 
 
 def ensure_default_admin() -> None:
     """Crea usuarios admin y rumaul por defecto si no existen."""
-    with get_db() as conn:
+    with get_db(empresa_id=0) as conn:
         # Check and insert admin
         admin_exists = conn.execute("SELECT 1 FROM usuarios WHERE username = 'admin'").fetchone()
         if not admin_exists:
             pwd = Config.ADMIN_INITIAL_PASSWORD or Config.master_password() or "admin"
             conn.execute(
                 """
-                INSERT INTO usuarios (username, nombre, password_hash, role, activo)
-                VALUES ('admin', 'Administrador', ?, 'admin', 1)
+                INSERT INTO usuarios (username, nombre, password_hash, role, activo, empresa_id)
+                VALUES ('admin', 'Administrador', ?, 'admin', 1, 1)
                 """,
                 (generate_password_hash(pwd),),
             )
@@ -45,8 +46,8 @@ def ensure_default_admin() -> None:
         if not rumaul_exists:
             conn.execute(
                 """
-                INSERT INTO usuarios (username, nombre, password_hash, role, activo)
-                VALUES ('rumaul', 'Rumaul', ?, 'admin', 1)
+                INSERT INTO usuarios (username, nombre, password_hash, role, activo, empresa_id)
+                VALUES ('rumaul', 'Rumaul', ?, 'admin', 1, 1)
                 """,
                 (generate_password_hash("admin"),),
             )
@@ -54,7 +55,7 @@ def ensure_default_admin() -> None:
 
 
 def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
-    with get_db() as conn:
+    with get_db(empresa_id=0) as conn:
         row = conn.execute(
             "SELECT * FROM usuarios WHERE username = ? AND activo = 1",
             (username.strip().lower(),),
@@ -78,7 +79,7 @@ def list_users() -> list[dict[str, Any]]:
     return [_row_to_user(r) for r in rows]
 
 
-def create_user(username: str, password: str, role: str = "operador", nombre: str = "") -> int:
+def create_user(username: str, password: str, role: str = "operador", nombre: str = "", empresa_id: int | None = None) -> int:
     role = (role or "operador").lower()
     if role not in ROLES:
         raise ValueError("Rol inválido")
@@ -87,16 +88,16 @@ def create_user(username: str, password: str, role: str = "operador", nombre: st
         raise ValueError("Usuario demasiado corto")
     if len(password) < 8:
         raise ValueError("La contraseña debe tener al menos 8 caracteres")
-    with get_db() as conn:
+    with get_db(empresa_id=0) as conn:
         exists = conn.execute("SELECT 1 FROM usuarios WHERE username = ?", (username,)).fetchone()
         if exists:
             raise ValueError("El nombre de usuario ya está registrado")
         cur = conn.execute(
             """
-            INSERT INTO usuarios (username, nombre, password_hash, role, activo)
-            VALUES (?, ?, ?, ?, 1)
+            INSERT INTO usuarios (username, nombre, password_hash, role, activo, empresa_id)
+            VALUES (?, ?, ?, ?, 1, ?)
             """,
-            (username, nombre or username, generate_password_hash(password), role),
+            (username, nombre or username, generate_password_hash(password), role, empresa_id),
         )
         return int(cur.lastrowid)
 

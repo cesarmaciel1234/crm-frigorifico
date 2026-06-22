@@ -94,8 +94,45 @@ class PostgresConnWrapper:
     def rollback(self): self.conn.rollback()
     def close(self): self.conn.close()
 
+import os
+from flask import has_request_context, session, request
+
+def get_tenant_db_path(empresa_id=None):
+    if Config.TESTING:
+        return Config.DB_PATH
+        
+    if empresa_id == 0:
+        return Config.DB_PATH
+    
+    if empresa_id is None:
+        if has_request_context():
+            empresa_id = session.get("empresa_id")
+            if not empresa_id:
+                hdr = request.headers.get("X-Empresa-ID") or request.headers.get("X-Company-ID")
+                if hdr and hdr.isdigit():
+                    empresa_id = int(hdr)
+                else:
+                    arg = request.args.get("empresa_id") or request.args.get("company_id")
+                    if arg and arg.isdigit():
+                        empresa_id = int(arg)
+                        
+        if empresa_id is None:
+            empresa_id = 1
+            
+    if empresa_id:
+        base_dir = os.path.dirname(Config.DB_PATH)
+        return os.path.join(base_dir, f"master_total_empresa_{empresa_id}.db")
+        
+    return Config.DB_PATH
+
+def _init_tenant_db(conn):
+    with open(Config.SCHEMA_PATH, encoding="utf-8") as f:
+        sql = f.read()
+    conn.executescript(sql)
+    _run_migrations(conn)
+
 @contextmanager
-def get_db():
+def get_db(empresa_id=None):
     if Config.DATABASE_URL and psycopg2:
         conn = psycopg2.connect(Config.DATABASE_URL)
         conn.cursor_factory = psycopg2.extras.DictCursor
@@ -108,8 +145,19 @@ def get_db():
         finally:
             conn.close()
     else:
-        conn = sqlite3.connect(Config.DB_PATH)
+        db_path = get_tenant_db_path(empresa_id)
+        is_tenant = "master_total_empresa_" in db_path
+        db_exists = os.path.exists(db_path)
+        
+        conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
+        
+        if is_tenant and not db_exists:
+            try:
+                _init_tenant_db(conn)
+            except Exception as e:
+                print(f"Error al inicializar base de datos de empresa: {e}")
+                
         try:
             yield conn
             conn.commit()
@@ -119,20 +167,95 @@ def get_db():
         finally:
             conn.close()
 
-# ------------------------------------------------------------------------------
-# 🏗️ CONSTRUIR LA BÓVEDA (init_db)
-# ¿Qué hace esto? Imagina que el restaurante recién abre y no hay dónde guardar
-# las facturas. Esta función lee el plano de construcción ("schema.sql"), que dice:
-# "Construye una caja para los remitos, una caja para los bancos", y luego usa a 
-# los obreros de la bóveda para armarlas (executescript).
-# Finalmente, revisa si hay alguna caja vieja que necesite actualizarse (_run_migrations).
-# ------------------------------------------------------------------------------
 def init_db():
-    with open(Config.SCHEMA_PATH, encoding="utf-8") as f:
-        sql = f.read()
-    with get_db() as conn:
-        conn.executescript(sql)
-        _run_migrations(conn)
+    # If in test mode, load the full schema directly on Config.DB_PATH
+    if Config.TESTING:
+        with open(Config.SCHEMA_PATH, encoding="utf-8") as f:
+            sql = f.read()
+        with get_db(empresa_id=0) as conn:
+            conn.executescript(sql)
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS empresas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL,
+                    slug TEXT NOT NULL UNIQUE,
+                    cuit TEXT DEFAULT '',
+                    activo INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+                );
+                """
+            )
+            try:
+                conn.execute("ALTER TABLE usuarios ADD COLUMN empresa_id INTEGER")
+            except Exception:
+                pass
+            _run_migrations(conn)
+            
+            # Ensure company 1 exists
+            c1 = conn.execute("SELECT 1 FROM empresas WHERE id = 1").fetchone()
+            if not c1:
+                conn.execute("INSERT INTO empresas (id, nombre, slug) VALUES (1, 'Rumaul', 'rumaul')")
+                
+        from app.services.users import ensure_default_admin
+        ensure_default_admin()
+        return
+
+    base_dir = os.path.dirname(Config.DB_PATH)
+    central_path = Config.DB_PATH
+    tenant_1_path = os.path.join(base_dir, "master_total_empresa_1.db")
+    
+    # 1. MIGRATE LEGACY DB TO TENANT 1
+    if os.path.exists(central_path) and not os.path.exists(tenant_1_path):
+        import shutil
+        try:
+            conn_check = sqlite3.connect(central_path)
+            cur = conn_check.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='clientes'")
+            has_clientes = cur.fetchone() is not None
+            conn_check.close()
+            
+            if has_clientes:
+                shutil.copy(central_path, tenant_1_path)
+                print(f"Migrated legacy database to tenant 1 database: {tenant_1_path}")
+                os.remove(central_path)
+        except Exception as e:
+            print(f"Error during legacy db migration: {e}")
+
+    # 2. INITIALIZE CENTRAL DB
+    with get_db(empresa_id=0) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS empresas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                cuit TEXT DEFAULT '',
+                activo INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now', 'localtime'))
+            );
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                nombre TEXT NOT NULL DEFAULT '',
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'operador',
+                activo INTEGER NOT NULL DEFAULT 1,
+                empresa_id INTEGER,
+                created_at TEXT DEFAULT (datetime('now', 'localtime')),
+                FOREIGN KEY (empresa_id) REFERENCES empresas(id)
+            );
+            """
+        )
+        
+        # Ensure company 1 exists (rumaul)
+        c1 = conn.execute("SELECT 1 FROM empresas WHERE id = 1").fetchone()
+        if not c1:
+            conn.execute(
+                "INSERT INTO empresas (id, nombre, slug, cuit) VALUES (1, 'Rumaul', 'rumaul', '')"
+            )
+            
+    from app.services.users import ensure_default_admin
+    ensure_default_admin()
 
 def _table_exists(conn, name: str) -> bool:
     return table_exists(conn, name)
@@ -382,6 +505,14 @@ def _run_migrations(conn):
                 "ON ventas_mostrador(offline_id) WHERE offline_id IS NOT NULL"
             )
 
+    if _table_exists(conn, "usuarios"):
+        if is_pg:
+            usr_cols = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'usuarios'")}
+        else:
+            usr_cols = {row[1] for row in conn.execute("PRAGMA table_info(usuarios)")}
+        if "empresa_id" not in usr_cols:
+            conn.execute("ALTER TABLE usuarios ADD COLUMN empresa_id INTEGER")
+
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS usuarios (
@@ -391,6 +522,7 @@ def _run_migrations(conn):
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'operador',
             activo INTEGER NOT NULL DEFAULT 1,
+            empresa_id INTEGER,
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
         CREATE TABLE IF NOT EXISTS empresa_config (

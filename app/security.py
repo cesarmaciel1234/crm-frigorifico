@@ -117,6 +117,7 @@ def set_session_user(user: dict, *, auth_method: str = "password") -> None:
     session["user_id"] = user["id"]
     session["username"] = user["username"]
     session["role"] = user["role"]
+    session["empresa_id"] = user.get("empresa_id") or 1
     session["auth_method"] = auth_method
     session["last_activity"] = datetime.now(timezone.utc).timestamp()
 

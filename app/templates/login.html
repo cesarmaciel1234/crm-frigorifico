@@ -299,6 +299,10 @@
                     <label for="reg-password">Contraseña</label>
                     <input type="password" id="reg-password" placeholder="Mínimo 8 caracteres" required minlength="8">
                 </div>
+                <div class="field">
+                    <label for="reg-empresa">Nombre de tu empresa</label>
+                    <input type="text" id="reg-empresa" placeholder="Ej: Frigorífico El Sol" required>
+                </div>
                 <div id="reg-error" class="error-box hidden"></div>
                 <button type="submit" class="btn-glorious">Registrarse y Entrar</button>
             </form>
@@ -366,12 +370,13 @@
             const username = document.getElementById('reg-username').value.trim();
             const nombre = document.getElementById('reg-nombre').value.trim();
             const password = document.getElementById('reg-password').value;
+            const empresa_nombre = document.getElementById('reg-empresa').value.trim();
 
             try {
                 const res = await fetch('/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, nombre, password })
+                    body: JSON.stringify({ username, nombre, password, empresa_nombre })
                 });
                 
                 const data = await res.json();

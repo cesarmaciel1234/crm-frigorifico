@@ -117,7 +117,7 @@ class TestSecurity:
         assert r_login.status_code in (302, 303)
         
         # Register new user
-        reg_payload = {"username": "newuser", "password": "securepassword123", "nombre": "Nuevo Usuario"}
+        reg_payload = {"username": "newuser", "password": "securepassword123", "nombre": "Nuevo Usuario", "empresa_nombre": "Test Company"}
         r_reg = client.post("/auth/register", json=reg_payload)
         assert r_reg.status_code == 200
         assert r_reg.get_json()["ok"] is True
