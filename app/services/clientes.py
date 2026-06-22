@@ -42,18 +42,42 @@ def registrar_cliente(nombre: str, techo_deuda: float, scoring: str = "A") -> in
     return cliente_id
 
 def list_clientes() -> list[dict]:
+    import datetime
     with get_db() as conn:
         rows = conn.execute(
             """
-            SELECT id, nombre, scoring, techo_deuda, saldo_actual, created_at
-            FROM clientes ORDER BY nombre ASC
+            SELECT c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.created_at, c.fecha_ultimo_pago,
+                   MIN(r.fecha) as oldest_unpaid
+            FROM clientes c
+            LEFT JOIN remitos_carga r ON c.id = r.cliente_id AND r.pagado = 0
+            GROUP BY c.id
+            ORDER BY c.nombre ASC
             """
         ).fetchall()
         
     out = []
+    today = datetime.date.today()
     for row in rows:
         r = dict(row)
         limite_superado = r["saldo_actual"] > r["techo_deuda"]
+        inrecuperable = False
+        
+        if r["saldo_actual"] > 0:
+            if r["fecha_ultimo_pago"]:
+                try:
+                    f_ultimo = datetime.datetime.strptime(r["fecha_ultimo_pago"], "%Y-%m-%d").date()
+                    if (today - f_ultimo).days > 60:
+                        inrecuperable = True
+                except:
+                    pass
+            elif r["oldest_unpaid"]:
+                try:
+                    f_oldest = datetime.datetime.strptime(r["oldest_unpaid"], "%Y-%m-%d").date()
+                    if (today - f_oldest).days > 60:
+                        inrecuperable = True
+                except:
+                    pass
+
         out.append({
             "id": r["id"],
             "nombre": r["nombre"],
@@ -61,7 +85,8 @@ def list_clientes() -> list[dict]:
             "techo_deuda": r["techo_deuda"],
             "saldo_actual": r["saldo_actual"],
             "limite_superado": limite_superado,
-            "created_at": r["created_at"]
+            "created_at": r["created_at"],
+            "inrecuperable": inrecuperable
         })
     return out
 

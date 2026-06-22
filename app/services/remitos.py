@@ -70,4 +70,5 @@ def marcar_remito_pagado(remito_id: int):
         
         conn.execute("UPDATE remitos_carga SET pagado = 1 WHERE id = ?", (remito_id,))
         if cliente_id:
+            conn.execute("UPDATE clientes SET fecha_ultimo_pago = date('now', 'localtime') WHERE id = ?", (cliente_id,))
             recalcular_saldo_cliente(conn, cliente_id)

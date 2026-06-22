@@ -772,20 +772,22 @@ const $ = id => document.getElementById(id);
 
         function renderClientes() {
             const table = $('tblClientes');
+            const tableInrec = $('tblInrecuperables');
             if (!table) return;
             
-            const countEl = $('clientCount');
-            if (countEl) {
-                countEl.textContent = (data.clientes || []).length + ' clientes';
-            }
+            const activos = (data.clientes || []).filter(c => !c.inrecuperable);
+            const inrecuperables = (data.clientes || []).filter(c => c.inrecuperable);
             
-            table.innerHTML = data.clientes && data.clientes.length ? data.clientes.map(c => {
+            const countEl = $('clientCount');
+            if (countEl) countEl.textContent = activos.length + ' clientes';
+            const inrecCountEl = $('inrecCount');
+            if (inrecCountEl) inrecCountEl.textContent = inrecuperables.length + ' clientes';
+            
+            const renderRow = c => {
                 const statusBadge = c.limite_superado 
                     ? '<span class="badge badge-danger">Superado</span>' 
                     : '<span class="badge badge-success">Límite OK</span>';
-                
                 const style = c.limite_superado ? 'color: var(--danger)' : '';
-                
                 const techoText = '$' + fmtCompact(c.techo_deuda);
                 const saldoText = '$' + fmtCompact(c.saldo_actual);
 
@@ -801,9 +803,15 @@ const $ = id => document.getElementById(id);
                     <td style="text-align:center"><span class="badge badge-neutral" style="text-align:center; display:inline-block; width:20px;">${c.scoring}</span></td>
                     <td style="text-align:center">${statusBadge}</td>
                 </tr>`;
-            }).join('') : '<tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center">Sin clientes registrados</td></tr>';
+            };
+
+            table.innerHTML = activos.length ? activos.map(renderRow).join('') : '<tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center">Sin clientes activos</td></tr>';
             
-            table.querySelectorAll('tr.clickable').forEach((row, idx) => {
+            if (tableInrec) {
+                tableInrec.innerHTML = inrecuperables.length ? inrecuperables.map(renderRow).join('') : '<tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center">No hay clientes inrecuperables</td></tr>';
+            }
+            
+            document.querySelectorAll('#tblClientes tr.clickable, #tblInrecuperables tr.clickable').forEach((row, idx) => {
                 row.addEventListener('click', () => {
                     activeRowIndex = idx;
                     updateSelectedRow(Array.from(table.querySelectorAll('tr')));
@@ -1053,6 +1061,7 @@ const $ = id => document.getElementById(id);
         }
 
         function abrirFormularioRegistro(id, tipo = null) {
+            switchView('registro');
             $('registroMenu').classList.add('field-hidden');
             document.querySelectorAll('.registro-subview').forEach(el => el.classList.add('field-hidden'));
             $(id).classList.remove('field-hidden');
@@ -1068,7 +1077,19 @@ const $ = id => document.getElementById(id);
             setTimeout(() => $(id).classList.remove('fade-in'), 300);
         }
 
-        function volverMenuRegistro() {
+        window.abrirSubVistaClientes = (id) => {
+            if ($('clientesMenu')) $('clientesMenu').classList.add('field-hidden');
+            document.querySelectorAll('.clientes-subview').forEach(v => v.classList.add('field-hidden'));
+            if ($(id)) $(id).classList.remove('field-hidden');
+            window.scrollTo({top:0, behavior:'smooth'});
+        };
+
+        window.volverMenuClientes = () => {
+            if ($('clientesMenu')) $('clientesMenu').classList.remove('field-hidden');
+            document.querySelectorAll('.clientes-subview').forEach(v => v.classList.add('field-hidden'));
+        };
+
+        window.volverMenuRegistro = () => {
             document.querySelectorAll('.registro-subview').forEach(el => el.classList.add('field-hidden'));
             $('registroMenu').classList.remove('field-hidden');
             $('registroMenu').classList.add('fade-in');
@@ -1113,7 +1134,10 @@ const $ = id => document.getElementById(id);
             if ($('pageSub')) $('pageSub').textContent = s;
             if ($('breadcrumbPage')) $('breadcrumbPage').textContent = bc || t;
             if (name === 'remitos') renderRemitosFull();
-            if (name === 'clientes') renderClientes();
+            if (name === 'clientes') {
+                volverMenuClientes();
+                renderClientes();
+            }
             if (name === 'historial-pagos') renderHistorialPagos();
             if (name === 'auditoria') renderAuditoria();
             if (name === 'registro') volverMenuRegistro();

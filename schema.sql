@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS clientes (
     scoring TEXT NOT NULL CHECK(scoring IN ('A', 'B', 'C', 'D')) DEFAULT 'A',
     techo_deuda REAL NOT NULL DEFAULT 500000,
     saldo_actual REAL NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    fecha_ultimo_pago TEXT
 );
 
 CREATE TABLE IF NOT EXISTS remitos_carga (
