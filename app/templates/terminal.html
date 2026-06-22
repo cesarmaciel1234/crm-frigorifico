@@ -311,10 +311,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                 Auditoría (Historial)
             </button>
-            <button type="button" class="nav-item" data-view="usuarios" data-admin-only style="display:none;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-                Usuarios y acceso
-            </button>
+
 
             
             <!-- Botón de instalación PWA -->
@@ -369,7 +366,7 @@
                 <div class="weather-widget hide-mobile" id="weatherWidget" style="display: inline-flex; align-items: center; justify-content: center; background: rgba(50,50,50,0.9); color: #fff; font-size: 14px; font-family: sans-serif; font-weight: 700; padding: 0 10px; height: 38px; border-radius: 10px; line-height: 1; box-shadow: 0 2px 5px rgba(0,0,0,0.15); letter-spacing: 0.5px;">
                     10°
                 </div>
-                <button type="button" class="btn btn-ghost" id="btnLogout" style="color:#64748b; background:#f1f5f9; border-radius: 10px; padding: 0 10px; height: 38px; font-size: 12px; font-weight: 600;" title="Cerrar sesión">Salir</button>
+
                 <button type="button" class="btn btn-ghost" id="btnTogglePro" style="color:#111827; background:#e2e8f0; border-radius: 10px; padding: 0; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;" title="Modo PRO">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                 </button>
@@ -816,36 +813,7 @@
                 </div>
             </div>
 
-            <!-- VIEW: Usuarios (admin) -->
-            <div class="view" id="view-usuarios">
-                <div class="card">
-                    <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-                        <div>
-                            <h2>Usuarios y acceso</h2>
-                            <span id="usuariosCount" style="font-size:0.85rem;color:var(--text-secondary);">0 usuarios</span>
-                        </div>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                            <button type="button" class="btn btn-ghost btn-sm" id="btnExportData">Exportar datos</button>
-                            <button type="button" class="btn btn-primary btn-sm" id="btnNuevoUsuario">+ Nuevo usuario</button>
-                        </div>
-                    </div>
-                    <div class="table-wrap xls-wrap">
-                        <table class="data-table home-table">
-                            <thead>
-                                <tr>
-                                    <th>Usuario</th>
-                                    <th>Nombre</th>
-                                    <th>Rol</th>
-                                    <th>Estado</th>
-                                    <th>Creado</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="tblUsuarios"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+
 
             <!-- VIEW: Registro -->
             <div class="view" id="view-registro">

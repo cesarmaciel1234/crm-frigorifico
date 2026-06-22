@@ -1132,6 +1132,7 @@ const $ = id => document.getElementById(id);
         }
 
         async function renderUsuarios() {
+            if (!$('tblUsuarios')) return;
             try {
                 data.usuarios = await api('/api/usuarios');
             } catch (e) {
@@ -2501,7 +2502,8 @@ const $ = id => document.getElementById(id);
                         telefono: fd.get('telefono') || undefined,
                         cuit: fd.get('cuit') || undefined,
                         direccion: fd.get('direccion') || undefined,
-                        email: fd.get('email') || undefined
+                        email: fd.get('email') || undefined,
+                        saldo_inicial: fd.get('saldo_inicial') ? parseFloat(fd.get('saldo_inicial')) : undefined
                     })
                 });
                 toast('Cliente registrado con éxito');
@@ -2716,8 +2718,10 @@ const $ = id => document.getElementById(id);
 
                     <!-- Cuadro de Totales -->
                     <div style="display:flex; justify-content:flex-end; margin-top:8px;">
-                        <div style="width:220px; display:flex; flex-direction:column; gap:6px; font-size:11px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px;">
-                            <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Subtotal:</span><span style="font-weight:600; color:#0f172a;">$${fmt(r.precio_venta_total)}</span></div>
+                        <div style="width:250px; display:flex; flex-direction:column; gap:6px; font-size:11px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px;">
+                            <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Subtotal Carne:</span><span style="font-weight:600; color:#0f172a;">$${fmt(r.precio_venta_total - r.costo_total_logistica)}</span></div>
+                            <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Costo Logística (Flete):</span><span style="font-weight:600; color:#0f172a;">$${fmt(r.costo_total_logistica)}</span></div>
+                            <div style="display:flex; justify-content:space-between; border-top:1px solid #cbd5e1; padding-top:4px;"><span style="color:#475569; font-weight:bold;">TOTAL FACTURADO:</span><span style="font-weight:700; color:#0f172a;">$${fmt(r.precio_venta_total)}</span></div>
                             <div style="display:flex; justify-content:space-between;"><span style="color:#10b981; font-weight:600;">Monto Cobrado:</span><span style="font-weight:700; color:#10b981;">$${fmt(pagado)}</span></div>
                             <div style="display:flex; justify-content:space-between; border-top:1px solid #cbd5e1; padding-top:6px; font-size:12px;"><span style="font-weight:700; color:#0f172a;">SALDO PENDIENTE:</span><span style="font-weight:800; color:${saldo > 0 ? '#ef4444' : '#111827'};">$${fmt(saldo)}</span></div>
                         </div>
@@ -2902,8 +2906,8 @@ const $ = id => document.getElementById(id);
                     const plazo = r.plazo_cobro_dias != null ? `${r.plazo_cobro_dias} días` : '—';
                     const importe = r.precio_venta_total;
                     const detalleHtml = piezas.length
-                        ? `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span>${pesosPiezasHtml(piezas)}</div>`
-                        : `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span><span class="sin-piezas">${fmt(r.kg)} kg total</span></div>`;
+                        ? `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span>${pesosPiezasHtml(piezas)}${r.costo_total_logistica > 0 ? `<div style="font-size:8px;color:#475569;margin-top:2px;">Flete/Logística: $${fmt(r.costo_total_logistica)}</div>` : ''}</div>`
+                        : `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span><span class="sin-piezas">${fmt(r.kg)} kg total</span>${r.costo_total_logistica > 0 ? `<div style="font-size:8px;color:#475569;margin-top:2px;">Flete/Logística: $${fmt(r.costo_total_logistica)}</div>` : ''}</div>`;
                     return `
                         <tr>
                             <td>${fmtFechaRemito(r.fecha)}</td>
