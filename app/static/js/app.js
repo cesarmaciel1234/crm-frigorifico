@@ -2161,6 +2161,9 @@ const $ = id => document.getElementById(id);
                 backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
             }
             document.body.classList.toggle('sidebar-open', open);
+            document.querySelectorAll('.dashboard-bar').forEach(el => {
+                el.classList.toggle('bar-suppressed', open);
+            });
         }
 
         $('menuToggle').addEventListener('click', () => setSidebarOpen(!$('sidebar').classList.contains('open')));
