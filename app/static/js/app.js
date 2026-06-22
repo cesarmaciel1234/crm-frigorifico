@@ -1504,6 +1504,7 @@ const $ = id => document.getElementById(id);
             }
         }
 
+        window.abrirFormularioRegistro = abrirFormularioRegistro;
         function abrirFormularioRegistro(id, tipo = null) {
             switchView('registro');
             $('registroMenu').classList.add('field-hidden');
@@ -2374,8 +2375,9 @@ const $ = id => document.getElementById(id);
         }
         window.addEventListener('online', updateConnectionStatus);
         window.addEventListener('offline', updateConnectionStatus);
-        function abrirNuevaVenta() {
+        window.abrirNuevaVenta = function() {
             $('formRemito').reset();
+            switchView('ventas-express');
             if (currentClientData) {
                 $('inpVentaCliente').value = currentClientData.nombre;
                 $('btnVolverVentasExpress').textContent = '← Volver al Perfil de ' + currentClientData.nombre;

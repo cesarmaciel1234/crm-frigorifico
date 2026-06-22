@@ -143,42 +143,49 @@ def api_create_op():
     uuid_val = d.get("uuid")
     
     # 5. ¡Abre la Bóveda de acero!
-    with get_db() as conn:
-        if uuid_val:
-            # Primero pregunta: "¿Ya guardé esto antes?"
-            row = conn.execute("SELECT id FROM operaciones_financieras WHERE uuid = ?", (uuid_val,)).fetchone()
-            if row:
-                return jsonify({"id": row["id"], "ok": True, "duplicate": True}), 200
+    try:
+        with get_db() as conn:
+            if uuid_val:
+                # Primero pregunta: "¿Ya guardé esto antes?"
+                row = conn.execute("SELECT id FROM operaciones_financieras WHERE uuid = ?", (uuid_val,)).fetchone()
+                if row:
+                    return jsonify({"id": row["id"], "ok": True, "duplicate": True}), 200
 
-        # 6. Lo guarda en el archivo correcto de la Bóveda usando el lenguaje secreto SQL (INSERT INTO)
-        fecha_inicio_val = payload.get("fecha_inicio")
-        if fecha_inicio_val:
-            fecha_inicio_val = f"{fecha_inicio_val} 12:00:00"
-            query = """
-            INSERT INTO operaciones_financieras
-                (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            params = (
-                uuid_val, payload["alias"], payload["tipo"], payload["recibido"], payload["pagar"],
-                payload["meses"], payload["fecha_cierre"], payload["fecha_vencimiento"],
-                payload["cuotas"], payload.get("kg"), payload.get("precio_kg"), payload.get("plazo_dias"),
-                fecha_inicio_val
-            )
-        else:
-            query = """
-            INSERT INTO operaciones_financieras
-                (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            params = (
-                uuid_val, payload["alias"], payload["tipo"], payload["recibido"], payload["pagar"],
-                payload["meses"], payload["fecha_cierre"], payload["fecha_vencimiento"],
-                payload["cuotas"], payload.get("kg"), payload.get("precio_kg"), payload.get("plazo_dias")
-            )
+            # 6. Lo guarda en el archivo correcto de la Bóveda usando el lenguaje secreto SQL (INSERT INTO)
+            fecha_inicio_val = payload.get("fecha_inicio")
+            if fecha_inicio_val:
+                fecha_inicio_val = f"{fecha_inicio_val} 12:00:00"
+                query = """
+                INSERT INTO operaciones_financieras
+                    (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                params = (
+                    uuid_val, payload["alias"], payload["tipo"], payload["recibido"], payload["pagar"],
+                    payload["meses"], payload["fecha_cierre"], payload["fecha_vencimiento"],
+                    payload["cuotas"], payload.get("kg"), payload.get("precio_kg"), payload.get("plazo_dias"),
+                    fecha_inicio_val
+                )
+            else:
+                query = """
+                INSERT INTO operaciones_financieras
+                    (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                params = (
+                    uuid_val, payload["alias"], payload["tipo"], payload["recibido"], payload["pagar"],
+                    payload["meses"], payload["fecha_cierre"], payload["fecha_vencimiento"],
+                    payload["cuotas"], payload.get("kg"), payload.get("precio_kg"), payload.get("plazo_dias")
+                )
 
-        cur = conn.execute(query, params)
-        op_id = cur.lastrowid
+            cur = conn.execute(query, params)
+            op_id = cur.lastrowid
+    except sqlite3.IntegrityError as e:
+        if "UNIQUE constraint failed" in str(e):
+            return jsonify({"error": "Esta operación ya ha sido registrada"}), 400
+        return jsonify({"error": f"Error de integridad: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al guardar la operación: {str(e)}"}), 500
 
     return jsonify(
         {
@@ -396,6 +403,13 @@ def api_remitos_endpoint():
         return jsonify({"id": rid, "margen": round(venta - costo - costo_carne, 2), "costo_carne": costo_carne}), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except sqlite3.IntegrityError as e:
+        if "UNIQUE constraint failed" in str(e):
+            return jsonify({"error": "Error: Remito duplicado o conflicto de integridad."}), 400
+        return jsonify({"error": f"Error de integridad en base de datos: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error inesperado al registrar remito: {str(e)}"}), 500
+
 
 @api_bp.route("/bancos", methods=["GET", "POST"])
 def api_bancos_endpoint():
@@ -466,6 +480,12 @@ def api_clientes_endpoint():
         return jsonify({"id": cid, "nombre": nombre, "techo_deuda": techo_deuda, "scoring": scoring}), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except sqlite3.IntegrityError as e:
+        if "UNIQUE constraint failed" in str(e):
+            return jsonify({"error": "El nombre del cliente ya existe"}), 400
+        return jsonify({"error": f"Error de integridad: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error inesperado al registrar cliente: {str(e)}"}), 500
 
 @api_bp.route("/clientes/<int:cid>", methods=["GET"])
 def api_cliente_detalle_endpoint(cid: int):
@@ -473,6 +493,8 @@ def api_cliente_detalle_endpoint(cid: int):
         return jsonify(get_cliente_detalle(cid))
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": f"Error al cargar detalle: {str(e)}"}), 500
 
 @api_bp.route("/clientes/<int:cid>/cobrar", methods=["POST"])
 def api_cliente_cobrar_endpoint(cid: int):
@@ -485,6 +507,8 @@ def api_cliente_cobrar_endpoint(cid: int):
         return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al registrar cobro: {str(e)}"}), 500
 
 @api_bp.route("/remitos/<int:rid>/cobrar", methods=["POST"])
 def api_remito_cobrar_endpoint(rid: int):
@@ -499,6 +523,8 @@ def api_remito_cobrar_endpoint(rid: int):
         return jsonify({**result, "message": msg})
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al registrar cobro de remito: {str(e)}"}), 500
 
 @api_bp.route("/clientes/<int:cid>/incobrable", methods=["POST"])
 def api_cliente_incobrable_endpoint(cid: int):
@@ -507,6 +533,8 @@ def api_cliente_incobrable_endpoint(cid: int):
         return jsonify({"ok": True, "perdida_id": pid, "message": "Cliente declarado como incobrable. Deuda transferida a Pérdidas Acumuladas."})
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al declarar incobrable: {str(e)}"}), 500
 
 @api_bp.route("/perdidas", methods=["GET"])
 def api_perdidas_endpoint():
@@ -527,3 +555,5 @@ def api_ventas_mostrador_sync():
         return jsonify({"ok": True, "synced_ids": synced_ids, "count": len(synced_ids)}), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al sincronizar ventas offline: {str(e)}"}), 500
