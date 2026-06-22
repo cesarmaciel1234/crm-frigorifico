@@ -180,11 +180,10 @@ def api_create_op():
 
             cur = conn.execute(query, params)
             op_id = cur.lastrowid
-    except sqlite3.IntegrityError as e:
-        if "UNIQUE constraint failed" in str(e):
-            return jsonify({"error": "Esta operación ya ha sido registrada"}), 400
-        return jsonify({"error": f"Error de integridad: {str(e)}"}), 400
     except Exception as e:
+        err_msg = str(e).lower()
+        if "unique constraint" in err_msg or "already exists" in err_msg or "constraint failed" in err_msg:
+            return jsonify({"error": "Esta operación ya ha sido registrada"}), 400
         return jsonify({"error": f"Error al guardar la operación: {str(e)}"}), 500
 
     return jsonify(
@@ -403,12 +402,11 @@ def api_remitos_endpoint():
         return jsonify({"id": rid, "margen": round(venta - costo - costo_carne, 2), "costo_carne": costo_carne}), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    except sqlite3.IntegrityError as e:
-        if "UNIQUE constraint failed" in str(e):
-            return jsonify({"error": "Error: Remito duplicado o conflicto de integridad."}), 400
-        return jsonify({"error": f"Error de integridad en base de datos: {str(e)}"}), 400
     except Exception as e:
-        return jsonify({"error": f"Error inesperado al registrar remito: {str(e)}"}), 500
+        err_msg = str(e).lower()
+        if "unique constraint" in err_msg or "already exists" in err_msg or "constraint failed" in err_msg:
+            return jsonify({"error": "Error: Remito duplicado o conflicto de integridad."}), 400
+        return jsonify({"error": f"Error al registrar remito: {str(e)}"}), 500
 
 
 @api_bp.route("/bancos", methods=["GET", "POST"])
@@ -433,8 +431,11 @@ def api_bancos_endpoint():
             )
             bid = cur.lastrowid
         return jsonify({"id": bid, "nombre": nombre, "limite": limite}), 201
-    except sqlite3.IntegrityError:
-        return jsonify({"error": "Entidad ya existe"}), 409
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "unique constraint" in err_msg or "already exists" in err_msg or "constraint failed" in err_msg:
+            return jsonify({"error": "Entidad ya existe"}), 409
+        return jsonify({"error": f"Error al registrar banco: {str(e)}"}), 500
 
 @api_bp.route("/bulk", methods=["GET", "POST"])
 def api_bulk_endpoint():
@@ -480,12 +481,11 @@ def api_clientes_endpoint():
         return jsonify({"id": cid, "nombre": nombre, "techo_deuda": techo_deuda, "scoring": scoring}), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    except sqlite3.IntegrityError as e:
-        if "UNIQUE constraint failed" in str(e):
-            return jsonify({"error": "El nombre del cliente ya existe"}), 400
-        return jsonify({"error": f"Error de integridad: {str(e)}"}), 400
     except Exception as e:
-        return jsonify({"error": f"Error inesperado al registrar cliente: {str(e)}"}), 500
+        err_msg = str(e).lower()
+        if "unique constraint" in err_msg or "already exists" in err_msg or "constraint failed" in err_msg:
+            return jsonify({"error": "El nombre del cliente ya existe"}), 400
+        return jsonify({"error": f"Error al registrar cliente: {str(e)}"}), 500
 
 @api_bp.route("/clientes/<int:cid>", methods=["GET"])
 def api_cliente_detalle_endpoint(cid: int):

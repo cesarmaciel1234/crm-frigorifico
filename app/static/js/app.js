@@ -1604,7 +1604,7 @@ const $ = id => document.getElementById(id);
             document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
             
             if ($('dashboardBar')) {
-                if (name === 'home' || name === 'dashboard') {
+                if (name === 'home' || name === 'dashboard' || name === 'deudas') {
                     $('dashboardBar').classList.remove('field-hidden');
                 } else {
                     $('dashboardBar').classList.add('field-hidden');
