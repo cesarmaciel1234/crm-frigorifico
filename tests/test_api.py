@@ -44,9 +44,9 @@ class TestAPI:
             "/api/remitos",
             json={
                 "cliente": "Test Cliente API",
+                "tipo_corte": "Novillo",
                 "kg": 100,
-                "costo_total_logistica": 3000,
-                "precio_venta_total": 55_000,
+                "precio_por_kg": 550,
                 "plazo_cobro_dias": 21,
             },
         )
@@ -58,9 +58,9 @@ class TestAPI:
             "/api/remitos",
             json={
                 "cliente": "Sin Stock",
+                "tipo_corte": "Novillo",
                 "kg": 9999,
-                "costo_total_logistica": 0,
-                "precio_venta_total": 1000,
+                "precio_por_kg": 100,
                 "plazo_cobro_dias": 7,
             },
         )
@@ -76,9 +76,9 @@ class TestAPI:
             "/api/remitos",
             json={
                 "cliente": "Cliente Chico",
+                "tipo_corte": "Novillo",
                 "kg": 50,
-                "costo_total_logistica": 500,
-                "precio_venta_total": 50_000,
+                "precio_por_kg": 1000,
                 "plazo_cobro_dias": 14,
             },
         )

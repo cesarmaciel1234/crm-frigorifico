@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS compras_bulk (
     kg_totales REAL NOT NULL CHECK(kg_totales > 0),
     kg_remanentes REAL NOT NULL CHECK(kg_remanentes >= 0),
     costo_total_bulk REAL NOT NULL CHECK(costo_total_bulk > 0),
+    costo_reparto REAL NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -60,7 +61,11 @@ CREATE TABLE IF NOT EXISTS remitos_carga (
     fecha TEXT NOT NULL DEFAULT (date('now', 'localtime')),
     cliente TEXT NOT NULL DEFAULT '',
     cliente_id INTEGER,
+    tipo_corte TEXT NOT NULL DEFAULT '',
+    cantidad INTEGER NOT NULL DEFAULT 0,
+    pesos_piezas TEXT NOT NULL DEFAULT '[]',
     kg REAL NOT NULL CHECK(kg > 0),
+    precio_por_kg REAL NOT NULL DEFAULT 0 CHECK(precio_por_kg >= 0),
     costo_total_logistica REAL NOT NULL DEFAULT 0 CHECK(costo_total_logistica >= 0),
     precio_venta_total REAL NOT NULL CHECK(precio_venta_total >= 0),
     plazo_cobro_dias INTEGER NOT NULL DEFAULT 0 CHECK(plazo_cobro_dias >= 0),
@@ -85,6 +90,7 @@ CREATE TABLE IF NOT EXISTS remitos_fracciones (
     lote_id INTEGER NOT NULL,
     kg_descontados REAL NOT NULL CHECK(kg_descontados > 0),
     costo_porcion REAL NOT NULL CHECK(costo_porcion >= 0),
+    costo_logistica_porcion REAL NOT NULL DEFAULT 0,
     FOREIGN KEY (remito_id) REFERENCES remitos_carga(id) ON DELETE CASCADE,
     FOREIGN KEY (lote_id) REFERENCES compras_bulk(id),
     UNIQUE(remito_id, lote_id)

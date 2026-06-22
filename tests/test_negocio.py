@@ -2,7 +2,7 @@
 import pytest
 
 from app.services.bulk import registrar_lote_bulk, list_bulk_lots, fraccionar_lote_fifo
-from app.services.clientes import registrar_cliente, list_clientes, marcar_cliente_incobrable
+from app.services.clientes import registrar_cliente, list_clientes, marcar_cliente_incobrable, registrar_pago_cliente_global
 from app.services.remitos import list_remitos, marcar_remito_pagado, _estado_cobro
 from app.database import get_db
 from app.services.clientes import buscar_o_crear_cliente, recalcular_saldo_cliente
@@ -33,6 +33,7 @@ def _remito_via_conn(conn, cliente, kg, costo_log, venta, plazo=30):
 class TestNegocio:
     def test_estado_cobro_remito(self):
         assert _estado_cobro(0) == "pendiente"
+        assert _estado_cobro(0, 500) == "parcial"
         assert _estado_cobro(1) == "cobrado"
         assert _estado_cobro(2) == "incobrable"
 
@@ -68,6 +69,33 @@ class TestNegocio:
         assert rem["pagado"] == 1
         assert rem["estado_cobro"] == "cobrado"
 
+    def test_pago_global_fifo_factura_antigua(self, db):
+        registrar_cliente("Fiado", 1_000_000, "A")
+        registrar_lote_bulk(1000, 800_000)
+        with get_db() as conn:
+            rid1, cid = _remito_via_conn(conn, "Fiado", 100, 2000, 50_000)
+            rid2, _ = _remito_via_conn(conn, "Fiado", 100, 2000, 80_000)
+            conn.execute("UPDATE remitos_carga SET fecha = '2026-01-01' WHERE id = ?", (rid1,))
+            conn.execute("UPDATE remitos_carga SET fecha = '2026-02-01' WHERE id = ?", (rid2,))
+
+        registrar_pago_cliente_global(cid, 60_000)
+
+        with get_db() as conn:
+            r1 = dict(conn.execute(
+                "SELECT monto_pagado, pagado FROM remitos_carga WHERE id = ?", (rid1,)
+            ).fetchone())
+            r2 = dict(conn.execute(
+                "SELECT monto_pagado, pagado FROM remitos_carga WHERE id = ?", (rid2,)
+            ).fetchone())
+
+        assert r1["pagado"] == 1
+        assert r1["monto_pagado"] == pytest.approx(50_000, abs=0.01)
+        assert r2["pagado"] == 0
+        assert r2["monto_pagado"] == pytest.approx(10_000, abs=0.01)
+
+        c = next(x for x in list_clientes() if x["id"] == cid)
+        assert c["saldo_actual"] == pytest.approx(70_000, abs=0.01)
+
     def test_cliente_incobrable(self, db):
         registrar_cliente("Moroso", 100_000, "D")
         registrar_lote_bulk(200, 160_000)
@@ -80,3 +108,34 @@ class TestNegocio:
         c = next(x for x in list_clientes() if x["nombre"] == "Moroso")
         assert c["saldo_actual"] == 0
         assert c["techo_deuda"] == 0
+
+
+def test_parse_kg_detalle_piezas():
+    from app.utils import parse_kg_detalle, pesos_piezas_to_json, pesos_piezas_from_json
+
+    total, piezas = parse_kg_detalle("97+97+101+104")
+    assert total == 399
+    assert piezas == [97, 97, 101, 104]
+    assert pesos_piezas_from_json(pesos_piezas_to_json(piezas)) == piezas
+
+
+def test_remito_api_guarda_pesos_piezas(client):
+    client.post("/api/bulk", json={"kg_totales": 500, "costo_total_bulk": 400_000})
+    r = client.post(
+        "/api/remitos",
+        json={
+            "cliente": "Cliente Piezas",
+            "tipo_corte": "Media Res",
+            "pesos_piezas": [58, 62, 59, 61, 60],
+            "precio_por_kg": 1300,
+            "plazo_cobro_dias": 30,
+        },
+    )
+    assert r.status_code == 201
+    det = client.get("/api/clientes").get_json()
+    cli = next(c for c in det if c["nombre"] == "Cliente Piezas")
+    full = client.get(f"/api/clientes/{cli['id']}").get_json()
+    rem = full["remitos"][0]
+    assert rem["cantidad"] == 5
+    assert rem["pesos_piezas"] == [58, 62, 59, 61, 60]
+    assert rem["kg"] == 300

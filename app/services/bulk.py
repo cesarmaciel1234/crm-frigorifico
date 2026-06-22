@@ -1,11 +1,13 @@
 from datetime import date
 from app.database import get_db
 
-def registrar_lote_bulk(kg_totales: float, costo_total_bulk: float, fecha: str = None) -> int:
+def registrar_lote_bulk(kg_totales: float, costo_total_bulk: float, costo_reparto: float = 0, fecha: str = None) -> int:
     if kg_totales <= 0:
         raise ValueError("Los kilos totales deben ser mayores a 0")
     if costo_total_bulk <= 0:
         raise ValueError("El costo total bulk debe ser mayor a 0")
+    if costo_reparto < 0:
+        raise ValueError("El costo de reparto no puede ser negativo")
     
     if not fecha:
         fecha = date.today().isoformat()
@@ -13,10 +15,10 @@ def registrar_lote_bulk(kg_totales: float, costo_total_bulk: float, fecha: str =
     with get_db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO compras_bulk (fecha, kg_totales, kg_remanentes, costo_total_bulk)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO compras_bulk (fecha, kg_totales, kg_remanentes, costo_total_bulk, costo_reparto)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (fecha, kg_totales, kg_totales, costo_total_bulk)
+            (fecha, kg_totales, kg_totales, costo_total_bulk, costo_reparto)
         )
         lote_id = cur.lastrowid
     return lote_id
@@ -25,7 +27,7 @@ def list_bulk_lots() -> list[dict]:
     with get_db() as conn:
         rows = conn.execute(
             """
-            SELECT id, fecha, kg_totales, kg_remanentes, costo_total_bulk, created_at
+            SELECT id, fecha, kg_totales, kg_remanentes, costo_total_bulk, costo_reparto, created_at
             FROM compras_bulk ORDER BY id DESC
             """
         ).fetchall()
@@ -40,6 +42,7 @@ def list_bulk_lots() -> list[dict]:
             "kg_totales": r["kg_totales"],
             "kg_remanentes": r["kg_remanentes"],
             "costo_total_bulk": r["costo_total_bulk"],
+            "costo_reparto": r["costo_reparto"],
             "costo_kg": round(costo_kg, 2),
             "activo": r["kg_remanentes"] > 0,
             "created_at": r["created_at"]
@@ -65,7 +68,7 @@ def fraccionar_lote_fifo(conn, kg_venta: float) -> tuple[float, list[dict]]:
     # Obtener lotes activos por FIFO (ID ascendente)
     lotes = conn.execute(
         """
-        SELECT id, kg_remanentes, kg_totales, costo_total_bulk
+        SELECT id, kg_remanentes, kg_totales, costo_total_bulk, costo_reparto
         FROM compras_bulk
         WHERE kg_remanentes > 0
         ORDER BY id ASC
@@ -84,12 +87,15 @@ def fraccionar_lote_fifo(conn, kg_venta: float) -> tuple[float, list[dict]]:
         l_remanente = float(lote["kg_remanentes"])
         l_totales = float(lote["kg_totales"])
         l_costo_total = float(lote["costo_total_bulk"])
+        l_costo_reparto = float(lote["costo_reparto"])
         costo_unitario = l_costo_total / l_totales
+        costo_reparto_unitario = l_costo_reparto / l_totales
         
         if l_remanente >= restante:
             # El lote actual cubre todo lo restante
             nuevo_remanente = l_remanente - restante
             costo_porcion = restante * costo_unitario
+            costo_logistica_porcion = restante * costo_reparto_unitario
             
             conn.execute(
                 "UPDATE compras_bulk SET kg_remanentes = ? WHERE id = ?",
@@ -99,7 +105,8 @@ def fraccionar_lote_fifo(conn, kg_venta: float) -> tuple[float, list[dict]]:
             fracciones.append({
                 "lote_id": l_id,
                 "kg_descontados": restante,
-                "costo_porcion": costo_porcion
+                "costo_porcion": costo_porcion,
+                "costo_logistica_porcion": costo_logistica_porcion
             })
             
             costo_total_carne += costo_porcion
@@ -107,6 +114,7 @@ def fraccionar_lote_fifo(conn, kg_venta: float) -> tuple[float, list[dict]]:
         else:
             # El lote actual se agota por completo
             costo_porcion = l_remanente * costo_unitario
+            costo_logistica_porcion = l_remanente * costo_reparto_unitario
             
             conn.execute(
                 "UPDATE compras_bulk SET kg_remanentes = 0 WHERE id = ?",
@@ -116,7 +124,8 @@ def fraccionar_lote_fifo(conn, kg_venta: float) -> tuple[float, list[dict]]:
             fracciones.append({
                 "lote_id": l_id,
                 "kg_descontados": l_remanente,
-                "costo_porcion": costo_porcion
+                "costo_porcion": costo_porcion,
+                "costo_logistica_porcion": costo_logistica_porcion
             })
             
             costo_total_carne += costo_porcion

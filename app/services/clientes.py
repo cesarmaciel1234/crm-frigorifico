@@ -1,5 +1,6 @@
 from app.database import get_db
 from app.services.remitos import _estado_cobro
+from app.utils import pesos_piezas_from_json
 
 # ==============================================================================
 # 🕵️ EL EXPERTO EN CLIENTES (clientes.py)
@@ -47,7 +48,11 @@ def list_clientes() -> list[dict]:
         rows = conn.execute(
             """
             SELECT c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.created_at, c.fecha_ultimo_pago,
-                   MIN(r.fecha) as oldest_unpaid
+                   MIN(r.fecha) as oldest_unpaid,
+                   (SELECT COUNT(*) FROM remitos_carga r2
+                    WHERE r2.cliente_id = c.id AND r2.pagado = 0
+                      AND date(r2.fecha, '+' || r2.plazo_cobro_dias || ' days') < date('now', 'localtime')
+                   ) AS remitos_vencidos
             FROM clientes c
             LEFT JOIN remitos_carga r ON c.id = r.cliente_id AND r.pagado = 0
             GROUP BY c.id
@@ -78,6 +83,8 @@ def list_clientes() -> list[dict]:
                 except:
                     pass
 
+        en_mora = float(r["saldo_actual"]) > 0 and int(r.get("remitos_vencidos") or 0) > 0
+
         out.append({
             "id": r["id"],
             "nombre": r["nombre"],
@@ -86,6 +93,9 @@ def list_clientes() -> list[dict]:
             "saldo_actual": r["saldo_actual"],
             "limite_superado": limite_superado,
             "created_at": r["created_at"],
+            "fecha_ultimo_pago": r.get("fecha_ultimo_pago"),
+            "oldest_unpaid": r.get("oldest_unpaid"),
+            "en_mora": en_mora,
             "inrecuperable": inrecuperable
         })
     return out
@@ -96,7 +106,10 @@ def recalcular_saldo_cliente(conn, cliente_id: int) -> float:
     Debe ejecutarse dentro de la transacción activa (conn).
     """
     row = conn.execute(
-        "SELECT COALESCE(SUM(precio_venta_total), 0) AS saldo FROM remitos_carga WHERE cliente_id = ? AND pagado = 0",
+        """
+        SELECT COALESCE(SUM(precio_venta_total - COALESCE(monto_pagado, 0)), 0) AS saldo
+        FROM remitos_carga WHERE cliente_id = ? AND pagado = 0
+        """,
         (cliente_id,)
     ).fetchone()
     nuevo_saldo = float(row["saldo"])
@@ -121,7 +134,7 @@ def get_cliente_detalle(cliente_id: int) -> dict:
         
         remitos = conn.execute(
             """
-            SELECT id, fecha, kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, created_at
+            SELECT id, fecha, tipo_corte, cantidad, pesos_piezas, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, COALESCE(monto_pagado, 0) AS monto_pagado, created_at
             FROM remitos_carga
             WHERE cliente_id = ?
             ORDER BY id DESC
@@ -133,16 +146,22 @@ def get_cliente_detalle(cliente_id: int) -> dict:
     for rem in remitos:
         r = dict(rem)
         pagado = int(r["pagado"] or 0)
+        monto_pagado = float(r.get("monto_pagado") or 0)
         list_rem.append({
             "id": r["id"],
             "fecha": r["fecha"],
+            "tipo_corte": r["tipo_corte"],
+            "cantidad": int(r.get("cantidad") or 0),
+            "pesos_piezas": pesos_piezas_from_json(r.get("pesos_piezas")),
             "kg": r["kg"],
+            "precio_por_kg": r["precio_por_kg"],
             "costo_total_logistica": r["costo_total_logistica"],
             "precio_venta_total": r["precio_venta_total"],
             "plazo_cobro_dias": r["plazo_cobro_dias"],
             "costo_carne": r["costo_carne"],
             "pagado": pagado,
-            "estado_cobro": _estado_cobro(pagado),
+            "monto_pagado": monto_pagado,
+            "estado_cobro": _estado_cobro(pagado, monto_pagado),
             "created_at": r["created_at"]
         })
         
@@ -157,6 +176,95 @@ def get_cliente_detalle(cliente_id: int) -> dict:
         "created_at": r_cli["created_at"],
         "remitos": list_rem
     }
+
+
+def registrar_pago_cliente_global(cliente_id: int, monto: float) -> dict:
+    """Aplica un pago global al cliente, descontando facturas de la más antigua a la más nueva."""
+    if monto <= 0:
+        raise ValueError("El monto debe ser mayor a cero")
+
+    monto = round(float(monto), 2)
+    with get_db() as conn:
+        cli = conn.execute(
+            "SELECT id, nombre, saldo_actual FROM clientes WHERE id = ?",
+            (cliente_id,),
+        ).fetchone()
+        if not cli:
+            raise ValueError("Cliente no encontrado")
+
+        saldo_cliente = float(cli["saldo_actual"])
+        if monto > saldo_cliente + 0.009:
+            raise ValueError(f"El monto supera la deuda pendiente (${saldo_cliente:,.2f})")
+
+        remitos = conn.execute(
+            """
+            SELECT id, precio_venta_total, COALESCE(monto_pagado, 0) AS monto_pagado
+            FROM remitos_carga
+            WHERE cliente_id = ? AND pagado = 0
+            ORDER BY fecha ASC, id ASC
+            """,
+            (cliente_id,),
+        ).fetchall()
+        if not remitos:
+            raise ValueError("El cliente no tiene facturas pendientes")
+
+        restante = monto
+        aplicaciones = []
+
+        for rem in remitos:
+            if restante <= 0.009:
+                break
+            rid = int(rem["id"])
+            total = float(rem["precio_venta_total"])
+            ya_pagado = float(rem["monto_pagado"] or 0)
+            saldo_rem = round(total - ya_pagado, 2)
+            if saldo_rem <= 0:
+                continue
+
+            aplicar = round(min(restante, saldo_rem), 2)
+            nuevo_pagado = round(ya_pagado + aplicar, 2)
+            cobrado_completo = nuevo_pagado >= total - 0.009
+
+            if cobrado_completo:
+                conn.execute(
+                    "UPDATE remitos_carga SET monto_pagado = ?, pagado = 1 WHERE id = ?",
+                    (total, rid),
+                )
+            else:
+                conn.execute(
+                    "UPDATE remitos_carga SET monto_pagado = ? WHERE id = ?",
+                    (nuevo_pagado, rid),
+                )
+
+            aplicaciones.append({
+                "remito_id": rid,
+                "monto": aplicar,
+                "cobrado_completo": cobrado_completo,
+            })
+            restante = round(restante - aplicar, 2)
+
+        if not aplicaciones:
+            raise ValueError("No se pudo aplicar el pago a ninguna factura pendiente")
+
+        conn.execute(
+            "UPDATE clientes SET fecha_ultimo_pago = date('now', 'localtime') WHERE id = ?",
+            (cliente_id,),
+        )
+        nuevo_saldo = recalcular_saldo_cliente(conn, cliente_id)
+
+    facturas_cobradas = sum(1 for a in aplicaciones if a["cobrado_completo"])
+    msg = f"Pago de ${monto:,.2f} aplicado"
+    if facturas_cobradas:
+        msg += f" · {facturas_cobradas} factura(s) saldada(s)"
+
+    return {
+        "ok": True,
+        "monto_aplicado": monto,
+        "aplicaciones": aplicaciones,
+        "saldo_cliente": nuevo_saldo,
+        "message": msg,
+    }
+
 
 def buscar_o_crear_cliente(conn, nombre: str) -> int:
     """

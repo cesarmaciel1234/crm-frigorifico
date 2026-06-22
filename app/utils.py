@@ -1,5 +1,7 @@
 from typing import Optional, Any
 from datetime import date, timedelta, datetime
+import json
+import re
 
 def fmt_plazo_dias(dias: Optional[int]) -> Optional[str]:
     if dias is None:
@@ -17,6 +19,78 @@ def _f(val, field: str) -> float:
     if n < 0:
         raise ValueError(f"{field}: no puede ser negativo")
     return n
+
+
+def parse_kg_detalle(val) -> tuple[float, list[float]]:
+    """Parsea kg total y lista de pesos por pieza (ej. '97+97+101+104')."""
+    if isinstance(val, (int, float)):
+        n = round(float(val), 2)
+        if n <= 0:
+            raise ValueError("kg debe ser > 0")
+        return n, []
+
+    if isinstance(val, list):
+        pieces = []
+        for item in val:
+            p = round(float(item), 2)
+            if p <= 0:
+                raise ValueError("pesos_piezas: cada peso debe ser > 0")
+            pieces.append(p)
+        if not pieces:
+            raise ValueError("pesos_piezas: lista vacía")
+        return round(sum(pieces), 2), pieces
+
+    s = str(val or "").replace(",", ".").strip()
+    if not s:
+        raise ValueError("kg: número inválido")
+
+    if re.match(r"^\d+(?:\.\d+)?(?:\s*\+\s*\d+(?:\.\d+)?)+$", s):
+        pieces = [round(float(p.strip()), 2) for p in s.split("+")]
+        total = round(sum(pieces), 2)
+        if total <= 0:
+            raise ValueError("kg debe ser > 0")
+        return total, pieces
+
+    try:
+        n = round(float(s), 2)
+    except ValueError:
+        raise ValueError("kg: número inválido")
+    if n <= 0:
+        raise ValueError("kg debe ser > 0")
+    return n, []
+
+
+def pesos_piezas_to_json(pieces: list[float]) -> str:
+    return json.dumps(pieces) if pieces else "[]"
+
+
+def pesos_piezas_from_json(raw) -> list[float]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            return []
+        return [round(float(x), 2) for x in data if float(x) > 0]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+
+def resolve_remito_kg(d: dict) -> tuple[float, list[float], int]:
+    """Resuelve kg, pesos por pieza y cantidad desde el payload de un remito."""
+    pesos_raw = d.get("pesos_piezas")
+    if isinstance(pesos_raw, list) and pesos_raw:
+        kg, pieces = parse_kg_detalle(pesos_raw)
+    else:
+        kg, pieces = parse_kg_detalle(d.get("kg"))
+
+    cantidad_raw = d.get("cantidad")
+    cantidad = int(cantidad_raw) if cantidad_raw not in (None, "", 0, "0") else 0
+    if cantidad < 0:
+        raise ValueError("cantidad inválida")
+    if not cantidad and pieces:
+        cantidad = len(pieces)
+    return kg, pieces, cantidad
 
 def _i(val, field: str, mn: int = 1) -> int:
     try:

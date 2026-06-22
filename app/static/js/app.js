@@ -1,6 +1,16 @@
 const $ = id => document.getElementById(id);
         const esc = s => (window.CrmSafe && window.CrmSafe.esc(s)) || String(s ?? '');
 
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            if (String(msg).includes('api.open-meteo.com')) return false;
+            console.error("Error global de JS:", msg, "Línea:", lineNo, "Error:", error);
+            // alert solo si estamos en móvil para que el usuario pueda ver qué falló.
+            if(window.innerWidth < 1000) {
+                alert("Error JS: " + msg + "nLínea: " + lineNo + ":" + columnNo + "n" + (error ? error.stack : ""));
+            }
+            return false;
+        };
+
         // --- OFFLINE SYNC ENGINE (Dexie) ---
         const MODO_PRUEBA = false; // Cambiar a false para enviar datos a la nube
         const db = new Dexie('CarniceriaContableDB');
@@ -83,11 +93,24 @@ const $ = id => document.getElementById(id);
         };
         const fmtPct = n => n != null ? n.toFixed(2) + '%' : '—';
 
+        function parseKgInput(val) {
+            const s = String(val || '').replace(/,/g, '.').trim();
+            if (/^\d+(?:\.\d+)?(?:\s*\+\s*\d+(?:\.\d+)?)+$/.test(s)) {
+                const pesos_piezas = s.split('+').map(p => parseFloat(p.trim())).filter(n => !isNaN(n) && n > 0);
+                const kg = Math.round(pesos_piezas.reduce((a, b) => a + b, 0) * 100) / 100;
+                return { kg, pesos_piezas };
+            }
+            const kg = parseFloat(s);
+            if (!isNaN(kg) && kg > 0) return { kg, pesos_piezas: [] };
+            return { kg: 0, pesos_piezas: [] };
+        }
+
         function remitoEstado(pagado) {
             if (typeof pagado === 'string') {
                 const s = pagado.toLowerCase();
                 if (s === 'cobrado') return { label: 'Cobrado', badgeClass: 'badge-success', cobrable: false };
                 if (s === 'incobrable') return { label: 'Incobrable', badgeClass: 'badge-neutral', cobrable: false };
+                if (s === 'parcial') return { label: 'Parcial', badgeClass: 'badge-warning', cobrable: true };
                 return { label: 'Pendiente', badgeClass: 'badge-danger', cobrable: true };
             }
             const p = Number(pagado ?? 0);
@@ -95,6 +118,18 @@ const $ = id => document.getElementById(id);
             if (p === 2) return { label: 'Incobrable', badgeClass: 'badge-neutral', cobrable: false };
             return { label: 'Pendiente', badgeClass: 'badge-danger', cobrable: true };
         }
+
+        function remitoSaldoPendiente(r) {
+            const total = Number(r.precio_venta_total || 0);
+            const pagado = Number(r.monto_pagado || 0);
+            const isCobrado = (r.pagado ?? r.estado_cobro) === 'cobrado' || Number(r.pagado) === 1 || (r.estado_cobro === 'incobrable' || Number(r.pagado) === 2);
+            if (isCobrado) return 0;
+            return Math.max(0, total - pagado);
+        }
+
+        let remitoPagoActual = null;
+        let cobranzaClienteActual = null;
+        let pagoCentralDeudaActual = null;
 
         let data = { enemigos: [], remitos: [], estrategia: {}, bancos: [], historial: [], historialPagos: [], bulk: [], clientes: [], auditoria: [] };
         let isProMode = true;
@@ -107,11 +142,17 @@ const $ = id => document.getElementById(id);
             home: ['Inicio', 'Resumen rápido', 'Inicio'],
             dashboard: ['', 'Análisis general del negocio', 'Panel del jefe'],
             deudas: ['Prioridad de pagos', 'Obligaciones ordenadas por impacto financiero', 'Obligaciones'],
-            remitos: ['Remitos de venta', 'Historial de ventas y márgenes', 'Ventas'],
+            remitos: ['Historial de venta', 'Historial de ventas y márgenes', 'Ventas'],
             clientes: ['CRM de Clientes', 'Gestión de cuentas corrientes y créditos', 'Clientes'],
-            registro: ['Nuevo registro', 'Alta de deudas, remitos y entidades', 'Registro'],
+            registro: ['Nueva deuda', 'Alta de deudas, remitos y entidades', 'Deuda'],
+            'compra-bulk': ['Compra Bulk', 'Registrar nuevo lote mayorista de carne', 'Bulk'],
+            'ventas-express': ['Ventas Express', 'Registro rápido de ventas de mostrador', 'Express'],
             'historial-pagos': ['Historial de pagos', 'Ledger de movimientos por cuota', 'Pagos'],
-            auditoria: ['Auditoría', 'Historial completo de acciones', 'Historial']
+            cobranzas: ['Central de Cobranzas', 'Clientes con saldo pendiente', 'Cobranzas'],
+            'pago-central': ['Pago Centralizado Empresarial', 'Obligaciones pendientes de pago', 'Pagos'],
+            auditoria: ['Auditoría', 'Historial completo de acciones', 'Historial'],
+            'cliente-detalle': ['Perfil de Cliente', 'Detalle corporativo y facturación', 'Perfil'],
+            'nueva-venta': ['Registrar Venta', 'Emitir remito o factura a cuenta corriente', 'Ventas']
         };
 
         function setLoading(on) {
@@ -237,6 +278,133 @@ const $ = id => document.getElementById(id);
                 cerrarModalPago();
                 closeDrawer();
                 await loadAll();
+            } catch (e) { toast(e.message, true); }
+        }
+
+        function abrirModalPagoRemito(remito) {
+            if (!remito) return;
+            const saldo = remitoSaldoPendiente(remito);
+            if (saldo <= 0) {
+                toast('Este remito no tiene saldo pendiente', true);
+                return;
+            }
+            remitoPagoActual = remito;
+            const cliente = currentClientData?.nombre || remito.cliente || '';
+            $('modalPagoRemitoSub').textContent = `Remito #${remito.id}${cliente ? ' · ' + cliente : ''}`;
+            $('inpRemitoSaldo').value = fmt(saldo);
+            $('inpMontoRemitoPago').value = saldo;
+            $('inpMontoRemitoPago').max = saldo;
+            $('modalPagoRemito').classList.add('open');
+            setTimeout(() => $('inpMontoRemitoPago')?.focus(), 100);
+        }
+
+        function cerrarModalPagoRemito() {
+            $('modalPagoRemito')?.classList.remove('open');
+            remitoPagoActual = null;
+        }
+
+        async function confirmarPagoRemito() {
+            if (!remitoPagoActual) return;
+            const saldo = remitoSaldoPendiente(remitoPagoActual);
+            const monto = parseFloat($('inpMontoRemitoPago').value);
+            if (!monto || monto <= 0) {
+                toast('Ingresá un monto válido', true);
+                return;
+            }
+            if (monto > saldo + 0.009) {
+                toast('El monto supera el saldo pendiente', true);
+                return;
+            }
+            try {
+                const res = await api('/api/remitos/' + remitoPagoActual.id + '/cobrar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ monto_pagado: monto })
+                });
+                toast(res.message || 'Pago registrado');
+                cerrarModalPagoRemito();
+                await loadAll();
+                if (currentClientData && $('view-cliente-detalle')?.classList.contains('active')) {
+                    const c = await api('/api/clientes/' + currentClientData.id);
+                    currentClientData = c;
+                    if ($('viewClientTitle')) $('viewClientTitle').textContent = c.nombre;
+                    renderClientDashboard();
+                } else {
+                    await renderRemitosFull();
+                }
+            } catch (e) { toast(e.message, true); }
+        }
+
+        function abrirAccionCobranza(clientId) {
+            const c = (data.clientes || []).find(x => x.id === clientId);
+            if (!c) return;
+            cobranzaClienteActual = c;
+            if ($('modalCobranzaAccionSub')) {
+                $('modalCobranzaAccionSub').textContent = `${c.nombre} · Deuda $${fmt(c.saldo_actual)}`;
+            }
+            $('modalCobranzaAccion')?.classList.add('open');
+        }
+        window.abrirAccionCobranza = abrirAccionCobranza;
+
+        function cerrarModalCobranzaAccion() {
+            $('modalCobranzaAccion')?.classList.remove('open');
+        }
+
+        function cobranzaElegirVer() {
+            const c = cobranzaClienteActual;
+            cerrarModalCobranzaAccion();
+            cobranzaClienteActual = null;
+            if (c) openClientDrawer(c.id);
+        }
+
+        function cobranzaElegirCobrar() {
+            if (!cobranzaClienteActual) return;
+            const c = cobranzaClienteActual;
+            cerrarModalCobranzaAccion();
+            abrirModalPagoGlobal(c);
+        }
+
+        function abrirModalPagoGlobal(cliente) {
+            if (!cliente) return;
+            cobranzaClienteActual = cliente;
+            const saldo = Number(cliente.saldo_actual || 0);
+            if ($('modalPagoGlobalSub')) $('modalPagoGlobalSub').textContent = cliente.nombre;
+            if ($('inpPagoGlobalSaldo')) $('inpPagoGlobalSaldo').value = fmt(saldo);
+            if ($('inpMontoPagoGlobal')) {
+                $('inpMontoPagoGlobal').value = saldo;
+                $('inpMontoPagoGlobal').max = saldo;
+            }
+            $('modalPagoGlobal')?.classList.add('open');
+            setTimeout(() => $('inpMontoPagoGlobal')?.focus(), 100);
+        }
+
+        function cerrarModalPagoGlobal() {
+            $('modalPagoGlobal')?.classList.remove('open');
+            cobranzaClienteActual = null;
+        }
+
+        async function confirmarPagoGlobal() {
+            if (!cobranzaClienteActual) return;
+            const saldo = Number(cobranzaClienteActual.saldo_actual || 0);
+            const monto = parseFloat($('inpMontoPagoGlobal').value);
+            if (!monto || monto <= 0) {
+                toast('Ingresá un monto válido', true);
+                return;
+            }
+            if (monto > saldo + 0.009) {
+                toast('El monto supera la deuda pendiente', true);
+                return;
+            }
+            try {
+                const res = await api('/api/clientes/' + cobranzaClienteActual.id + '/cobrar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ monto_pagado: monto })
+                });
+                toast(res.message || 'Cobro registrado');
+                cerrarModalPagoGlobal();
+                await loadAll();
+                renderCobranzas();
             } catch (e) { toast(e.message, true); }
         }
 
@@ -372,14 +540,21 @@ const $ = id => document.getElementById(id);
                 if ($('barDeudaSub')) $('barDeudaSub').textContent = `Int: $${fmt(mf.int_acumulado || 0)}`;
                 
                 const absCapital = Math.abs(mf.capital);
-                const isPos = mf.capital >= 0;
-                const signStr = isPos ? '+' : '-';
-                const signClass = isPos ? 'sign-pos' : 'sign-neg';
-                const signSpan = `<span class="${signClass}">${signStr}</span>`;
-                if ($('barCapitalValue')) $('barCapitalValue').innerHTML = signSpan + '$' + fmt(absCapital);
+                const signStr = mf.capital < 0 ? '-' : '';
+                const isNeg = mf.capital < 0;
+                const isZero = mf.capital === 0;
+                if ($('barCapitalValue')) {
+                    $('barCapitalValue').textContent = signStr + '$' + fmt(absCapital);
+                    $('barCapitalValue').className = 'value ' + (isNeg ? 'capital-neg' : isZero ? 'capital-zero' : 'capital-pos');
+                }
                 if ($('barCapitalTrend')) {
-                    $('barCapitalTrend').textContent = mf.tendencia === 'up' ? '▲' : '▼';
-                    $('barCapitalTrend').className = 'trend ' + mf.tendencia;
+                    const trend = isNeg ? 'down' : (isZero ? 'down' : (mf.tendencia || 'up'));
+                    $('barCapitalTrend').textContent = trend === 'up' ? '▲' : '▼';
+                    $('barCapitalTrend').className = 'trend ' + trend;
+                    $('barCapitalTrend').style.visibility = isZero ? 'hidden' : 'visible';
+                }
+                if ($('barCapitalSub')) {
+                    $('barCapitalSub').textContent = isNeg ? 'En déficit' : isZero ? 'Sin margen' : 'Disponible hoy';
                 }
             }
 
@@ -427,17 +602,8 @@ const $ = id => document.getElementById(id);
             }).join('');
         }
 
-        function renderHomeTable() {
-            if (!data.enemigos || !data.enemigos.length) {
-                if (isProMode) {
-                    $('tblHomeWrapperPro').innerHTML = '<div class="empty-state">No hay obligaciones cargadas</div>';
-                } else {
-                    $('tblHome').innerHTML = '<tr><td colspan="8"><div class="empty-state">No hay obligaciones cargadas</div></td></tr>';
-                }
-                return;
-            }
-            
-            const sorted = [...data.enemigos].sort((a, b) => {
+        function sortEnemigosPrioridad(list) {
+            return [...list].sort((a, b) => {
                 const getScore = e => {
                     if (e.vencido) return -1000 - (e.dias_retraso || 0);
                     if (e.estado_vencimiento === 'hoy') return 0;
@@ -447,33 +613,31 @@ const $ = id => document.getElementById(id);
                 };
                 return getScore(a) - getScore(b);
             });
+        }
 
-            if (isProMode) {
-                $('tblHomeWrapperPro').innerHTML = sorted.map(e => {
-                    const isVencido = e.vencido;
-                    let tipoClase = (e.tipo || 'neutro').toLowerCase();
-                    
-                    const cfrText = e.sin_interes ? '0%' : fmtPct(e.cfr);
-                    const intText = e.sin_interes ? '$0' : '$' + fmtCompact(e.interes);
-                    const capText = '$' + fmtCompact(e.recibido);
-
-                    let icon = '💳';
-                    if (tipoClase === 'proveedor') icon = '🏭';
-                    if (tipoClase === 'cheque') icon = '🧾';
-                    if (tipoClase === 'banco') icon = '🏦';
-                    if (tipoClase.includes('préstamo') || tipoClase.includes('prestamo')) icon = '🦈';
-
-                    const totalHighlight = isVencido ? ' highlight' : '';
-                    
-                    let dueHtml = plazoTexto(e);
-                    if (dueHtml.toLowerCase().includes('- vto')) {
-                        dueHtml = dueHtml.replace(/ - vto /i, '<br>Vto: <strong>') + '</strong>';
-                    } else if (dueHtml.toLowerCase().includes('- vto:')) {
-                        dueHtml = dueHtml.replace(/ - vto: /i, '<br>Vto: <strong>') + '</strong>';
-                    }
-
-                    return `
-            <div class="debt-card clickable" data-id="${e.id}">
+        function deudaCardHtml(e, opts = {}) {
+            const { clickable = true, actionBtnHtml = '' } = opts;
+            const isVencido = e.vencido;
+            let tipoClase = (e.tipo || 'neutro').toLowerCase();
+            const cfrText = e.sin_interes ? '0%' : fmtPct(e.cfr);
+            const intText = e.sin_interes ? '$0' : '$' + fmtCompact(e.interes);
+            const capText = '$' + fmtCompact(e.recibido);
+            let icon = '💳';
+            if (tipoClase === 'proveedor') icon = '🏭';
+            if (tipoClase === 'cheque') icon = '🧾';
+            if (tipoClase === 'banco') icon = '🏦';
+            if (tipoClase.includes('préstamo') || tipoClase.includes('prestamo')) icon = '🦈';
+            const totalHighlight = isVencido ? ' highlight' : '';
+            let dueHtml = plazoTexto(e);
+            if (dueHtml.toLowerCase().includes('- vto')) {
+                dueHtml = dueHtml.replace(/ - vto /i, '<br>Vto: <strong>') + '</strong>';
+            } else if (dueHtml.toLowerCase().includes('- vto:')) {
+                dueHtml = dueHtml.replace(/ - vto: /i, '<br>Vto: <strong>') + '</strong>';
+            }
+            const clickCls = clickable && !actionBtnHtml ? ' clickable' : '';
+            const extraCls = actionBtnHtml ? ' cobranza-debt-card' : '';
+            return `
+            <div class="debt-card${clickCls}${extraCls}" data-id="${e.id}">
                 <div class="card-header">
                     <div class="card-title-group">
                         <div class="icon-box">${icon}</div>
@@ -484,7 +648,6 @@ const $ = id => document.getElementById(id);
                     </div>
                     ${badgeVencimiento(e)}
                 </div>
-
                 <div class="card-body">
                     <div class="data-col">
                         <span class="data-label">Capital</span>
@@ -499,7 +662,6 @@ const $ = id => document.getElementById(id);
                         <span class="data-value">${cfrText}</span>
                     </div>
                 </div>
-
                 <div class="card-footer">
                     <div class="amount-section">
                         <span class="amount-label">TOTAL A PAGAR</span>
@@ -509,8 +671,24 @@ const $ = id => document.getElementById(id);
                         ${dueHtml}
                     </div>
                 </div>
+                ${actionBtnHtml}
             </div>`;
-                }).join('');
+        }
+
+        function renderHomeTable() {
+            if (!data.enemigos || !data.enemigos.length) {
+                if (isProMode) {
+                    $('tblHomeWrapperPro').innerHTML = '<div class="empty-state">No hay obligaciones cargadas</div>';
+                } else {
+                    $('tblHome').innerHTML = '<tr><td colspan="8"><div class="empty-state">No hay obligaciones cargadas</div></td></tr>';
+                }
+                return;
+            }
+            
+            const sorted = sortEnemigosPrioridad(data.enemigos);
+
+            if (isProMode) {
+                $('tblHomeWrapperPro').innerHTML = sorted.map(e => deudaCardHtml(e)).join('');
                 
                 document.querySelectorAll('#tblHomeWrapperPro .clickable').forEach(card => {
                     card.addEventListener('click', () => {
@@ -585,7 +763,7 @@ const $ = id => document.getElementById(id);
             const all = await api('/api/remitos');
             $('remitoCount').textContent = all.length + ' registros';
             $('tblRemitosFull').innerHTML = all.length ? all.map(r => {
-                const est = remitoEstado(r.pagado ?? r.estado_cobro);
+                const est = remitoEstado(r.estado_cobro ?? r.pagado);
                 const badgeStatus = `<div style="margin-bottom:4px"><span class="badge ${est.badgeClass}" style="font-size:9px;padding:2px 4px">${est.label}</span></div>`;
                 const actionBtn = est.cobrable
                     ? `<button type="button" class="btn btn-ghost btn-sm btn-cobrar-remito" data-rid="${r.id}" style="color:var(--success); border:1px solid var(--success); padding: 2px 4px; font-size:9px; width:100%">Cobrar</button>`
@@ -617,15 +795,11 @@ const $ = id => document.getElementById(id);
 
             // Vincular acciones de cobro
             document.querySelectorAll('.btn-cobrar-remito').forEach(btn => {
-                btn.addEventListener('click', async ev => {
+                btn.addEventListener('click', ev => {
                     ev.stopPropagation();
-                    if (!confirm('¿Confirmar cobro de este remito?')) return;
-                    try {
-                        await api('/api/remitos/' + btn.dataset.rid + '/cobrar', { method: 'POST' });
-                        toast('Remito cobrado correctamente');
-                        await loadAll();
-                        await renderRemitosFull();
-                    } catch (e) { toast(e.message, true); }
+                    const rid = parseInt(btn.dataset.rid, 10);
+                    const remito = all.find(r => r.id === rid);
+                    if (remito) abrirModalPagoRemito(remito);
                 });
             });
         }
@@ -666,7 +840,7 @@ const $ = id => document.getElementById(id);
                     progreso
                 ].map(csvCell).join(';');
             });
-            const csv = '\ufeff' + [headers.map(csvCell).join(';'), ...lines].join('\r\n');
+            const csv = 'ufeff' + [headers.map(csvCell).join(';'), ...lines].join('rn');
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -813,108 +987,360 @@ const $ = id => document.getElementById(id);
             
             document.querySelectorAll('#tblClientes tr.clickable, #tblInrecuperables tr.clickable').forEach((row, idx) => {
                 row.addEventListener('click', () => {
-                    activeRowIndex = idx;
-                    updateSelectedRow(Array.from(table.querySelectorAll('tr')));
                     const cid = parseInt(row.dataset.id, 10);
                     openClientDrawer(cid);
                 });
             });
+
+            // Populate datalist for Ventas Express
+            const datalist = $('clientesExpressList');
+            if (datalist) {
+                datalist.innerHTML = (data.clientes || []).map(c => `<option value="${esc(c.nombre)}"></option>`).join('');
+            }
         }
 
+        function badgeCobranzaMora(c) {
+            if (c.en_mora) return '<span class="badge-home vencido" style="line-height:1.2;text-align:center;display:inline-block">En<br>mora</span>';
+            if (c.limite_superado) return '<span class="badge-home vencido" style="line-height:1.2;text-align:center;display:inline-block">Límite<br>superado</span>';
+            return '<span class="badge-home verde" style="line-height:1.2;text-align:center;display:inline-block">Al<br>día</span>';
+        }
+
+        function cobranzaCardHtml(c) {
+            const scoreIcons = { A: '🅰️', B: '📊', C: '⚠️', D: '⛔' };
+            const icon = scoreIcons[c.scoring] || '🏪';
+            const pctUso = c.techo_deuda > 0 ? Math.round((c.saldo_actual / c.techo_deuda) * 100) + '%' : '—';
+            const ultimoPago = c.fecha_ultimo_pago ? fmtFecha(c.fecha_ultimo_pago) : 'Nunca';
+            const moraText = c.en_mora
+                ? (c.oldest_unpaid ? `En mora · desde ${fmtFecha(c.oldest_unpaid)}` : 'En mora')
+                : (c.oldest_unpaid ? `Al día · ${fmtFecha(c.oldest_unpaid)}` : 'Sin vencimientos');
+            const totalCls = c.en_mora ? ' highlight' : '';
+
+            return `
+            <div class="debt-card cobranza-debt-card">
+                <div class="card-header">
+                    <div class="card-title-group">
+                        <div class="icon-box">${icon}</div>
+                        <div>
+                            <h3 class="card-title">${esc(c.nombre)}</h3>
+                            <span class="pill pill-type">Scoring ${esc(c.scoring)}</span>
+                        </div>
+                    </div>
+                    ${badgeCobranzaMora(c)}
+                </div>
+                <div class="card-body">
+                    <div class="data-col">
+                        <span class="data-label">Scoring</span>
+                        <span class="data-value">${esc(c.scoring)}</span>
+                    </div>
+                    <div class="data-col">
+                        <span class="data-label">Límite</span>
+                        <span class="data-value">$${fmtCompact(c.techo_deuda)}</span>
+                    </div>
+                    <div class="data-col">
+                        <span class="data-label">Uso crédito</span>
+                        <span class="data-value">${pctUso}</span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="amount-section">
+                        <span class="amount-label">TOTAL A COBRAR</span>
+                        <span class="amount-total${totalCls}">$${fmtCompact(c.saldo_actual)}</span>
+                    </div>
+                    <div class="due-details">
+                        Último pago: <strong>${ultimoPago}</strong><br>${moraText}
+                    </div>
+                </div>
+                <button type="button" class="btn btn-primary btn-cobranza-accion cobranza-card-btn" data-cid="${c.id}">Cobrar / Ver</button>
+            </div>`;
+        }
+
+        function renderCobranzas() {
+            const grid = $('cobranzasGrid');
+            if (!grid) return;
+            let conDeuda = data.clientes.filter(c => c.saldo_actual > 0);
+            conDeuda.sort((a,b) => b.saldo_actual - a.saldo_actual);
+            
+            let totalDeuda = conDeuda.reduce((acc, c) => acc + c.saldo_actual, 0);
+            const enMora = conDeuda.filter(c => c.en_mora);
+            const montoMora = enMora.reduce((acc, c) => acc + c.saldo_actual, 0);
+
+            if ($('cobranzasCount')) $('cobranzasCount').textContent = `${conDeuda.length} clientes con saldo pendiente`;
+
+            if ($('cobBarClientesMora')) $('cobBarClientesMora').textContent = enMora.length;
+            if ($('cobBarClientesMoraSub')) $('cobBarClientesMoraSub').textContent = enMora.length === 1 ? 'Cliente con facturas vencidas' : 'Clientes con facturas vencidas';
+            if ($('cobBarMontoMora')) $('cobBarMontoMora').textContent = '$' + fmt(montoMora);
+            if ($('cobBarCapitalTotal')) $('cobBarCapitalTotal').textContent = '$' + fmt(totalDeuda);
+            if ($('cobBarCapitalSub')) $('cobBarCapitalSub').textContent = `${conDeuda.length} clientes con saldo`;
+            
+            if (!conDeuda.length) {
+                grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text-secondary);">No hay clientes con saldo pendiente</div>';
+            } else {
+                grid.innerHTML = conDeuda.map(cobranzaCardHtml).join('');
+            }
+
+            grid.querySelectorAll('.btn-cobranza-accion').forEach(btn => {
+                btn.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    abrirAccionCobranza(parseInt(btn.dataset.cid, 10));
+                });
+            });
+        }
+
+        function pagoCentralSaldo(e) {
+            const s = Number(e.saldo_pendiente);
+            if (!Number.isNaN(s) && s > 0) return s;
+            return Number(e.total_pagar || 0);
+        }
+
+        function pagoCentralCardHtml(e) {
+            return deudaCardHtml(e, {
+                clickable: false,
+                actionBtnHtml: `<button type="button" class="btn btn-primary btn-pago-central-accion cobranza-card-btn" data-deuda-id="${e.id}">Pagar / Ver</button>`
+            });
+        }
+
+        function abrirAccionPagoCentral(deudaId) {
+            const e = (data.enemigos || []).find(x => x.id === deudaId);
+            if (!e) return;
+            pagoCentralDeudaActual = e;
+            const saldo = pagoCentralSaldo(e);
+            if ($('modalPagoCentralAccionSub')) {
+                $('modalPagoCentralAccionSub').textContent = `${e.alias} · Saldo $${fmt(saldo)}`;
+            }
+            const btnPagar = $('btnPagoCentralPagar');
+            if (btnPagar) {
+                const puedePagar = e.tiene_cuotas && !e.completa;
+                btnPagar.disabled = !puedePagar;
+                btnPagar.style.opacity = puedePagar ? '1' : '0.5';
+                btnPagar.title = puedePagar ? '' : 'Esta obligación no usa plan de cuotas';
+            }
+            $('modalPagoCentralAccion')?.classList.add('open');
+        }
+
+        function cerrarModalPagoCentralAccion() {
+            $('modalPagoCentralAccion')?.classList.remove('open');
+            pagoCentralDeudaActual = null;
+        }
+
+        function pagoCentralElegirVer() {
+            const e = pagoCentralDeudaActual;
+            cerrarModalPagoCentralAccion();
+            if (e) openDrawer(e);
+        }
+
+        function pagoCentralElegirPagar() {
+            const e = pagoCentralDeudaActual;
+            if (!e) return;
+            cerrarModalPagoCentralAccion();
+            selectedDeuda = e;
+            if (e.tiene_cuotas && !e.completa) {
+                abrirModalPago();
+            } else {
+                openDrawer(e);
+                toast('Abrí el detalle para gestionar esta obligación', false);
+            }
+        }
+
+        function renderPagosCentral() {
+            const grid = $('pagoCentralGrid');
+            if (!grid) return;
+            const pendientes = (data.enemigos || []).filter(e => !e.completa && pagoCentralSaldo(e) > 0.009);
+            const sorted = sortEnemigosPrioridad(pendientes);
+            const vencidas = pendientes.filter(e => e.vencido);
+            const totalPagar = pendientes.reduce((acc, e) => acc + pagoCentralSaldo(e), 0);
+            const montoVencido = vencidas.reduce((acc, e) => acc + pagoCentralSaldo(e), 0);
+
+            if ($('pagoCentralCount')) {
+                $('pagoCentralCount').textContent = `${pendientes.length} obligacion${pendientes.length === 1 ? '' : 'es'} pendiente${pendientes.length === 1 ? '' : 's'}`;
+            }
+            if ($('pcBarObligaciones')) $('pcBarObligaciones').textContent = pendientes.length;
+            if ($('pcBarMontoVencido')) $('pcBarMontoVencido').textContent = '$' + fmt(montoVencido);
+            if ($('pcBarTotalPagar')) $('pcBarTotalPagar').textContent = '$' + fmt(totalPagar);
+            if ($('pcBarTotalSub')) $('pcBarTotalSub').textContent = `${pendientes.length} obligaciones activas`;
+
+            if (!pendientes.length) {
+                grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text-secondary);">No hay obligaciones pendientes de pago</div>';
+            } else {
+                grid.innerHTML = sorted.map(pagoCentralCardHtml).join('');
+            }
+
+            grid.querySelectorAll('.btn-pago-central-accion').forEach(btn => {
+                btn.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    abrirAccionPagoCentral(parseInt(btn.dataset.deudaId, 10));
+                });
+            });
+        }
+
+        let currentClientData = null;
+        let currentClientFilter = 'all';
+        let clientDetailReturnView = 'clientes';
+
         async function openClientDrawer(clientId) {
+            if (!$('view-cliente-detalle')) {
+                toast('Actualizando aplicación...', false);
+                setTimeout(() => window.location.reload(), 500);
+                return;
+            }
+            const currentView = document.querySelector('.view.active')?.id?.replace(/^view-/, '') || '';
+            if (currentView && currentView !== 'cliente-detalle') {
+                clientDetailReturnView = currentView;
+            }
             selectedClienteId = clientId;
-            $('drawerClientOverlay').classList.add('open');
-            $('drawerClientBody').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">Cargando detalles...</div>';
+            switchView('cliente-detalle');
+            $('viewClientBody').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">Cargando detalles corporativos...</div>';
             
             try {
                 const c = await api('/api/clientes/' + clientId);
                 if (selectedClienteId !== clientId) return;
                 
-                $('drawerClientTitle').textContent = c.nombre;
+                currentClientData = c;
+                currentClientFilter = 'all';
+                const titleEl = $('viewClientTitle');
+                if (titleEl) titleEl.textContent = c.nombre;
                 
-                const limitStatus = c.limite_superado 
-                    ? '<span class="badge badge-danger">Límite de crédito superado</span>' 
-                    : '<span class="badge badge-success">Crédito OK</span>';
-                    
-                let remitosHtml = '';
-                if (c.remitos && c.remitos.length) {
-                    remitosHtml = `
-                    <h4 style="margin:20px 0 10px 0;border-bottom:1px solid var(--border);padding-bottom:5px">Remitos de Venta</h4>
-                    <div class="table-wrap">
-                        <table class="home-table" style="font-size:0.85rem">
-                            <thead>
-                                <tr>
-                                    <th>Info</th>
-                                    <th>Venta</th>
-                                    <th>Estado</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${c.remitos.map(r => {
-                                    const est = remitoEstado(r.pagado ?? r.estado_cobro);
-                                    const btn = r.estado_cobro !== 'cobrado' 
-                                        ? `<div style="margin-top:4px"><button class="btn btn-ghost btn-sm btn-cobrar-remito-drawer" data-rid="${r.id}" style="color:var(--success); border:1px solid var(--success); padding:2px 6px; font-size:9px">Cobrar</button></div>` 
-                                        : '';
-                                        
-                                    return `<tr>
-                                        <td>
-                                            <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Remito #${r.id}</div>
-                                            <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${r.fecha}</div>
-                                        </td>
-                                        <td style="line-height:1.4; font-size:10px;">
-                                            <div class="home-amount" style="font-size:13px">$${fmtCompact(r.precio_venta_total)}</div>
-                                            <div style="color:var(--text-muted);font-size:9px;margin-top:2px">${fmt(r.kg)} kg</div>
-                                        </td>
-                                        <td style="text-align:center">
-                                            <span class="badge ${est.badgeClass}" style="padding:2px 4px;font-size:0.75rem">${est.label}</span>
-                                            ${btn}
-                                        </td>
-                                    </tr>`;
-                                }).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                    `;
-                } else {
-                    remitosHtml = `
-                    <h4 style="margin:20px 0 10px 0;border-bottom:1px solid var(--border);padding-bottom:5px">Remitos de Venta</h4>
-                    <div style="color:var(--text-muted);text-align:center;padding:10px;font-size:0.85rem">Sin remitos registrados para este cliente</div>
-                    `;
-                }
-                
-                $('drawerClientBody').innerHTML = `
-                    <div class="drawer-row"><span class="lbl">ID Cliente</span><span class="val">#${c.id}</span></div>
-                    <div class="drawer-row"><span class="lbl">Nombre</span><span class="val" style="font-weight:bold;color:var(--text-primary)">${esc(c.nombre)}</span></div>
-                    <div class="drawer-row"><span class="lbl">Scoring de Crédito</span><span class="val"><span class="badge badge-neutral" style="width:20px;display:inline-block;text-align:center">${c.scoring}</span></span></div>
-                    <div class="drawer-row"><span class="lbl">Techo de Deuda</span><span class="val" style="color:var(--warning)">$${fmt(c.techo_deuda)}</span></div>
-                    <div class="drawer-row"><span class="lbl">Saldo de Deuda Actual</span><span class="val" style="color:${c.saldo_actual > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:bold">$${fmt(c.saldo_actual)}</span></div>
-                    <div class="drawer-row"><span class="lbl">Estado de Deuda</span><span class="val">${limitStatus}</span></div>
-                    <div class="drawer-row"><span class="lbl">Registrado</span><span class="val">${(c.created_at || '').slice(0, 19).replace('T', ' ')}</span></div>
-                    ${remitosHtml}
-                `;
+                renderClientDashboard();
                 
                 if (c.saldo_actual > 0 && c.scoring !== 'D') {
-                    $('drawerClientIncobrable').style.display = 'inline-block';
+                    $('btnClientIncobrable').style.display = 'inline-block';
                 } else {
-                    $('drawerClientIncobrable').style.display = 'none';
+                    $('btnClientIncobrable').style.display = 'none';
                 }
                 
-                $('drawerClientBody').querySelectorAll('.btn-cobrar-remito-drawer').forEach(btn => {
-                    btn.addEventListener('click', async ev => {
-                        ev.stopPropagation();
-                        if (!confirm('¿Confirmar cobro de este remito?')) return;
-                        try {
-                            await api('/api/remitos/' + btn.dataset.rid + '/cobrar', { method: 'POST' });
-                            toast('Remito cobrado correctamente');
-                            await loadAll();
-                            await openClientDrawer(clientId);
-                        } catch (e) { toast(e.message, true); }
-                    });
-                });
-                
             } catch (e) {
-                $('drawerClientBody').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px">Error al cargar detalles: ${esc(e.message)}</div>`;
+                $('viewClientBody').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px">Error al cargar detalles: ${esc(e.message)}</div>`;
             }
+        }
+        window.openClientDrawer = openClientDrawer;
+
+        function volverDesdeClienteDetalle() {
+            switchView(clientDetailReturnView || 'clientes');
+        }
+        window.volverDesdeClienteDetalle = volverDesdeClienteDetalle;
+
+        function renderClientDashboard() {
+            if (!currentClientData) return;
+            const c = currentClientData;
+            
+            const limitStatus = c.limite_superado 
+                ? '<span style="color:var(--danger)">Bloqueado (Límite superado)</span>' 
+                : '<span style="color:var(--success)">Activo y Operativo</span>';
+                
+            let filteredRemitos = c.remitos || [];
+            if (currentClientFilter === 'pending') {
+                filteredRemitos = filteredRemitos.filter(r => (r.pagado ?? r.estado_cobro) !== 'cobrado' && (r.pagado ?? r.estado_cobro) !== 1 && (r.pagado ?? r.estado_cobro) !== 2);
+            } else if (currentClientFilter === 'paid') {
+                filteredRemitos = filteredRemitos.filter(r => (r.pagado ?? r.estado_cobro) === 'cobrado' || (r.pagado ?? r.estado_cobro) === 1 || (r.pagado ?? r.estado_cobro) === 2);
+            }
+            
+            let remitosHtml = '';
+            if (filteredRemitos.length > 0) {
+                remitosHtml = `
+                <div class="table-wrap" style="max-height: 40vh; overflow-y: auto;">
+                    <table class="data-table" style="font-size:0.85rem; width:100%;">
+                        <thead>
+                            <tr style="background:var(--bg);position:sticky;top:0;z-index:10;">
+                                <th style="text-align:left;padding:8px;">Remito</th>
+                                <th style="text-align:left;padding:8px;">Detalle</th>
+                                <th style="text-align:right;padding:8px;">Total</th>
+                                <th style="text-align:right;padding:8px;">Pagado</th>
+                                <th style="text-align:right;padding:8px;">Saldo</th>
+                                <th style="text-align:center;padding:8px;">Estado</th>
+                                <th style="text-align:center;padding:8px;">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredRemitos.map(r => {
+                                const est = remitoEstado(r.estado_cobro ?? r.pagado);
+                                const pagadoAmnt = Number(r.monto_pagado || 0);
+                                const saldoAmnt = remitoSaldoPendiente(r);
+                                const btn = est.cobrable
+                                    ? `<button class="btn btn-ghost btn-sm btn-cobrar-remito-drawer" data-rid="${r.id}" style="color:var(--brand); border:1px solid var(--brand); padding:2px 8px; font-size:10px; border-radius:6px; cursor:pointer;">Registrar Pago</button>` 
+                                    : '';
+                                    
+                                return `<tr style="border-bottom:1px solid #e5e7eb;">
+                                    <td style="padding:8px;">
+                                        <div style="font-weight:600;color:#111827;">#${r.id}</div>
+                                        <div style="font-size:10px;color:#6b7280;margin-top:2px;">${r.fecha}</div>
+                                    </td>
+                                    <td style="padding:8px;">
+                                        <div style="font-size:12px;color:#111827;font-weight:600;">${r.tipo_corte || '-'}</div>
+                                        <div style="font-size:10px;color:#6b7280;margin-top:2px;">${remitoCantidad(r)} u · ${fmt(r.kg)} kg${remitoPesosPiezas(r).length ? ' · ' + remitoPesosPiezas(r).map(p => fmt(p)).join(' ') : ''}</div>
+                                    </td>
+                                    <td style="text-align:right;padding:8px;font-weight:600;color:#111827;">$${fmt(r.precio_venta_total)}</td>
+                                    <td style="text-align:right;padding:8px;color:#10b981;">$${fmt(pagadoAmnt)}</td>
+                                    <td style="text-align:right;padding:8px;color:${saldoAmnt > 0 ? '#ef4444' : '#111827'};font-weight:bold;">$${fmt(saldoAmnt)}</td>
+                                    <td style="text-align:center;padding:8px;">
+                                        <span class="badge ${est.badgeClass}" style="padding:4px 8px;font-size:10px;">${est.label}</span>
+                                    </td>
+                                    <td style="text-align:center;padding:8px;">${btn}</td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                `;
+            } else {
+                remitosHtml = `<div style="color:#6b7280;text-align:center;padding:30px;font-size:0.9rem;background:#f9fafb;border-radius:12px;">No se encontraron facturas/remitos para este filtro.</div>`;
+            }
+            
+            const btnStyle = (filter) => currentClientFilter === filter 
+                ? 'background:var(--brand); color:white; border-color:var(--brand); padding:6px 12px; border-radius:20px; font-size:11px; font-weight:bold; cursor:pointer; border:1px solid transparent;'
+                : 'background:transparent; color:var(--text-muted); border-color:var(--border); padding:6px 12px; border-radius:20px; font-size:11px; cursor:pointer; border:1px solid var(--border);';
+                
+            $('viewClientBody').innerHTML = `
+                <div style="display:flex; flex-direction:column; gap:20px; font-family:'Segoe UI',sans-serif;">
+                    <!-- Top KPI cards -->
+                    <div style="display:flex; gap:15px; flex-wrap:wrap;">
+                        <div style="flex:1; min-width:200px; padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                            <div style="font-size:11px; color:#6b7280; font-weight:800; letter-spacing:0.5px;">DEUDA TOTAL ACUMULADA</div>
+                            <div style="font-size:32px; font-weight:900; color:${c.saldo_actual > 0 ? '#ef4444' : '#10b981'}; margin-top:8px;">$${fmt(c.saldo_actual)}</div>
+                            <div style="font-size:12px; color:#6b7280; margin-top:8px;">Límite Autorizado: <span style="font-weight:bold;color:#111827;">$${fmt(c.techo_deuda)}</span></div>
+                        </div>
+                        <div style="flex:1; min-width:200px; padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                            <div style="font-size:11px; color:#6b7280; font-weight:800; letter-spacing:0.5px;">ESTADO DEL CRÉDITO</div>
+                            <div style="font-size:18px; font-weight:bold; margin-top:12px;">${limitStatus}</div>
+                            <div style="display:flex; gap:10px; margin-top:16px;">
+                                <div style="background:#f3f4f6; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; color:#111827;">Scoring: ${c.scoring}</div>
+                                <div style="background:#f3f4f6; padding:4px 10px; border-radius:6px; font-size:11px; color:#6b7280;">Alta: ${(c.created_at || '').slice(0, 10)}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- History and Filters -->
+                    <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:16px; overflow:hidden;">
+                        <div style="padding:15px 20px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background:#f9fafb;">
+                            <h4 style="margin:0; font-size:14px; font-weight:800; color:#111827;">Historial de Facturación</h4>
+                            <div style="display:flex; gap:8px;">
+                                <button class="btn-filter-drawer" data-filter="all" style="${btnStyle('all')}">Todas</button>
+                                <button class="btn-filter-drawer" data-filter="pending" style="${btnStyle('pending')}">Impagas / Parciales</button>
+                                <button class="btn-filter-drawer" data-filter="paid" style="${btnStyle('paid')}">Pagadas</button>
+                            </div>
+                        </div>
+                        <div style="padding:0;">
+                            ${remitosHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Re-bind filter events
+            $('viewClientBody').querySelectorAll('.btn-filter-drawer').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    currentClientFilter = btn.dataset.filter;
+                    renderClientDashboard();
+                });
+            });
+            
+            // Re-bind action events
+            $('viewClientBody').querySelectorAll('.btn-cobrar-remito-drawer').forEach(btn => {
+                btn.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    const rid = parseInt(btn.dataset.rid, 10);
+                    const remito = currentClientData?.remitos?.find(r => r.id === rid);
+                    if (remito) abrirModalPagoRemito(remito);
+                });
+            });
         }
 
         function closeClientDrawer() {
@@ -1017,7 +1443,23 @@ const $ = id => document.getElementById(id);
             });
         }
 
+        function updateGreeting() {
+            const h = new Date().getHours();
+            let icon = '☀️';
+            let msg = 'Buenos días,';
+            if (h >= 13 && h < 20) {
+                icon = '🌤️';
+                msg = 'Buenas tardes,';
+            } else if (h >= 20 || h < 6) {
+                icon = '🌙';
+                msg = 'Buenas noches,';
+            }
+            if ($('topbarIcon')) $('topbarIcon').textContent = icon;
+            if ($('topbarGreeting')) $('topbarGreeting').textContent = msg;
+        }
+
         function renderAll() {
+            updateGreeting();
             renderKpis();
             renderHealth();
             renderChartCfr();
@@ -1026,6 +1468,8 @@ const $ = id => document.getElementById(id);
             renderBancos();
             renderBulkLots();
             renderClientes();
+            renderCobranzas();
+            renderPagosCentral();
             renderHistorialSidebar();
         }
 
@@ -1096,6 +1540,41 @@ const $ = id => document.getElementById(id);
             setTimeout(() => $('registroMenu').classList.remove('fade-in'), 300);
         }
 
+        window.abrirSubVistaBulk = (id) => {
+            $('bulkMenu').classList.add('field-hidden');
+            document.querySelectorAll('.bulk-subview').forEach(el => el.classList.add('field-hidden'));
+            $(id).classList.remove('field-hidden');
+            $(id).classList.add('fade-in');
+            setTimeout(() => $(id).classList.remove('fade-in'), 300);
+        };
+
+        window.volverMenuBulk = () => {
+            document.querySelectorAll('.bulk-subview').forEach(el => el.classList.add('field-hidden'));
+            $('bulkMenu').classList.remove('field-hidden');
+            $('bulkMenu').classList.add('fade-in');
+            setTimeout(() => $('bulkMenu').classList.remove('fade-in'), 300);
+        };
+
+        window.abrirSubVistaVentasExpress = (id) => {
+            $('ventasExpressMenu').classList.add('field-hidden');
+            document.querySelectorAll('.ventas-express-subview').forEach(el => el.classList.add('field-hidden'));
+            $(id).classList.remove('field-hidden');
+            $(id).classList.add('fade-in');
+            setTimeout(() => $(id).classList.remove('fade-in'), 300);
+        };
+
+        window.volverMenuVentasExpress = () => {
+            if (currentClientData) {
+                // If we came from a client profile, going back means returning to the profile
+                switchView('cliente-detalle');
+                return;
+            }
+            document.querySelectorAll('.ventas-express-subview').forEach(el => el.classList.add('field-hidden'));
+            $('ventasExpressMenu').classList.remove('field-hidden');
+            $('ventasExpressMenu').classList.add('fade-in');
+            setTimeout(() => $('ventasExpressMenu').classList.remove('fade-in'), 300);
+        };
+
         function getGreeting() {
             const h = new Date().getHours();
             let emoji = '🌙'; let text = 'Buenas noches,';
@@ -1111,11 +1590,40 @@ const $ = id => document.getElementById(id);
         }
 
         function switchView(name) {
+            if (activeRowIndex >= 0) {
+                const trs = Array.from(document.querySelectorAll('#tblHome tr.clickable'));
+                const el = trs[activeRowIndex];
+                if (el && el.nextElementSibling && el.nextElementSibling.classList.contains('detail-row')) {
+                    el.nextElementSibling.remove();
+                }
+                activeRowIndex = -1;
+            }
             if (!titles[name]) return;
-            activeRowIndex = -1;
             document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
             document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
             
+            if ($('dashboardBar')) {
+                if (name === 'home' || name === 'dashboard') {
+                    $('dashboardBar').classList.remove('field-hidden');
+                } else {
+                    $('dashboardBar').classList.add('field-hidden');
+                }
+            }
+            if ($('cobranzasBar')) {
+                if (name === 'cobranzas') {
+                    $('cobranzasBar').classList.remove('field-hidden');
+                } else {
+                    $('cobranzasBar').classList.add('field-hidden');
+                }
+            }
+            if ($('pagosCentralBar')) {
+                if (name === 'pago-central') {
+                    $('pagosCentralBar').classList.remove('field-hidden');
+                } else {
+                    $('pagosCentralBar').classList.add('field-hidden');
+                }
+            }
+
             if (name === 'dashboard' || name === 'home') {
                 titles[name][0] = getGreeting();
                 if ($('weatherWidget')) $('weatherWidget').classList.remove('field-hidden');
@@ -1125,6 +1633,7 @@ const $ = id => document.getElementById(id);
 
             if (name === 'home') {
                 if ($('btnTogglePro')) $('btnTogglePro').style.display = '';
+                renderHomeTable();
             } else {
                 if ($('btnTogglePro')) $('btnTogglePro').style.display = 'none';
             }
@@ -1139,6 +1648,8 @@ const $ = id => document.getElementById(id);
                 renderClientes();
             }
             if (name === 'historial-pagos') renderHistorialPagos();
+            if (name === 'cobranzas') renderCobranzas();
+            if (name === 'pago-central') renderPagosCentral();
             if (name === 'auditoria') renderAuditoria();
             if (name === 'registro') volverMenuRegistro();
             $('sidebar').classList.remove('open');
@@ -1187,14 +1698,37 @@ const $ = id => document.getElementById(id);
         });
         $('drawerClose').addEventListener('click', closeDrawer);
         $('drawerOverlay').addEventListener('click', ev => { if (ev.target === $('drawerOverlay')) closeDrawer(); });
-        
-        $('drawerClientClose').addEventListener('click', closeClientDrawer);
-        $('drawerClientCloseBtn').addEventListener('click', closeClientDrawer);
-        $('drawerClientOverlay').addEventListener('click', ev => { if (ev.target === $('drawerClientOverlay')) closeClientDrawer(); });
+
+        document.body.addEventListener('blur', ev => {
+            if (ev.target && ev.target.classList.contains('calc-input')) {
+                let val = ev.target.value.replace(/,/g, '.');
+                if (/^\d+(?:\.\d+)?(?:\s*\+\s*\d+(?:\.\d+)?)+$/.test(val.trim())) {
+                    const parsed = parseKgInput(val);
+                    ev.target.dataset.pesos = JSON.stringify(parsed.pesos_piezas);
+                    ev.target.value = parsed.kg;
+                    return;
+                }
+                delete ev.target.dataset.pesos;
+                if (/^[0-9+\-.*\/()\s]+$/.test(val) && val.trim() !== '') {
+                    try {
+                        let res = Function('"use strict";return (' + val + ')')();
+                        if (!isNaN(res) && isFinite(res)) {
+                            ev.target.value = Math.round(res * 100) / 100;
+                        }
+                    } catch (e) {}
+                }
+            }
+        }, true);
 
         $('drawerPagar').addEventListener('click', abrirModalPago);
         $('drawerDelete').addEventListener('click', async () => {
-            if (!selectedDeuda || !confirm('¿Eliminar ' + selectedDeuda.alias + '?')) return;
+            if (!selectedDeuda) return;
+            const pw = prompt('Ingrese la contraseña para eliminar la deuda:');
+            if (pw !== '2094') {
+                toast('Contraseña incorrecta', true);
+                return;
+            }
+            if (!confirm('¿Eliminar ' + selectedDeuda.alias + '?')) return;
             await api('/api/operaciones/' + selectedDeuda.id, { method: 'DELETE' });
             toast('Obligación eliminada');
             closeDrawer();
@@ -1202,25 +1736,38 @@ const $ = id => document.getElementById(id);
         });
 
         $('btnConfirmDeleteAuditoria')?.addEventListener('click', async () => {
-            const pwd = $('inpPasswordAuditoria').value;
-            if (!pwd) return;
-            try {
-                await api('/api/auditoria/' + selectedAuditId, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pwd })
-                });
-                toast('Registro eliminado permanentemente');
-                $('modalPasswordAuditoria').classList.remove('open');
-                await loadAll();
-            } catch (err) {
-                toast('Contraseña incorrecta o error', true);
+            if (!selectedAuditId) return;
+            const pw = prompt('Ingrese la contraseña para borrar el registro del historial:');
+            if (pw !== '2094') {
+                toast('Contraseña incorrecta', true);
+                return;
             }
+            if (!confirm('¿Borrar definitivamente este registro de auditoría?')) return;
+            await api('/api/auditoria/' + selectedAuditId, { method: 'DELETE' });
+            toast('Registro eliminado');
+            $('modalConfirmDeleteAuditoria').classList.remove('show');
+            await loadAll();
         });
 
         $('btnCancelarPago').addEventListener('click', cerrarModalPago);
         $('btnConfirmarPago').addEventListener('click', confirmarPago);
         $('modalPago').addEventListener('click', ev => { if (ev.target === $('modalPago')) cerrarModalPago(); });
+        $('btnCancelarPagoRemito')?.addEventListener('click', cerrarModalPagoRemito);
+        $('btnConfirmarPagoRemito')?.addEventListener('click', confirmarPagoRemito);
+        $('modalPagoRemito')?.addEventListener('click', ev => { if (ev.target === $('modalPagoRemito')) cerrarModalPagoRemito(); });
+        $('inpMontoRemitoPago')?.addEventListener('keydown', ev => { if (ev.key === 'Enter') confirmarPagoRemito(); });
+        $('btnCobranzaCobrar')?.addEventListener('click', cobranzaElegirCobrar);
+        $('btnCobranzaVer')?.addEventListener('click', cobranzaElegirVer);
+        $('btnCobranzaCancelar')?.addEventListener('click', cerrarModalCobranzaAccion);
+        $('modalCobranzaAccion')?.addEventListener('click', ev => { if (ev.target === $('modalCobranzaAccion')) cerrarModalCobranzaAccion(); });
+        $('btnPagoCentralPagar')?.addEventListener('click', pagoCentralElegirPagar);
+        $('btnPagoCentralVer')?.addEventListener('click', pagoCentralElegirVer);
+        $('btnPagoCentralCancelar')?.addEventListener('click', cerrarModalPagoCentralAccion);
+        $('modalPagoCentralAccion')?.addEventListener('click', ev => { if (ev.target === $('modalPagoCentralAccion')) cerrarModalPagoCentralAccion(); });
+        $('btnCancelarPagoGlobal')?.addEventListener('click', cerrarModalPagoGlobal);
+        $('btnConfirmarPagoGlobal')?.addEventListener('click', confirmarPagoGlobal);
+        $('modalPagoGlobal')?.addEventListener('click', ev => { if (ev.target === $('modalPagoGlobal')) cerrarModalPagoGlobal(); });
+        $('inpMontoPagoGlobal')?.addEventListener('keydown', ev => { if (ev.key === 'Enter') confirmarPagoGlobal(); });
         $('inpMontoPago').addEventListener('input', () => {
             const esp = planPagoActual ? planPagoActual.monto_cuota : 0;
             calcDiffUi(esp, parseFloat($('inpMontoPago').value) || 0);
@@ -1302,19 +1849,35 @@ const $ = id => document.getElementById(id);
         $('formRemito').addEventListener('submit', async ev => {
             ev.preventDefault();
             const fd = new FormData(ev.target);
+            const kgInput = ev.target.querySelector('[name=kg]');
+            let pesos_piezas = [];
+            if (kgInput?.dataset?.pesos) {
+                try { pesos_piezas = JSON.parse(kgInput.dataset.pesos); } catch (e) { pesos_piezas = []; }
+            }
+            if (!pesos_piezas.length) {
+                const parsed = parseKgInput(fd.get('kg'));
+                pesos_piezas = parsed.pesos_piezas;
+            }
             try {
                 await api('/api/remitos', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         cliente: fd.get('cliente'),
-                        kg: fd.get('kg'), costo_total_logistica: fd.get('costo'),
-                        precio_venta_total: fd.get('venta'), plazo_cobro_dias: fd.get('plazo')
+                        tipo_corte: fd.get('tipo_corte'),
+                        cantidad: fd.get('cantidad') || (pesos_piezas.length || 0),
+                        pesos_piezas: pesos_piezas.length ? pesos_piezas : undefined,
+                        kg: fd.get('kg'),
+                        precio_por_kg: fd.get('precio_por_kg'),
+                        plazo_cobro_dias: fd.get('plazo')
                     })
                 });
                 toast('Remito de venta registrado');
                 ev.target.reset();
-                ev.target.plazo.value = 30;
+                if (ev.target.plazo) ev.target.plazo.value = 30;
                 await loadAll();
+                if (currentClientData) {
+                    await openClientDrawer(currentClientData.id);
+                }
             } catch (e) { toast(e.message, true); }
         });
 
@@ -1362,197 +1925,369 @@ const $ = id => document.getElementById(id);
                 toast('Cliente registrado con éxito');
                 ev.target.reset();
                 await loadAll();
+                abrirSubVistaClientes('cliVer');
             } catch (e) { toast(e.message, true); }
         });
         
-        $('drawerClientIncobrable').addEventListener('click', async () => {
-            if (!selectedClienteId) return;
+        $('btnClientIncobrable').addEventListener('click', async () => {
+            if (!currentClientData) return;
             if (!confirm('⚠️ ¿ESTÁ SEGURO DE DECLARAR ESTE CLIENTE COMO INCOBRABLE?\nSu deuda de saldo pendiente se pasará a pérdidas y el crédito se bloqueará a $0 para siempre.')) return;
             try {
-                await api('/api/clientes/' + selectedClienteId + '/incobrable', { method: 'POST' });
+                await api('/api/clientes/' + currentClientData.id + '/incobrable', { method: 'POST' });
                 toast('Cliente declarado como Incobrable');
-                closeClientDrawer();
                 await loadAll();
+                await openClientDrawer(currentClientData.id);
             } catch (e) { toast(e.message, true); }
         });
 
-        $('drawerClientPrint').addEventListener('click', async () => {
-            if (!selectedClienteId) return;
+        const PESO_REF_CORTE = {
+            'media res': 60,
+            'cuartos': 30,
+            'parrilleros': 25,
+            'pechos': 20,
+            'novillo': 280,
+        };
+
+        function remitoPesosPiezas(r) {
+            if (Array.isArray(r?.pesos_piezas) && r.pesos_piezas.length) {
+                return r.pesos_piezas.map(Number);
+            }
+            return [];
+        }
+
+        function remitoCantidad(r) {
+            const piezas = remitoPesosPiezas(r);
+            if (piezas.length) return piezas.length;
+            const q = parseInt(r.cantidad, 10);
+            if (q > 0) return q;
+            const tipo = (r.tipo_corte || '').toLowerCase().trim();
+            const peso = PESO_REF_CORTE[tipo];
+            if (peso && r.kg > 0) {
+                const est = r.kg / peso;
+                if (Math.abs(est - Math.round(est)) < 0.12) return Math.round(est);
+            }
+            return 1;
+        }
+
+        function remitoKgPorUnidad(r) {
+            const piezas = remitoPesosPiezas(r);
+            if (piezas.length === 1) return piezas[0];
+            const q = remitoCantidad(r);
+            return q > 0 ? r.kg / q : r.kg;
+        }
+
+        function fmtFechaRemito(iso) {
+            if (!iso) return '—';
+            const p = String(iso).split('T')[0].split('-');
+            if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+            return iso;
+        }
+
+        function pesosPiezasHtml(piezas) {
+            if (!piezas.length) return '';
+            return `<div class="pesos-grid">${piezas.map(p => `<span class="peso-chip">${Number(p).toFixed(2)}</span>`).join('')}</div>`;
+        }
+
+        function reporteEstadoClass(label) {
+            const l = (label || '').toLowerCase();
+            if (l.includes('cobrado')) return 'st-paid';
+            if (l.includes('parcial')) return 'st-partial';
+            if (l.includes('incobrable')) return 'st-bad';
+            return 'st-pending';
+        }
+
+        function buildReporteClienteHtml(c) {
+            const remitos = c.remitos || [];
+            const genAt = new Date().toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+            const totalKg = remitos.reduce((acc, r) => acc + r.kg, 0);
+            const totalVendido = remitos.reduce((acc, r) => acc + r.precio_venta_total, 0);
+            const totalCobrado = remitos.reduce((acc, r) => acc + (Number(r.monto_pagado || 0) || (Number(r.pagado) === 1 ? r.precio_venta_total : 0)), 0);
+            const disponible = Math.max(0, c.techo_deuda - c.saldo_actual);
+            const totalUnidades = remitos.reduce((acc, r) => acc + remitoCantidad(r), 0);
+
+            const remitosRows = remitos.length
+                ? remitos.map((r) => {
+                    const est = remitoEstado(r.estado_cobro ?? r.pagado);
+                    const piezas = remitoPesosPiezas(r);
+                    const cant = remitoCantidad(r);
+                    const corte = (r.tipo_corte || '—').toUpperCase();
+                    const pxKg = r.precio_por_kg || (r.kg > 0 ? r.precio_venta_total / r.kg : 0);
+                    const pagado = Number(r.monto_pagado || 0) || (Number(r.pagado) === 1 ? r.precio_venta_total : 0);
+                    const saldo = Math.max(0, r.precio_venta_total - pagado);
+                    const plazo = r.plazo_cobro_dias != null ? `${r.plazo_cobro_dias} días` : '—';
+                    const importe = r.precio_venta_total;
+                    const detalleHtml = piezas.length
+                        ? `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span>${pesosPiezasHtml(piezas)}</div>`
+                        : `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span><span class="sin-piezas">${fmt(r.kg)} kg total</span></div>`;
+                    return `
+                        <tr>
+                            <td>${fmtFechaRemito(r.fecha)}</td>
+                            <td class="col-mono">${String(r.id).padStart(3, '0')}</td>
+                            <td class="col-qty">${cant}</td>
+                            <td class="col-detalle">${detalleHtml}</td>
+                            <td class="col-num">${Number(r.kg).toFixed(2)}</td>
+                            <td class="col-num">${Number(pxKg).toFixed(2)}</td>
+                            <td class="col-num col-total">$${fmt(importe)}</td>
+                            <td class="col-num">$${fmt(pagado)}</td>
+                            <td class="col-num col-saldo">$${fmt(saldo)}</td>
+                            <td class="col-plazo">${plazo}</td>
+                            <td class="col-estado"><span class="status ${reporteEstadoClass(est.label)}">${esc(est.label.toUpperCase())}</span></td>
+                        </tr>`;
+                }).join('')
+                : '<tr><td colspan="11" class="empty-row">Sin movimientos registrados</td></tr>';
+
+            const totalesRemitosRow = remitos.length ? `
+                <tr class="totales-row">
+                    <td colspan="2"><strong>TOTALES</strong></td>
+                    <td class="col-qty"><strong>${totalUnidades}</strong></td>
+                    <td></td>
+                    <td class="col-num"><strong>${Number(totalKg).toFixed(2)}</strong></td>
+                    <td></td>
+                    <td class="col-num col-total"><strong>$${fmt(totalVendido)}</strong></td>
+                    <td class="col-num"><strong>$${fmt(totalCobrado)}</strong></td>
+                    <td class="col-num"><strong>$${fmt(c.saldo_actual)}</strong></td>
+                    <td colspan="2"></td>
+                </tr>` : '';
+
+            return `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Estado de cuenta — ${esc(c.nombre)}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #111827;
+            font-size: 10pt;
+            line-height: 1.45;
+            background: #fff;
+            padding: 28px 32px;
+        }
+        .doc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 24px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #0d6efd;
+            margin-bottom: 22px;
+        }
+        .brand-block { display: flex; gap: 14px; align-items: center; }
+        .brand-logo {
+            width: 52px; height: 52px; background: #0d6efd; color: #fff;
+            border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 17px; letter-spacing: -0.5px; flex-shrink: 0;
+        }
+        .brand-name { font-size: 17pt; font-weight: 700; color: #0f172a; letter-spacing: -0.3px; }
+        .brand-tag { font-size: 9pt; color: #64748b; margin-top: 2px; }
+        .doc-meta { text-align: right; font-size: 9pt; color: #475569; }
+        .doc-meta .doc-type {
+            display: inline-block; background: #eff6ff; color: #1d4ed8;
+            font-weight: 700; font-size: 8.5pt; letter-spacing: 0.06em;
+            text-transform: uppercase; padding: 4px 10px; border-radius: 6px; margin-bottom: 6px;
+        }
+        .doc-meta .doc-date { font-weight: 600; color: #334155; }
+        .info-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px;
+        }
+        .info-card {
+            border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; background: #f8fafc;
+        }
+        .info-card h4 {
+            font-size: 8pt; text-transform: uppercase; letter-spacing: 0.08em;
+            color: #64748b; margin-bottom: 10px; font-weight: 700;
+        }
+        .info-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 9.5pt; }
+        .info-row .lbl { color: #64748b; }
+        .info-row .val { font-weight: 600; text-align: right; }
+        .info-row.highlight .val { color: #b45309; font-size: 11pt; }
+        .info-row.balance .val { color: #dc2626; font-size: 12pt; font-weight: 800; }
+        .section-title {
+            font-size: 9pt; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.07em; color: #334155; margin-bottom: 10px;
+            padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;
+        }
+        .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; }
+        .items-table thead th {
+            background: #0f172a; color: #fff; font-weight: 600; font-size: 8pt;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            padding: 9px 7px; text-align: left; white-space: nowrap;
+        }
+        .items-table thead th.col-num, .items-table tbody td.col-num,
+        .items-table thead th.col-qty, .items-table tbody td.col-qty { text-align: right; }
+        .items-table tbody td {
+            padding: 10px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top;
+        }
+        .items-table tbody tr:nth-child(even) { background: #f8fafc; }
+        .items-table tbody tr:hover { background: #eff6ff; }
+        .col-detalle { min-width: 180px; max-width: 340px; }
+        .detalle-cell .corte-nombre {
+            display: block; font-weight: 700; font-size: 8.5pt; letter-spacing: 0.04em;
+            color: #0f172a; margin-bottom: 6px;
+        }
+        .pesos-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+        .peso-chip {
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 8pt; font-weight: 600; color: #1e40af;
+            background: #eff6ff; border: 1px solid #bfdbfe;
+            padding: 2px 6px; border-radius: 4px; min-width: 42px; text-align: center;
+        }
+        .sin-piezas { font-size: 8pt; color: #64748b; }
+        .totales-row { background: #0f172a !important; color: #fff; }
+        .totales-row td { border-bottom: none; padding: 10px 8px; font-size: 9pt; }
+        .totales-row .col-total { color: #fff; }
+        .col-mono { font-family: 'Consolas', 'Courier New', monospace; font-size: 8.5pt; color: #475569; }
+        .col-total { font-weight: 700; color: #0f172a; }
+        .col-saldo { font-weight: 700; color: #dc2626; }
+        .col-plazo { font-size: 8.5pt; color: #64748b; white-space: nowrap; text-align: center; }
+        .col-estado { text-align: center; white-space: nowrap; }
+        .empty-row { text-align: center; padding: 24px !important; color: #94a3b8; }
+        .status {
+            display: inline-block; font-size: 7.5pt; font-weight: 700;
+            letter-spacing: 0.05em; padding: 4px 10px; border-radius: 6px; white-space: nowrap;
+        }
+        .st-paid { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .st-partial { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
+        .st-pending { background: #ffffff; color: #dc2626; border: 1.5px solid #dc2626; }
+        .st-bad { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+        .totals-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 4px;
+        }
+        .totals-card {
+            border: 2px solid #0f172a; border-radius: 10px; padding: 16px 18px;
+        }
+        .totals-card.secondary { border-color: #cbd5e1; }
+        .totals-card h4 {
+            font-size: 8pt; text-transform: uppercase; letter-spacing: 0.08em;
+            color: #64748b; margin-bottom: 12px; font-weight: 700;
+        }
+        .total-row {
+            display: flex; justify-content: space-between; align-items: baseline;
+            padding: 5px 0; font-size: 9.5pt; border-bottom: 1px dashed #e2e8f0;
+        }
+        .total-row:last-child { border-bottom: none; }
+        .total-row.grand {
+            margin-top: 8px; padding-top: 10px; border-top: 2px solid #0f172a;
+            border-bottom: none; font-size: 11pt;
+        }
+        .total-row.grand .lbl { font-weight: 700; color: #0f172a; }
+        .total-row.grand .val { font-weight: 800; color: #dc2626; font-size: 14pt; }
+        .total-row .lbl { color: #475569; }
+        .total-row .val { font-weight: 700; color: #0f172a; }
+        .total-row.credit .val { color: #059669; }
+        .doc-footer {
+            margin-top: 28px; padding-top: 14px; border-top: 1px solid #e2e8f0;
+            text-align: center; font-size: 8pt; color: #94a3b8;
+        }
+        .doc-footer p + p { margin-top: 3px; }
+        .legal-note {
+            margin-top: 16px; font-size: 8pt; color: #64748b;
+            background: #f1f5f9; border-radius: 8px; padding: 10px 14px;
+            border-left: 3px solid #0d6efd;
+        }
+        @media print {
+            body { padding: 12px 16px; }
+            .items-table tbody tr:hover { background: inherit; }
+            @page { margin: 12mm; }
+        }
+    </style>
+</head>
+<body>
+    <header class="doc-header">
+        <div class="brand-block">
+            <div class="brand-logo">MT</div>
+            <div>
+                <div class="brand-name">Master Total</div>
+                <div class="brand-tag">Distribuidora de Carne · Cuenta Corriente</div>
+            </div>
+        </div>
+        <div class="doc-meta">
+            <div class="doc-type">Estado de Cuenta</div>
+            <div class="doc-date">Generado: ${genAt}</div>
+        </div>
+    </header>
+
+    <div class="info-grid">
+        <div class="info-card">
+            <h4>Datos del cliente</h4>
+            <div class="info-row"><span class="lbl">Razón social</span><span class="val">${esc(c.nombre)}</span></div>
+            <div class="info-row"><span class="lbl">Scoring de crédito</span><span class="val">${esc(c.scoring)}</span></div>
+            <div class="info-row"><span class="lbl">Techo de deuda</span><span class="val">$${fmt(c.techo_deuda)}</span></div>
+        </div>
+        <div class="info-card">
+            <h4>Situación financiera</h4>
+            <div class="info-row highlight"><span class="lbl">Saldo deudor</span><span class="val">$${fmt(c.saldo_actual)}</span></div>
+            <div class="info-row credit"><span class="lbl">Crédito disponible</span><span class="val">$${fmt(disponible)}</span></div>
+            <div class="info-row"><span class="lbl">Remitos en cuenta</span><span class="val">${remitos.length}</span></div>
+        </div>
+    </div>
+
+    <div class="section-title">Detalle de remitos — facturación por pieza</div>
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Cód.</th>
+                <th class="col-qty">Cant.</th>
+                <th>Detalle (pesos por pieza)</th>
+                <th class="col-num">Kilos</th>
+                <th class="col-num">Precio</th>
+                <th class="col-num">Importe</th>
+                <th class="col-num">Pagado</th>
+                <th class="col-num">Saldo</th>
+                <th>Plazo</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>${remitosRows}${totalesRemitosRow}</tbody>
+    </table>
+
+    <div class="totals-grid">
+        <div class="totals-card secondary">
+            <h4>Resumen operativo</h4>
+            <div class="total-row"><span class="lbl">Unidades totales</span><span class="val">${totalUnidades}</span></div>
+            <div class="total-row"><span class="lbl">Kilos facturados</span><span class="val">${fmt(totalKg)} kg</span></div>
+            <div class="total-row"><span class="lbl">Total facturado</span><span class="val">$${fmt(totalVendido)}</span></div>
+            <div class="total-row"><span class="lbl">Total cobrado</span><span class="val">$${fmt(totalCobrado)}</span></div>
+        </div>
+        <div class="totals-card">
+            <h4>Balance de cuenta</h4>
+            <div class="total-row"><span class="lbl">Facturación acumulada</span><span class="val">$${fmt(totalVendido)}</span></div>
+            <div class="total-row"><span class="lbl">Pagos recibidos</span><span class="val">$${fmt(totalCobrado)}</span></div>
+            <div class="total-row grand"><span class="lbl">SALDO IMPAGO</span><span class="val">$${fmt(c.saldo_actual)}</span></div>
+            <div class="total-row credit"><span class="lbl">Crédito libre</span><span class="val">$${fmt(disponible)}</span></div>
+        </div>
+    </div>
+
+    <div class="legal-note">
+        Documento informativo de cuenta corriente. Los montos en pesos argentinos ($). 
+        El plazo de cobro indicado por remito corresponde al acuerdo comercial vigente al momento de la entrega.
+    </div>
+
+    <footer class="doc-footer">
+        <p>Master Total Terminal · Distribuidoras de Carne</p>
+        <p>— Fin del estado de cuenta —</p>
+    </footer>
+    <script>
+        window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 600); };
+    <\/script>
+</body>
+</html>`;
+        }
+
+        $('btnClientPrint').addEventListener('click', async () => {
+            if (!currentClientData) return;
             try {
-                const c = await api('/api/clientes/' + selectedClienteId);
+                const c = await api('/api/clientes/' + currentClientData.id);
                 
-                const printWindow = window.open('', '_blank', 'width=800,height=600');
+                const printWindow = window.open('', '_blank', 'width=900,height=700');
                 if (!printWindow) {
                     toast('El navegador bloqueó la ventana emergente de impresión', true);
                     return;
                 }
                 
-                const remitosRows = c.remitos && c.remitos.length 
-                    ? c.remitos.map(r => {
-                        const est = remitoEstado(r.pagado ?? r.estado_cobro);
-                        return `
-                        <tr>
-                            <td>${r.fecha}</td>
-                            <td>#${r.id}</td>
-                            <td style="text-align:right">${fmt(r.kg)} kg</td>
-                            <td style="text-align:right">$${fmt(r.kg > 0 ? r.precio_venta_total / r.kg : 0)}</td>
-                            <td style="text-align:right">$${fmt(r.precio_venta_total)}</td>
-                            <td style="text-align:center">${est.label.toUpperCase()}</td>
-                        </tr>
-                    `;
-                    }).join('')
-                    : '<tr><td colspan="6" style="text-align:center;padding:10px">Sin movimientos registrados</td></tr>';
-                    
-                const totalKg = c.remitos ? c.remitos.reduce((acc, r) => acc + r.kg, 0) : 0;
-                const totalVendido = c.remitos ? c.remitos.reduce((acc, r) => acc + r.precio_venta_total, 0) : 0;
-                const totalCobrado = c.remitos ? c.remitos.reduce((acc, r) => acc + (Number(r.pagado) === 1 ? r.precio_venta_total : 0), 0) : 0;
-                const disponible = Math.max(0, c.techo_deuda - c.saldo_actual);
-                
-                printWindow.document.write(`
-                    <html>
-                    <head>
-                        <title>Reporte - ${c.nombre}</title>
-                        <style>
-                            body {
-                                font-family: 'Courier New', Courier, monospace;
-                                color: #000;
-                                background: #fff;
-                                padding: 20px;
-                                font-size: 12px;
-                                line-height: 1.4;
-                            }
-                            .header {
-                                text-align: center;
-                                border-bottom: 2px dashed #000;
-                                padding-bottom: 10px;
-                                margin-bottom: 20px;
-                            }
-                            .header h1 {
-                                margin: 0;
-                                font-size: 20px;
-                                text-transform: uppercase;
-                            }
-                            .header p {
-                                margin: 5px 0 0 0;
-                                font-size: 11px;
-                            }
-                            .details-table, .data-table {
-                                width: 100%;
-                                border-collapse: collapse;
-                                margin-bottom: 20px;
-                            }
-                            .details-table td {
-                                padding: 4px 8px;
-                                vertical-align: top;
-                            }
-                            .details-table td.label {
-                                font-weight: bold;
-                                width: 180px;
-                                text-transform: uppercase;
-                            }
-                            .data-table th, .data-table td {
-                                border: 1px solid #000;
-                                padding: 6px 8px;
-                            }
-                            .data-table th {
-                                background-color: #f2f2f2;
-                                text-transform: uppercase;
-                                font-weight: bold;
-                            }
-                            .summary-box {
-                                border: 2px solid #000;
-                                padding: 10px;
-                                margin-top: 20px;
-                                display: flex;
-                                justify-content: space-between;
-                            }
-                            .summary-col {
-                                flex: 1;
-                            }
-                            .summary-row {
-                                margin-bottom: 5px;
-                            }
-                            .summary-row span.label {
-                                font-weight: bold;
-                                text-transform: uppercase;
-                            }
-                            .footer {
-                                margin-top: 40px;
-                                text-align: center;
-                                font-size: 10px;
-                                border-top: 1px dashed #000;
-                                padding-top: 10px;
-                            }
-                            @media print {
-                                body { padding: 0; }
-                                button { display: none; }
-                            }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="header">
-                            <h1>Master Total — Distribuidora de Carne</h1>
-                            <p>Reporte de Cuenta de Cliente · Generado el: ${new Date().toLocaleString('es-AR')}</p>
-                        </div>
-                        
-                        <table class="details-table">
-                            <tr>
-                                <td class="label">Cliente:</td>
-                                <td><strong>${c.nombre}</strong></td>
-                                <td class="label">Scoring de Crédito:</td>
-                                <td>${c.scoring}</td>
-                            </tr>
-                            <tr>
-                                <td class="label">Techo de Deuda:</td>
-                                <td>$${fmt(c.techo_deuda)}</td>
-                                <td class="label">Saldo de Deuda Actual:</td>
-                                <td><strong>$${fmt(c.saldo_actual)}</strong></td>
-                            </tr>
-                        </table>
-                        
-                        <h3 style="text-transform:uppercase;border-bottom:1px solid #000;padding-bottom:3px">Historial de Remitos de Venta</h3>
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Fecha</th>
-                                    <th>Nro Remito</th>
-                                    <th style="text-align:right">Kilos</th>
-                                    <th style="text-align:right">Precio Unit.</th>
-                                    <th style="text-align:right">Total Remito</th>
-                                    <th style="text-align:center">Estado Pago</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${remitosRows}
-                            </tbody>
-                        </table>
-                        
-                        <div class="summary-box">
-                            <div class="summary-col">
-                                <div class="summary-row"><span class="label">Total Comprado (Kg):</span> ${fmt(totalKg)} kg</div>
-                                <div class="summary-row"><span class="label">Total Compras Facturado:</span> $${fmt(totalVendido)}</div>
-                            </div>
-                            <div class="summary-col" style="text-align:right">
-                                <div class="summary-row"><span class="label">Total Cobrado (Pagado):</span> $${fmt(totalCobrado)}</div>
-                                <div class="summary-row"><span class="label">Saldo Impago Pendiente:</span> <strong style="font-size:14px">$${fmt(c.saldo_actual)}</strong></div>
-                                <div class="summary-row"><span class="label">Crédito Disponible:</span> $${fmt(disponible)}</div>
-                            </div>
-                        </div>
-                        
-                        <div class="footer">
-                            <p>— Fin de Reporte de Cuenta —</p>
-                            <p>Master Total Terminal - Desarrollado para Distribuidoras de Carne</p>
-                        </div>
-                        
-                        <script>
-                            window.onload = function() {
-                                window.print();
-                                setTimeout(function() { window.close(); }, 500);
-                            };
-                        <\/script>
-                    </body>
-                    </html>
-                `);
+                printWindow.document.write(buildReporteClienteHtml(c));
                 printWindow.document.close();
             } catch (e) {
                 toast('Error al generar reporte impreso: ' + e.message, true);
@@ -1610,9 +2345,11 @@ const $ = id => document.getElementById(id);
         }
 
         function tickClock() {
-            $('clock').textContent = new Date().toLocaleString('es-AR', {
-                weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-            });
+            if ($('clock')) {
+                $('clock').textContent = new Date().toLocaleString('es-AR', {
+                    weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                });
+            }
         }
         tickClock();
         setInterval(tickClock, 30000);
@@ -1637,6 +2374,17 @@ const $ = id => document.getElementById(id);
         }
         window.addEventListener('online', updateConnectionStatus);
         window.addEventListener('offline', updateConnectionStatus);
+        function abrirNuevaVenta() {
+            $('formRemito').reset();
+            if (currentClientData) {
+                $('inpVentaCliente').value = currentClientData.nombre;
+                $('btnVolverVentasExpress').textContent = '← Volver al Perfil de ' + currentClientData.nombre;
+            } else {
+                $('btnVolverVentasExpress').textContent = '← Volver a opciones';
+            }
+            switchView('ventas-express');
+            abrirSubVistaVentasExpress('ventasExpressNueva');
+        }
         updateConnectionStatus();
 
         // PWA Installation handling
@@ -1684,12 +2432,17 @@ const $ = id => document.getElementById(id);
                         if (ww) ww.textContent = Math.round(data.current_weather.temperature) + '°';
                     }).catch(e => console.warn('Clima offline', e));
             }
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    pos => fetchW(pos.coords.latitude, pos.coords.longitude),
-                    err => fetchW(-34.61, -58.38)
-                );
-            } else {
+            try {
+                if ("geolocation" in navigator) {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => fetchW(pos.coords.latitude, pos.coords.longitude),
+                        err => fetchW(-34.61, -58.38)
+                    );
+                } else {
+                    fetchW(-34.61, -58.38);
+                }
+            } catch (e) {
+                console.warn('Geolocation failed', e);
                 fetchW(-34.61, -58.38);
             }
         }

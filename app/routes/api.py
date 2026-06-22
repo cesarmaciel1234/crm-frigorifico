@@ -3,7 +3,7 @@ import sqlite3
 from datetime import date
 
 from app.database import get_db
-from app.utils import parse_operacion_payload, fmt_plazo_dias, _i, _f
+from app.utils import parse_operacion_payload, fmt_plazo_dias, _i, _f, resolve_remito_kg, pesos_piezas_to_json
 from app.services.finanzas import (
     panel_estrategia, ranking_enemigos, historial_vencimientos, calc_cfr
 )
@@ -11,10 +11,10 @@ from app.services.pagos import (
     list_historial_pagos, get_pagos_operacion, registrar_pago,
     calc_estado_vencimiento, calc_plan_cuotas, calc_diferencia_pago
 )
-from app.services.remitos import list_remitos, marcar_remito_pagado
+from app.services.remitos import list_remitos, marcar_remito_pagado, registrar_pago_remito
 from app.services.bancos import list_bancos
 from app.services.bulk import registrar_lote_bulk, list_bulk_lots, fraccionar_lote_fifo
-from app.services.clientes import list_clientes, registrar_cliente, get_cliente_detalle, buscar_o_crear_cliente, recalcular_saldo_cliente, marcar_cliente_incobrable, list_perdidas_acumuladas
+from app.services.clientes import list_clientes, registrar_cliente, get_cliente_detalle, buscar_o_crear_cliente, recalcular_saldo_cliente, marcar_cliente_incobrable, list_perdidas_acumuladas, registrar_pago_cliente_global
 from app.services.ventas_mostrador import list_ventas_mostrador, sync_ventas_offline
 from app.security import verify_audit_password
 
@@ -323,11 +323,10 @@ def api_remitos_endpoint():
     d = request.get_json(silent=True) or {}
     try:
         fecha = str(d.get("fecha") or "").strip() or None
-        kg = _f(d.get("kg"), "kg")
-        if kg <= 0:
-            raise ValueError("kg debe ser > 0")
-        costo = _f(d.get("costo_total_logistica"), "costo_total_logistica")
-        venta = _f(d.get("precio_venta_total"), "precio_venta_total")
+        kg, pesos_piezas, cantidad = resolve_remito_kg(d)
+        precio_por_kg = _f(d.get("precio_por_kg"), "precio_por_kg")
+        tipo_corte = str(d.get("tipo_corte") or "").strip()
+        pesos_json = pesos_piezas_to_json(pesos_piezas)
         plazo = int(d.get("plazo_cobro_dias") or 0)
         if plazo < 0:
             raise ValueError("plazo_cobro_dias inválido")
@@ -349,32 +348,35 @@ def api_remitos_endpoint():
             if cli:
                 techo = float(cli["techo_deuda"])
                 saldo = float(cli["saldo_actual"])
-                if saldo + venta > techo:
-                    raise ValueError(
-                        f"Límite de crédito superado. Saldo actual: ${saldo:,.2f} + Venta: ${venta:,.2f} > Techo de deuda: ${techo:,.2f}"
-                    )
-            
-            # 3. Aplicar descuento de stock FIFO y calcular costo de carne
+            # 3. Aplicar descuento de stock FIFO y calcular costo de carne y logística
             costo_carne, fracciones = fraccionar_lote_fifo(conn, kg)
+            costo = sum(f["costo_logistica_porcion"] for f in fracciones)
             
-            # 4. Insertar el remito en remitos_carga con costo_carne, cliente_id y pagado=0
+            venta = round((kg * precio_por_kg) + costo, 2)
+            
+            if saldo + venta > techo:
+                raise ValueError(
+                    f"Límite de crédito superado. Saldo actual: ${saldo:,.2f} + Venta: ${venta:,.2f} > Techo de deuda: ${techo:,.2f}"
+                )
+            
+            # 4. Insertar el remito en remitos_carga
             if fecha:
                 cur = conn.execute(
                     """
                     INSERT INTO remitos_carga
-                        (fecha, cliente, cliente_id, kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        (fecha, cliente, cliente_id, tipo_corte, cantidad, pesos_piezas, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                     """,
-                    (fecha, cliente, cid, kg, costo, venta, plazo, costo_carne),
+                    (fecha, cliente, cid, tipo_corte, cantidad, pesos_json, kg, precio_por_kg, costo, venta, plazo, costo_carne),
                 )
             else:
                 cur = conn.execute(
                     """
                     INSERT INTO remitos_carga
-                        (cliente, cliente_id, kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                        (cliente, cliente_id, tipo_corte, cantidad, pesos_piezas, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                     """,
-                    (cliente, cid, kg, costo, venta, plazo, costo_carne),
+                    (cliente, cid, tipo_corte, cantidad, pesos_json, kg, precio_por_kg, costo, venta, plazo, costo_carne),
                 )
             rid = cur.lastrowid
             
@@ -382,10 +384,10 @@ def api_remitos_endpoint():
             for frac in fracciones:
                 conn.execute(
                     """
-                    INSERT INTO remitos_fracciones (remito_id, lote_id, kg_descontados, costo_porcion)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO remitos_fracciones (remito_id, lote_id, kg_descontados, costo_porcion, costo_logistica_porcion)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    (rid, frac["lote_id"], frac["kg_descontados"], frac["costo_porcion"])
+                    (rid, frac["lote_id"], frac["kg_descontados"], frac["costo_porcion"], frac["costo_logistica_porcion"])
                 )
                 
             # 6. Recalcular el saldo actual de deuda del cliente
@@ -430,16 +432,18 @@ def api_bulk_endpoint():
         fecha = str(d.get("fecha") or "").strip() or None
         kg_totales = _f(d.get("kg_totales"), "kg_totales")
         costo_total_bulk = _f(d.get("costo_total_bulk"), "costo_total_bulk")
+        costo_reparto = _f(d.get("costo_reparto") or 0, "costo_reparto")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
     try:
-        lote_id = registrar_lote_bulk(kg_totales, costo_total_bulk, fecha)
+        lote_id = registrar_lote_bulk(kg_totales, costo_total_bulk, costo_reparto, fecha)
         return jsonify({
             "id": lote_id,
             "fecha": fecha or date.today().isoformat(),
             "kg_totales": kg_totales,
-            "costo_total_bulk": costo_total_bulk
+            "costo_total_bulk": costo_total_bulk,
+            "costo_reparto": costo_reparto
         }), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -470,11 +474,29 @@ def api_cliente_detalle_endpoint(cid: int):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
 
+@api_bp.route("/clientes/<int:cid>/cobrar", methods=["POST"])
+def api_cliente_cobrar_endpoint(cid: int):
+    try:
+        d = request.get_json(silent=True) or {}
+        monto = d.get("monto_pagado")
+        if monto is None:
+            return jsonify({"error": "monto_pagado es requerido"}), 400
+        result = registrar_pago_cliente_global(cid, float(monto))
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
 @api_bp.route("/remitos/<int:rid>/cobrar", methods=["POST"])
 def api_remito_cobrar_endpoint(rid: int):
     try:
-        marcar_remito_pagado(rid)
-        return jsonify({"ok": True, "message": "Remito marcado como pagado/cobrado"})
+        d = request.get_json(silent=True) or {}
+        monto = d.get("monto_pagado")
+        if monto is None:
+            marcar_remito_pagado(rid)
+            return jsonify({"ok": True, "message": "Remito marcado como pagado/cobrado"})
+        result = registrar_pago_remito(rid, float(monto))
+        msg = "Pago parcial registrado" if not result["cobrado_completo"] else "Remito cobrado completamente"
+        return jsonify({**result, "message": msg})
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 

@@ -192,6 +192,11 @@ def _run_migrations(conn):
         "costo_carne": "REAL NOT NULL DEFAULT 0",
         "cliente_id": "INTEGER",
         "pagado": "INTEGER NOT NULL DEFAULT 0",
+        "monto_pagado": "REAL NOT NULL DEFAULT 0",
+        "tipo_corte": "TEXT NOT NULL DEFAULT ''",
+        "precio_por_kg": "REAL NOT NULL DEFAULT 0",
+        "cantidad": "INTEGER NOT NULL DEFAULT 0",
+        "pesos_piezas": "TEXT NOT NULL DEFAULT '[]'",
     }
     if _table_exists(conn, "remitos_carga"):
         if is_pg:
@@ -205,6 +210,18 @@ def _run_migrations(conn):
                 final_type = pg_type if is_pg else col_type
                 conn.execute(f"ALTER TABLE remitos_carga ADD COLUMN {name} {final_type}")
 
+    cliente_cols = {
+        "fecha_ultimo_pago": "TEXT",
+    }
+    if _table_exists(conn, "clientes"):
+        if is_pg:
+            cliente_existing = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'clientes'")}
+        else:
+            cliente_existing = {row[1] for row in conn.execute("PRAGMA table_info(clientes)")}
+        for name, col_type in cliente_cols.items():
+            if name not in cliente_existing:
+                conn.execute(f"ALTER TABLE clientes ADD COLUMN {name} {col_type}")
+
     # Migración de clientes
     conn.executescript(
         """
@@ -214,7 +231,8 @@ def _run_migrations(conn):
             scoring TEXT NOT NULL DEFAULT 'A',
             techo_deuda REAL NOT NULL DEFAULT 500000,
             saldo_actual REAL NOT NULL DEFAULT 0,
-            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            fecha_ultimo_pago TEXT
         );
         """
     )
