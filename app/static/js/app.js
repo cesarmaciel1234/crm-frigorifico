@@ -1677,7 +1677,7 @@ const $ = id => document.getElementById(id);
 
         async function updateWeather() {
             function fetchW(lat, lon) {
-                fetch(\`https://api.open-meteo.com/v1/forecast?latitude=\${lat}&longitude=\${lon}&current_weather=true\`)
+                fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`)
                     .then(r => r.json())
                     .then(data => {
                         const ww = $('weatherWidget');
