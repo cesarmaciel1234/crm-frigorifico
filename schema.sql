@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS compras_bulk (
     kg_remanentes REAL NOT NULL CHECK(kg_remanentes >= 0),
     costo_total_bulk REAL NOT NULL CHECK(costo_total_bulk > 0),
     costo_reparto REAL NOT NULL DEFAULT 0,
+    numero_lote TEXT,
+    fecha_vencimiento TEXT,
+    proveedor TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -107,7 +110,13 @@ CREATE TABLE IF NOT EXISTS auditoria_operaciones (
     alias TEXT NOT NULL,
     accion TEXT NOT NULL CHECK(accion IN ('CREADO', 'PAGADO', 'ELIMINADO')),
     monto REAL NOT NULL DEFAULT 0,
-    fecha TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    fecha TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    entidad TEXT,
+    entidad_id INTEGER,
+    usuario TEXT,
+    detalle TEXT,
+    ip_address TEXT,
+    user_agent TEXT
 );
 
 CREATE TABLE IF NOT EXISTS pagos_clientes (

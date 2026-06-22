@@ -1,7 +1,15 @@
 from datetime import date
 from app.database import get_db
 
-def registrar_lote_bulk(kg_totales: float, costo_total_bulk: float, costo_reparto: float = 0, fecha: str = None) -> int:
+def registrar_lote_bulk(
+    kg_totales: float,
+    costo_total_bulk: float,
+    costo_reparto: float = 0,
+    fecha: str = None,
+    numero_lote: str = None,
+    fecha_vencimiento: str = None,
+    proveedor: str = None,
+) -> int:
     if kg_totales <= 0:
         raise ValueError("Los kilos totales deben ser mayores a 0")
     if costo_total_bulk <= 0:
@@ -15,10 +23,19 @@ def registrar_lote_bulk(kg_totales: float, costo_total_bulk: float, costo_repart
     with get_db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO compras_bulk (fecha, kg_totales, kg_remanentes, costo_total_bulk, costo_reparto)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO compras_bulk (fecha, kg_totales, kg_remanentes, costo_total_bulk, costo_reparto, numero_lote, fecha_vencimiento, proveedor)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (fecha, kg_totales, kg_totales, costo_total_bulk, costo_reparto)
+            (
+                fecha,
+                kg_totales,
+                kg_totales,
+                costo_total_bulk,
+                costo_reparto,
+                numero_lote.strip() if numero_lote else None,
+                fecha_vencimiento.strip() if fecha_vencimiento else None,
+                proveedor.strip() if proveedor else None,
+            ),
         )
         lote_id = cur.lastrowid
     return lote_id
@@ -27,7 +44,8 @@ def list_bulk_lots() -> list[dict]:
     with get_db() as conn:
         rows = conn.execute(
             """
-            SELECT id, fecha, kg_totales, kg_remanentes, costo_total_bulk, costo_reparto, created_at
+            SELECT id, fecha, kg_totales, kg_remanentes, costo_total_bulk, costo_reparto,
+                   numero_lote, fecha_vencimiento, proveedor, created_at
             FROM compras_bulk ORDER BY id DESC
             """
         ).fetchall()
@@ -45,6 +63,9 @@ def list_bulk_lots() -> list[dict]:
             "costo_reparto": r["costo_reparto"],
             "costo_kg": round(costo_kg, 2),
             "activo": r["kg_remanentes"] > 0,
+            "numero_lote": r.get("numero_lote") or "",
+            "fecha_vencimiento": r.get("fecha_vencimiento") or "",
+            "proveedor": r.get("proveedor") or "",
             "created_at": r["created_at"]
         })
     return out

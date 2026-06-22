@@ -386,3 +386,113 @@ def historial_vencimientos() -> list[dict[str, Any]]:
 
     items.sort(key=sort_key)
     return items
+
+def calcular_antiguedad_deuda() -> dict[str, Any]:
+    from datetime import date, datetime
+    with get_db() as conn:
+        clientes = conn.execute("SELECT id, nombre, saldo_actual, saldo_inicial FROM clientes").fetchall()
+        remitos = conn.execute(
+            """
+            SELECT id, cliente_id, fecha, precio_venta_total, COALESCE(monto_pagado, 0.0) AS monto_pagado, pagado
+            FROM remitos_carga
+            WHERE pagado != 2
+            """
+        ).fetchall()
+        
+    now = date.today()
+    buckets = {
+        "0_30": 0.0,
+        "31_60": 0.0,
+        "61_90": 0.0,
+        "90_plus": 0.0
+    }
+    
+    detalles_clientes = {}
+    for c in clientes:
+        cid = c["id"]
+        detalles_clientes[cid] = {
+            "id": cid,
+            "nombre": c["nombre"],
+            "saldo_actual": float(c["saldo_actual"]),
+            "buckets": {
+                "0_30": 0.0,
+                "31_60": 0.0,
+                "61_90": 0.0,
+                "90_plus": float(c["saldo_inicial"])
+            }
+        }
+        
+    for r in remitos:
+        cid = r["cliente_id"]
+        if not cid or cid not in detalles_clientes:
+            continue
+        try:
+            r_fecha = datetime.strptime(r["fecha"], "%Y-%m-%d").date()
+            diff_days = (now - r_fecha).days
+        except Exception:
+            diff_days = 0
+            
+        monto_deuda = float(r["precio_venta_total"]) - float(r["monto_pagado"])
+        if monto_deuda <= 0:
+            continue
+            
+        if diff_days <= 30:
+            detalles_clientes[cid]["buckets"]["0_30"] += monto_deuda
+        elif diff_days <= 60:
+            detalles_clientes[cid]["buckets"]["31_60"] += monto_deuda
+        elif diff_days <= 90:
+            detalles_clientes[cid]["buckets"]["61_90"] += monto_deuda
+        else:
+            detalles_clientes[cid]["buckets"]["90_plus"] += monto_deuda
+
+    for cid, det in detalles_clientes.items():
+        for k in buckets:
+            buckets[k] += det["buckets"][k]
+            det["buckets"][k] = round(det["buckets"][k], 2)
+        det["saldo_actual"] = round(det["saldo_actual"], 2)
+            
+    for k in buckets:
+        buckets[k] = round(buckets[k], 2)
+        
+    return {
+        "totales": buckets,
+        "clientes": list(detalles_clientes.values())
+    }
+
+def calcular_margenes_ventas(limit: int = 200) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 1000))
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT r.id, r.fecha, r.cliente, r.precio_venta_total, r.costo_carne, r.costo_total_logistica, r.kg
+            FROM remitos_carga r
+            ORDER BY r.id DESC
+            LIMIT ?
+            """,
+            (limit,)
+        ).fetchall()
+        
+    out = []
+    for row in rows:
+        r = dict(row)
+        p_venta = float(r["precio_venta_total"])
+        c_carne = float(r["costo_carne"])
+        c_logistica = float(r["costo_total_logistica"])
+        
+        margen_bruto = p_venta - c_carne
+        margen_neto = p_venta - c_carne - c_logistica
+        pct_margen = (margen_neto / p_venta * 100.0) if p_venta > 0 else 0.0
+        
+        out.append({
+            "id": r["id"],
+            "fecha": r["fecha"],
+            "cliente": r["cliente"],
+            "kg": r["kg"],
+            "precio_venta_total": round(p_venta, 2),
+            "costo_carne": round(c_carne, 2),
+            "costo_logistica": round(c_logistica, 2),
+            "margen_bruto": round(margen_bruto, 2),
+            "margen_neto": round(margen_neto, 2),
+            "porcentaje_margen": round(pct_margen, 1)
+        })
+    return out

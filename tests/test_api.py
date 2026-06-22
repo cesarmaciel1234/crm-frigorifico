@@ -180,3 +180,16 @@ class TestAPI:
         r_cli_det5 = client.get(f"/api/clientes/{cid}")
         assert r_cli_det5.status_code == 404
 
+    def test_api_finanzas_endpoints(self, client):
+        r_aging = client.get("/api/finanzas/aging")
+        assert r_aging.status_code == 200
+        data_aging = r_aging.get_json()
+        assert "totales" in data_aging
+        assert "clientes" in data_aging
+
+        r_margenes = client.get("/api/finanzas/margenes")
+        assert r_margenes.status_code == 200
+        data_margenes = r_margenes.get_json()
+        assert isinstance(data_margenes, list)
+
+

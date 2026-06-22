@@ -9,6 +9,9 @@ from app.security import (
     set_session_api_key,
     is_authenticated,
     current_role,
+    check_login_rate_limit,
+    record_login_failure,
+    record_login_success,
 )
 from app.services.users import authenticate_user
 
@@ -45,21 +48,27 @@ def auth_session():
 @views_bp.route("/login", methods=["GET", "POST"])
 def login():
     next_url = request.args.get("next") or "/"
+    error_msg = request.args.get("error")
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
         if username and password:
+            ok, limit_msg = check_login_rate_limit(username)
+            if not ok:
+                return render_template("login.html", error=limit_msg, next=next_url), 429
             user = authenticate_user(username, password)
             if user:
+                record_login_success(username)
                 set_session_user(user)
                 return redirect(next_url if next_url.startswith("/") else "/")
+            record_login_failure(username)
             return render_template("login.html", error="Usuario o contraseña incorrectos", next=next_url), 401
         key = (request.form.get("api_key") or password or "").strip()
         if verify_api_key(key):
             set_session_api_key()
             return redirect(next_url if next_url.startswith("/") else "/")
         return render_template("login.html", error="Clave incorrecta", next=next_url), 401
-    return render_template("login.html", next=next_url)
+    return render_template("login.html", next=next_url, error=error_msg)
 
 
 @views_bp.route("/auth/login", methods=["POST"])
@@ -68,10 +77,15 @@ def auth_login_json():
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
     if username and password:
+        ok, limit_msg = check_login_rate_limit(username)
+        if not ok:
+            return jsonify({"error": limit_msg}), 429
         user = authenticate_user(username, password)
         if user:
+            record_login_success(username)
             set_session_user(user)
             return jsonify({"ok": True, "user": user})
+        record_login_failure(username)
         return jsonify({"error": "Usuario o contraseña incorrectos"}), 401
     key = (data.get("api_key") or request.form.get("api_key") or "").strip()
     if verify_api_key(key):

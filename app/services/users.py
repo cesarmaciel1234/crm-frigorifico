@@ -119,10 +119,15 @@ def get_empresa_config() -> dict[str, Any]:
             "direccion": "",
             "telefono": "",
             "email": "",
+            "cotizacion_usd": 1000.0,
         }
     try:
         data = json.loads(row["datos"])
-        return data if isinstance(data, dict) else {}
+        if isinstance(data, dict):
+            if "cotizacion_usd" not in data:
+                data["cotizacion_usd"] = 1000.0
+            return data
+        return {}
     except (TypeError, json.JSONDecodeError):
         return {}
 

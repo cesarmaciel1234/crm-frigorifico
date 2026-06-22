@@ -92,6 +92,20 @@ const $ = id => document.getElementById(id);
             if (n >= 1000000) return (n / 1000000).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + 'M';
             return fmt(n);
         };
+        const fmtDual = n => {
+            const emp = getEmpresaDatos();
+            const cotiz = emp.cotizacion_usd || 1000.0;
+            const ars = fmt(n);
+            const usd = fmt(Math.round(Number(n) / cotiz));
+            return `$${ars} <span class="dual-usd" title="Equivalente en USD (Cotización: $${cotiz})">(u$s ${usd})</span>`;
+        };
+        const fmtDualCompact = n => {
+            const emp = getEmpresaDatos();
+            const cotiz = emp.cotizacion_usd || 1000.0;
+            const ars = fmtCompact(n);
+            const usd = fmtCompact(Math.round(Number(n) / cotiz));
+            return `$${ars} <span class="dual-usd">(u$s ${usd})</span>`;
+        };
         const fmtPct = n => n != null ? n.toFixed(2) + '%' : '—';
 
         function parseKgInput(val) {
@@ -155,7 +169,9 @@ const $ = id => document.getElementById(id);
             auditoria: ['Auditoría', 'Historial completo de acciones', 'Historial'],
             usuarios: ['Usuarios', 'Gestión de accesos y roles', 'Usuarios'],
             'cliente-detalle': ['Perfil de Cliente', 'Detalle corporativo y facturación', 'Perfil'],
-            'nueva-venta': ['Registrar Venta', 'Emitir remito o factura a cuenta corriente', 'Ventas']
+            'nueva-venta': ['Registrar Venta', 'Emitir remito o factura a cuenta corriente', 'Ventas'],
+            'finanzas-aging': ['Antigüedad de deuda', 'Análisis de vencimiento de facturas', 'Deuda'],
+            'finanzas-margenes': ['Márgenes de venta', 'Rentabilidad y costos de remitos', 'Márgenes']
         };
 
         function setLoading(on) {
@@ -985,6 +1001,8 @@ const $ = id => document.getElementById(id);
                 const badge = r.pagado || (r.estado_cobro === 'cobrado') 
                     ? '<div style="margin-bottom:4px"><span class="badge badge-success" style="font-size:9px;padding:2px 4px">Cobrado</span></div>' 
                     : '<div style="margin-bottom:4px"><span class="badge badge-danger" style="font-size:9px;padding:2px 4px">Pendiente</span></div>';
+                const ventaText = fmtDualCompact(r.precio_venta_total);
+                const margenText = fmtDualCompact(r.margen);
                 return `<tr style="cursor:pointer;" onclick="abrirModalFacturaOriginal(${r.id})">
                     <td>
                         <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.cliente || '—')}</div>
@@ -995,8 +1013,8 @@ const $ = id => document.getElementById(id);
                         <div style="color:var(--text-muted)">Log: <span style="color:#111827;font-weight:500">$${fmtCompact(r.costo_total_logistica)}</span></div>
                     </td>
                     <td>
-                        <div class="home-amount" style="font-size:13px">$${fmtCompact(r.precio_venta_total)}</div>
-                        <div class="home-subtext" style="font-size:9px;margin-top:2px;color:var(--success)">Mrg: $${fmtCompact(r.margen)}</div>
+                        <div class="home-amount" style="font-size:12px">${ventaText}</div>
+                        <div class="home-subtext" style="font-size:9px;margin-top:2px;color:var(--success)">Mrg: ${margenText}</div>
                     </td>
                     <td style="text-align:center">${badge}</td>
                 </tr>`;
@@ -1014,8 +1032,8 @@ const $ = id => document.getElementById(id);
                     : '';
                 
                 const logisticaText = '$' + fmtCompact(r.costo_total_logistica);
-                const ventaText = '$' + fmtCompact(r.precio_venta_total);
-                const margenText = '$' + fmtCompact(r.margen);
+                const ventaText = fmtDualCompact(r.precio_venta_total);
+                const margenText = fmtDualCompact(r.margen);
 
                 return `<tr style="cursor:pointer;" onclick="abrirModalFacturaOriginal(${r.id})">
                     <td>
@@ -1027,7 +1045,7 @@ const $ = id => document.getElementById(id);
                         <div style="color:var(--text-muted)">Log: <span style="color:#111827;font-weight:500">${logisticaText}</span></div>
                     </td>
                     <td>
-                        <div class="home-amount" style="font-size:13px">${ventaText}</div>
+                        <div class="home-amount" style="font-size:12px">${ventaText}</div>
                         <div class="home-subtext" style="font-size:9px;margin-top:2px;color:var(--success)">Mrg: ${margenText}</div>
                     </td>
                     <td style="text-align:center">
@@ -1100,15 +1118,17 @@ const $ = id => document.getElementById(id);
             const arr = data.auditoria || [];
             $('auditoriaCount').textContent = arr.length + ' registros';
             const showDelete = sessionUser.role === 'admin';
-            $('tblAuditoria').innerHTML = arr.length ? arr.map(a => `
-                <tr>
+            $('tblAuditoria').innerHTML = arr.length ? arr.map(a => {
+                const ipText = a.ip_address ? ` · IP: ${esc(a.ip_address)}` : '';
+                const agentText = a.user_agent ? `<div style="font-size: 8px; color: var(--text-muted); margin-top: 2px;" title="${esc(a.user_agent)}">${esc(a.user_agent.length > 55 ? a.user_agent.substring(0, 55) + '...' : a.user_agent)}</div>` : '';
+                return `<tr>
                     <td>${fmtFecha(a.fecha, true)}</td>
-                    <td><strong>${esc(a.alias || 'Registro')}</strong><br><small style="color:var(--text-light)">Op ID: ${a.operacion_id || '—'}${a.usuario ? ' · ' + esc(a.usuario) : ''}</small></td>
+                    <td><strong>${esc(a.alias || 'Registro')}</strong><br><small style="color:var(--text-light)">Op ID: ${a.operacion_id || '—'}${a.usuario ? ' · ' + esc(a.usuario) : ''}${ipText}</small>${agentText}</td>
                     <td><span class="badge ${a.accion === 'ELIMINADO' ? 'badge-danger' : 'badge-success'}">${esc(a.accion)}</span></td>
                     <td class="money">$${fmt(a.monto)}</td>
                     <td>${showDelete ? `<button class="btn btn-ghost btn-sm" onclick="promptDeleteAuditoria(${a.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>` : ''}</td>
-                </tr>
-            `).join('') : '<tr><td colspan="5" class="empty-state">No hay registros de auditoría</td></tr>';
+                </tr>`;
+            }).join('') : '<tr><td colspan="5" class="empty-state">No hay registros de auditoría</td></tr>';
         }
 
         async function renderUsuarios() {
@@ -1241,14 +1261,41 @@ const $ = id => document.getElementById(id);
         function renderBulkLots() {
             const table = $('tblBulkLots');
             if (!table) return;
+            const now = new Date();
+            now.setHours(0,0,0,0);
+            
             table.innerHTML = data.bulk && data.bulk.length ? data.bulk.map(b => {
-                const badge = b.activo 
-                    ? '<span class="badge badge-success">Activo</span>' 
-                    : '<span class="badge badge-neutral">Agotado</span>';
+                let badge = '';
+                if (b.kg_remanentes <= 0) {
+                    badge = '<span class="badge badge-neutral">Agotado</span>';
+                } else {
+                    if (b.fecha_vencimiento) {
+                        const vto = new Date(b.fecha_vencimiento + 'T00:00:00');
+                        const diffDays = Math.ceil((vto - now) / (1000 * 60 * 60 * 24));
+                        if (diffDays < 0) {
+                            badge = '<span class="badge badge-danger">Vencido</span>';
+                        } else if (diffDays <= 7) {
+                            badge = '<span class="badge badge-warning">Vence pronto</span>';
+                        } else {
+                            badge = '<span class="badge badge-success">Activo</span>';
+                        }
+                    } else {
+                        badge = '<span class="badge badge-success">Activo</span>';
+                    }
+                }
+                
+                const provText = b.proveedor ? `<div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-top:2px;">Prov: ${esc(b.proveedor)}</div>` : '';
+                const loteNumText = b.numero_lote ? ` - ${esc(b.numero_lote)}` : '';
+                const vtoText = b.fecha_vencimiento ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">Vto: ${b.fecha_vencimiento}</div>` : '';
+                
                 return `<tr>
                     <td>
-                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Lote #${b.id}</div>
-                        <div style="font-size:9px;color:var(--text-muted);margin-top:2px">${b.fecha}</div>
+                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Lote #${b.id}${loteNumText}</div>
+                        ${provText}
+                    </td>
+                    <td style="font-size:11px;line-height:1.3">
+                        <div>Com: ${b.fecha}</div>
+                        ${vtoText}
                     </td>
                     <td style="line-height:1.4; font-size:10px;">
                         <div style="font-weight:600">${fmt(b.kg_remanentes)} kg</div>
@@ -1260,7 +1307,7 @@ const $ = id => document.getElementById(id);
                     </td>
                     <td style="text-align:center">${badge}</td>
                 </tr>`;
-            }).join('') : '<tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center">Sin lotes de compra bulk registrados</td></tr>';
+            }).join('') : '<tr><td colspan="5" style="color:var(--text-muted);padding:16px;text-align:center">Sin lotes de compra bulk registrados</td></tr>';
         }
 
         let selectedClienteId = null;
@@ -1283,8 +1330,8 @@ const $ = id => document.getElementById(id);
                     ? '<span class="badge badge-danger">Superado</span>' 
                     : '<span class="badge badge-success">Límite OK</span>';
                 const style = c.limite_superado ? 'color: var(--danger)' : '';
-                const techoText = '$' + fmtCompact(c.techo_deuda);
-                const saldoText = '$' + fmtCompact(c.saldo_actual);
+                const techoText = fmtDualCompact(c.techo_deuda);
+                const saldoText = fmtDualCompact(c.saldo_actual);
 
                 return `<tr class="clickable" data-id="${c.id}">
                     <td>
@@ -1293,7 +1340,7 @@ const $ = id => document.getElementById(id);
                     </td>
                     <td style="line-height:1.4; font-size:10px;">
                         <div class="home-amount" style="font-size:13px">${saldoText}</div>
-                        <div style="color:var(--text-muted);font-size:9px;margin-top:2px">Techo: <span style="color:#111827">${techoText}</span></div>
+                        <div style="color:var(--text-muted);font-size:9px;margin-top:2px">Techo: <span style="color:#111827;font-weight:500;">${techoText}</span></div>
                     </td>
                     <td style="text-align:center"><span class="badge badge-neutral" style="text-align:center; display:inline-block; width:20px;">${c.scoring}</span></td>
                     <td style="text-align:center">${statusBadge}</td>
@@ -1860,7 +1907,8 @@ const $ = id => document.getElementById(id);
                         cuit: emp.cuit || '',
                         direccion: emp.direccion || '',
                         telefono: emp.telefono || '',
-                        email: emp.email || ''
+                        email: emp.email || '',
+                        cotizacion_usd: parseFloat(emp.cotizacion_usd) || 1000.0
                     }));
                 }
             } catch (_) {}
@@ -2118,6 +2166,8 @@ const $ = id => document.getElementById(id);
             if (name === 'auditoria') renderAuditoria();
             if (name === 'usuarios') renderUsuarios();
             if (name === 'registro') volverMenuRegistro();
+            if (name === 'finanzas-aging') renderFinanzasAging();
+            if (name === 'finanzas-margenes') renderFinanzasMargenes();
             setSidebarOpen(false);
         }
 
@@ -2149,6 +2199,8 @@ const $ = id => document.getElementById(id);
             if (v === 'historial-pagos') renderHistorialPagos();
             if (v === 'auditoria') renderAuditoria();
             if (v === 'usuarios') renderUsuarios();
+            if (v === 'finanzas-aging') renderFinanzasAging();
+            if (v === 'finanzas-margenes') renderFinanzasMargenes();
             toast('Panel actualizado');
         });
 
@@ -2268,7 +2320,8 @@ const $ = id => document.getElementById(id);
                 cuit: $('inpEmpresaCuit').value.trim(),
                 direccion: $('inpEmpresaDireccion').value.trim(),
                 telefono: $('inpEmpresaTelefono').value.trim(),
-                email: $('inpEmpresaEmail').value.trim()
+                email: $('inpEmpresaEmail').value.trim(),
+                cotizacion_usd: parseFloat($('inpEmpresaUsd').value) || 1000.0
             };
             localStorage.setItem('empresa_datos', JSON.stringify(data));
             if (sessionUser.role === 'admin') {
@@ -2281,7 +2334,8 @@ const $ = id => document.getElementById(id);
                             cuit: data.cuit,
                             direccion: data.direccion,
                             telefono: data.telefono,
-                            email: data.email
+                            email: data.email,
+                            cotizacion_usd: data.cotizacion_usd
                         })
                     });
                 } catch (e) {
@@ -2530,7 +2584,8 @@ const $ = id => document.getElementById(id);
                 cuit: "30-12345678-9",
                 direccion: "Av. Juan B. Justo 1234, CABA",
                 telefono: "+54 11 4567-8901",
-                email: "contacto@mastertotal.com"
+                email: "contacto@mastertotal.com",
+                cotizacion_usd: 1000.0
             };
             try {
                 const raw = localStorage.getItem('empresa_datos');
@@ -2548,6 +2603,7 @@ const $ = id => document.getElementById(id);
             $('inpEmpresaDireccion').value = data.direccion;
             $('inpEmpresaTelefono').value = data.telefono;
             $('inpEmpresaEmail').value = data.email;
+            $('inpEmpresaUsd').value = data.cotizacion_usd || 1000.0;
             $('modalEmpresa').classList.add('open');
         };
 
@@ -3272,6 +3328,94 @@ const $ = id => document.getElementById(id);
             localStorage.setItem('pwa_ios_hint_dismissed', '1');
             $('iosInstallBanner')?.classList.add('field-hidden');
         });
+
+        async function renderFinanzasAging() {
+            setLoading(true);
+            try {
+                const res = await api('/api/finanzas/aging');
+                
+                // Set total cards
+                const t0_30 = $('ageTotal0_30');
+                const t31_60 = $('ageTotal31_60');
+                const t61_90 = $('ageTotal61_90');
+                const t90_plus = $('ageTotal90_plus');
+                
+                if (t0_30) t0_30.innerHTML = fmtDual(res.totales['0_30'] || 0);
+                if (t31_60) t31_60.innerHTML = fmtDual(res.totales['31_60'] || 0);
+                if (t61_90) t61_90.innerHTML = fmtDual(res.totales['61_90'] || 0);
+                if (t90_plus) t90_plus.innerHTML = fmtDual(res.totales['90_plus'] || 0);
+                
+                const tbody = $('tblFinanzasAging');
+                if (tbody) {
+                    tbody.innerHTML = '';
+                    if (!res.clientes || res.clientes.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="6" style="color:var(--text-muted);padding:16px;text-align:center">No hay clientes con saldo pendiente de pago.</td></tr>`;
+                        return;
+                    }
+                    
+                    const withBalance = res.clientes.filter(c => c.saldo_actual > 0);
+                    if (withBalance.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="6" style="color:var(--text-muted);padding:16px;text-align:center">No hay clientes con saldo pendiente de pago.</td></tr>`;
+                        return;
+                    }
+
+                    withBalance.forEach(c => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong>${esc(c.nombre)}</strong></td>
+                            <td>${fmtDual(c.saldo_actual)}</td>
+                            <td>${c.buckets['0_30'] > 0 ? fmtDual(c.buckets['0_30']) : '—'}</td>
+                            <td>${c.buckets['31_60'] > 0 ? fmtDual(c.buckets['31_60']) : '—'}</td>
+                            <td>${c.buckets['61_90'] > 0 ? fmtDual(c.buckets['61_90']) : '—'}</td>
+                            <td>${c.buckets['90_plus'] > 0 ? fmtDual(c.buckets['90_plus']) : '—'}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (e) {
+                console.error("Error al cargar la antigüedad de deuda:", e);
+                toast("Error al cargar reporte de antigüedad de deuda", true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function renderFinanzasMargenes() {
+            setLoading(true);
+            try {
+                const res = await api('/api/finanzas/margenes?limit=200');
+                const tbody = $('tblFinanzasMargenes');
+                if (tbody) {
+                    tbody.innerHTML = '';
+                    if (!res || res.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-muted);padding:16px;text-align:center">No hay remitos de carga para analizar.</td></tr>`;
+                        return;
+                    }
+                    
+                    res.forEach(r => {
+                        const tr = document.createElement('tr');
+                        const pctColor = r.porcentaje_margen >= 15 ? 'var(--success)' : (r.porcentaje_margen >= 5 ? 'var(--warning)' : 'var(--danger)');
+                        
+                        tr.innerHTML = `
+                            <td><strong>#${esc(r.id)}</strong></td>
+                            <td>${esc(r.fecha)}</td>
+                            <td>${fmt(r.kg)} kg</td>
+                            <td>${fmtDual(r.precio_venta_total)}</td>
+                            <td>${fmtDual(r.costo_carne)}</td>
+                            <td>${fmtDual(r.costo_logistica)}</td>
+                            <td><strong style="color: ${r.margen_neto >= 0 ? 'inherit' : 'var(--danger)'}">${fmtDual(r.margen_neto)}</strong></td>
+                            <td><span class="badge" style="background-color: ${pctColor}22; color: ${pctColor}; font-weight: 700;">${r.porcentaje_margen.toFixed(1)}%</span></td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (e) {
+                console.error("Error al cargar márgenes de venta:", e);
+                toast("Error al cargar reporte de márgenes de venta", true);
+            } finally {
+                setLoading(false);
+            }
+        }
 
         function registerServiceWorker() {
             if (!('serviceWorker' in navigator)) return;

@@ -78,3 +78,99 @@ class TestFinanzasCore:
         visa = next(e for e in enemigos if e["alias"] == "Visa")
         assert prov["cfr"] is None
         assert visa["cfr"] is not None
+
+    def test_calcular_antiguedad_deuda(self, db):
+        from app.services.finanzas import calcular_antiguedad_deuda
+        from datetime import date, timedelta
+        
+        # Insert client
+        cur = db.execute(
+            "INSERT INTO clientes (nombre, saldo_actual, saldo_inicial) VALUES (?, ?, ?)",
+            ("Cliente Test Aging", 10000.0, 1000.0) # $1000 saldo inicial goes to 90+ days bucket
+        )
+        cid = cur.lastrowid
+        
+        today_str = date.today().isoformat()
+        days_45_ago = (date.today() - timedelta(days=45)).isoformat()
+        days_120_ago = (date.today() - timedelta(days=120)).isoformat()
+        
+        # Remito 0-30 days:
+        db.execute(
+            """
+            INSERT INTO remitos_carga
+                (cliente, cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
+            VALUES (?, ?, ?, 10, 1000, 1000, 10000.0, 30, 6000.0, 0, 8000.0) -- Outstanding: 2000.0
+            """,
+            ("Cliente Test Aging", cid, today_str)
+        )
+        
+        # Remito 31-60 days:
+        db.execute(
+            """
+            INSERT INTO remitos_carga
+                (cliente, cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
+            VALUES (?, ?, ?, 10, 1000, 1000, 10000.0, 30, 6000.0, 0, 7000.0) -- Outstanding: 3000.0
+            """,
+            ("Cliente Test Aging", cid, days_45_ago)
+        )
+        
+        # Remito 90+ days:
+        db.execute(
+            """
+            INSERT INTO remitos_carga
+                (cliente, cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
+            VALUES (?, ?, ?, 10, 1000, 1000, 10000.0, 30, 6000.0, 0, 6000.0) -- Outstanding: 4000.0
+            """,
+            ("Cliente Test Aging", cid, days_120_ago)
+        )
+        
+        db.commit()
+        
+        res = calcular_antiguedad_deuda()
+        
+        assert res["totales"]["0_30"] == pytest.approx(2000.0, abs=0.01)
+        assert res["totales"]["31_60"] == pytest.approx(3000.0, abs=0.01)
+        assert res["totales"]["61_90"] == pytest.approx(0.0, abs=0.01)
+        assert res["totales"]["90_plus"] == pytest.approx(5000.0, abs=0.01) # 4000 from remito + 1000 from saldo_inicial
+        
+        # Check client details
+        client_res = next(c for c in res["clientes"] if c["id"] == cid)
+        assert client_res["nombre"] == "Cliente Test Aging"
+        assert client_res["saldo_actual"] == pytest.approx(10000.0, abs=0.01)
+        assert client_res["buckets"]["0_30"] == pytest.approx(2000.0, abs=0.01)
+        assert client_res["buckets"]["31_60"] == pytest.approx(3000.0, abs=0.01)
+        assert client_res["buckets"]["61_90"] == pytest.approx(0.0, abs=0.01)
+        assert client_res["buckets"]["90_plus"] == pytest.approx(5000.0, abs=0.01)
+
+    def test_calcular_margenes_ventas(self, db):
+        from app.services.finanzas import calcular_margenes_ventas
+        
+        # Insert client
+        cur = db.execute(
+            "INSERT INTO clientes (nombre, saldo_actual, saldo_inicial) VALUES (?, ?, ?)",
+            ("Cliente Test Margenes", 0.0, 0.0)
+        )
+        cid = cur.lastrowid
+        
+        # Insert remito
+        db.execute(
+            """
+            INSERT INTO remitos_carga
+                (cliente, cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
+            VALUES (?, ?, ?, 10, 1000, 1500.0, 10000.0, 30, 6000.0, 0, 0.0)
+            """,
+            ("Cliente Test Margenes", cid, "2026-06-22")
+        )
+        db.commit()
+        
+        res = calcular_margenes_ventas(limit=1)
+        assert len(res) >= 1
+        item = res[0]
+        assert item["cliente"] == "Cliente Test Margenes"
+        assert item["precio_venta_total"] == 10000.0
+        assert item["costo_carne"] == 6000.0
+        assert item["costo_logistica"] == 1500.0
+        assert item["margen_bruto"] == 4000.0
+        assert item["margen_neto"] == 2500.0
+        assert item["porcentaje_margen"] == pytest.approx(25.0, abs=0.1)
+

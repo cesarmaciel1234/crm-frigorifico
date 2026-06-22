@@ -296,6 +296,15 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 Historial de pagos
             </button>
+            <div class="nav-label" style="margin-top:12px">Analíticas</div>
+            <button type="button" class="nav-item" data-view="finanzas-aging">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Antigüedad de deuda
+            </button>
+            <button type="button" class="nav-item" data-view="finanzas-margenes">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2" ry="2"/><path d="M12 18V6M17 9H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                Márgenes de venta
+            </button>
             
             <div class="nav-label" style="margin-top:12px">Sistema</div>
             <button type="button" class="nav-item" data-view="auditoria">
@@ -732,6 +741,81 @@
                 </div>
             </div>
 
+            <!-- VIEW: Antigüedad de Deuda -->
+            <div class="view" id="view-finanzas-aging">
+                <div class="card" style="margin-bottom: 20px;">
+                    <div class="card-head"><h2>Resumen de Antigüedad de Deuda (Total General)</h2></div>
+                    <div class="card-body padded">
+                        <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr); gap: 16px;">
+                            <div class="kpi-card" style="border-left: 4px solid var(--success);">
+                                <span class="lbl">0 a 30 días</span>
+                                <span class="val" id="ageTotal0_30">$0</span>
+                            </div>
+                            <div class="kpi-card" style="border-left: 4px solid var(--warning);">
+                                <span class="lbl">31 a 60 días</span>
+                                <span class="val" id="ageTotal31_60">$0</span>
+                            </div>
+                            <div class="kpi-card" style="border-left: 4px solid #f97316;">
+                                <span class="lbl">61 a 90 días</span>
+                                <span class="val" id="ageTotal61_90">$0</span>
+                            </div>
+                            <div class="kpi-card" style="border-left: 4px solid var(--danger);">
+                                <span class="lbl">Más de 90 días</span>
+                                <span class="val" id="ageTotal90_plus">$0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head">
+                        <h2>Detalle por Cliente (Antigüedad de Deuda)</h2>
+                    </div>
+                    <div class="table-wrap xls-wrap">
+                        <table class="data-table home-table">
+                            <thead>
+                                <tr>
+                                    <th>Cliente</th>
+                                    <th>Saldo Total</th>
+                                    <th>0-30 días</th>
+                                    <th>31-60 días</th>
+                                    <th>61-90 días</th>
+                                    <th>90+ días</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblFinanzasAging"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: Márgenes de Venta -->
+            <div class="view" id="view-finanzas-margenes">
+                <div class="card">
+                    <div class="card-head">
+                        <h2>Análisis de Márgenes de Venta (F.I.F.O.)</h2>
+                        <span>Margen Neto = Venta - Costo Carne - Costo Logística</span>
+                    </div>
+                    <div class="table-wrap xls-wrap">
+                        <table class="data-table home-table">
+                            <thead>
+                                <tr>
+                                    <th>Remito</th>
+                                    <th>Fecha</th>
+                                    <th>Kilos</th>
+                                    <th>Venta ($)</th>
+                                    <th>Costo Carne ($)</th>
+                                    <th>Costo Log. ($)</th>
+                                    <th>Margen Neto ($)</th>
+                                    <th>Margen (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblFinanzasMargenes"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- VIEW: Usuarios (admin) -->
             <div class="view" id="view-usuarios">
                 <div class="card">
@@ -879,10 +963,13 @@
                         <div class="card-head"><h2>Registrar lote de compra (Bulk)</h2></div>
                         <div class="card-body padded">
                             <form id="formBulk" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-                                <div class="field" style="width:150px"><label>Fecha</label><input name="fecha" type="date" required id="inpBulkFecha"></div>
+                                <div class="field" style="width:150px"><label>Fecha Compra</label><input name="fecha" type="date" required id="inpBulkFecha"></div>
                                 <div class="field" style="flex:1;min-width:150px"><label>Kilos totales</label><input name="kg_totales" type="text" inputmode="decimal" class="calc-input" required placeholder="Ej: 1000 o 500+250+250"></div>
                                 <div class="field" style="flex:1;min-width:150px"><label>Costo carne total ($)</label><input name="costo_total_bulk" type="number" step="0.01" min="0.01" required placeholder="Ej: 850000"></div>
                                 <div class="field" style="flex:1;min-width:150px"><label>Costo de reparto ($)</label><input name="costo_reparto" type="number" step="0.01" min="0" required placeholder="Ej: 50000"></div>
+                                <div class="field" style="flex:1;min-width:150px"><label>Proveedor</label><input name="proveedor" type="text" placeholder="Ej: Frigorífico Alberdi"></div>
+                                <div class="field" style="flex:1;min-width:150px"><label>Nº Lote / Identificador</label><input name="numero_lote" type="text" placeholder="Ej: B-2026-06"></div>
+                                <div class="field" style="width:150px"><label>Fecha Vto. Lote</label><input name="fecha_vencimiento" type="date"></div>
                                 <button type="submit" class="btn btn-primary">Registrar Lote Bulk</button>
                             </form>
                         </div>
@@ -1077,6 +1164,10 @@
                         <label>Email / Web</label>
                         <input type="text" id="inpEmpresaEmail" placeholder="Ej: contacto@mastertotal.com">
                     </div>
+                    <div class="field">
+                        <label>Cotización de Referencia USD ($)</label>
+                        <input type="number" id="inpEmpresaUsd" step="0.01" min="1" required placeholder="Ej: 1000">
+                    </div>
                     <div class="modal-actions" style="margin-top:16px;">
                         <button type="submit" class="btn btn-primary">Guardar Cambios</button>
                         <button type="button" class="btn btn-ghost" onclick="cerrarModalEmpresa()">Cancelar</button>
@@ -1190,7 +1281,7 @@
         .dashboard-bar.bar-suppressed {
             display: none !important;
         }
-        @media (min-width: 1025px) {
+        @media (min-width: 769px) {
             .dashboard-bar {
                 left: calc(var(--sidebar-w, 272px) + 20px);
                 right: 20px;

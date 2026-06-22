@@ -1,6 +1,8 @@
 """Autenticación, roles, headers de seguridad y utilidades de hardening."""
 import hmac
 import secrets
+import time
+from datetime import datetime, timezone
 from functools import wraps
 
 from flask import jsonify, redirect, request, session, url_for
@@ -8,6 +10,45 @@ from flask import jsonify, redirect, request, session, url_for
 from app.config import Config
 
 PUBLIC_PATHS = frozenset({"/login", "/auth/login", "/health", "/health/ready", "/manifest.json", "/sw.js"})
+
+FAILED_LOGINS = {}  # username -> {"count": int, "blocked_until": float}
+
+
+def check_login_rate_limit(username: str) -> tuple[bool, str]:
+    if not username:
+        return True, ""
+    username = username.strip().lower()
+    record = FAILED_LOGINS.get(username)
+    if record and record["count"] >= 5:
+        now = time.time()
+        time_left = int(record["blocked_until"] - now)
+        if time_left > 0:
+            return False, f"Usuario bloqueado temporalmente por seguridad. Intente de nuevo en {time_left} segundos."
+        else:
+            record["count"] = 0
+    return True, ""
+
+
+def record_login_failure(username: str) -> None:
+    if not username:
+        return
+    username = username.strip().lower()
+    now = time.time()
+    record = FAILED_LOGINS.setdefault(username, {"count": 0, "blocked_until": 0.0})
+    record["count"] += 1
+    if record["count"] >= 5:
+        record["blocked_until"] = now + 60  # Bloqueado por 60 segundos
+    else:
+        record["blocked_until"] = 0.0
+
+
+def record_login_success(username: str) -> None:
+    if not username:
+        return
+    username = username.strip().lower()
+    if username in FAILED_LOGINS:
+        FAILED_LOGINS[username]["count"] = 0
+        FAILED_LOGINS[username]["blocked_until"] = 0.0
 
 
 def auth_enabled() -> bool:
@@ -77,6 +118,7 @@ def set_session_user(user: dict, *, auth_method: str = "password") -> None:
     session["username"] = user["username"]
     session["role"] = user["role"]
     session["auth_method"] = auth_method
+    session["last_activity"] = datetime.now(timezone.utc).timestamp()
 
 
 def set_session_api_key() -> None:
@@ -86,6 +128,7 @@ def set_session_api_key() -> None:
     session["username"] = "api_key"
     session["role"] = "admin"
     session["auth_method"] = "api_key"
+    session["last_activity"] = datetime.now(timezone.utc).timestamp()
 
 
 def require_master_password_in_request() -> tuple[bool, str]:
@@ -102,6 +145,29 @@ def require_master_password_in_request() -> tuple[bool, str]:
 
 
 def register_security(app):
+    @app.before_request
+    def _enforce_session_timeout():
+        if not auth_enabled():
+            return None
+        path = request.path
+        if path.startswith("/static/") or path in PUBLIC_PATHS:
+            return None
+        if not session.get("authenticated"):
+            return None
+            
+        now = datetime.now(timezone.utc).timestamp()
+        last_act = session.get("last_activity")
+        TIMEOUT_SECONDS = 3600  # 60 minutos
+        
+        if last_act and (now - last_act > TIMEOUT_SECONDS):
+            session.clear()
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Sesión expirada por inactividad"}), 401
+            return redirect(url_for("views.login", error="Sesión expirada por inactividad"))
+            
+        session["last_activity"] = now
+        return None
+
     @app.before_request
     def _enforce_auth():
         if not auth_enabled():

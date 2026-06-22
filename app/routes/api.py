@@ -5,7 +5,8 @@ from datetime import date
 from app.database import get_db
 from app.utils import parse_operacion_payload, fmt_plazo_dias, _i, _f, resolve_remito_kg, pesos_piezas_to_json
 from app.services.finanzas import (
-    panel_estrategia, ranking_enemigos, historial_vencimientos, calc_cfr
+    panel_estrategia, ranking_enemigos, historial_vencimientos, calc_cfr,
+    calcular_antiguedad_deuda, calcular_margenes_ventas
 )
 from app.services.pagos import (
     list_historial_pagos, get_pagos_operacion, registrar_pago,
@@ -120,6 +121,15 @@ def api_estrategia():
 @api_bp.route("/enemigos")
 def api_enemigos():
     return jsonify(ranking_enemigos())
+
+@api_bp.route("/finanzas/aging")
+def api_finanzas_aging():
+    return jsonify(calcular_antiguedad_deuda())
+
+@api_bp.route("/finanzas/margenes")
+def api_finanzas_margenes():
+    limit = request.args.get("limit", 200, type=int)
+    return jsonify(calcular_margenes_ventas(limit=limit))
 
 # ------------------------------------------------------------------------------
 # 📝 RUTA: GUARDAR UNA OPERACIÓN (NUEVA DEUDA)
@@ -461,17 +471,26 @@ def api_bulk_endpoint():
         kg_totales = _f(d.get("kg_totales"), "kg_totales")
         costo_total_bulk = _f(d.get("costo_total_bulk"), "costo_total_bulk")
         costo_reparto = _f(d.get("costo_reparto") or 0, "costo_reparto")
+        numero_lote = d.get("numero_lote")
+        fecha_vencimiento = d.get("fecha_vencimiento")
+        proveedor = d.get("proveedor")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
     try:
-        lote_id = registrar_lote_bulk(kg_totales, costo_total_bulk, costo_reparto, fecha)
+        lote_id = registrar_lote_bulk(
+            kg_totales, costo_total_bulk, costo_reparto, fecha,
+            numero_lote, fecha_vencimiento, proveedor
+        )
         return jsonify({
             "id": lote_id,
             "fecha": fecha or date.today().isoformat(),
             "kg_totales": kg_totales,
             "costo_total_bulk": costo_total_bulk,
-            "costo_reparto": costo_reparto
+            "costo_reparto": costo_reparto,
+            "numero_lote": numero_lote or "",
+            "fecha_vencimiento": fecha_vencimiento or "",
+            "proveedor": proveedor or ""
         }), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

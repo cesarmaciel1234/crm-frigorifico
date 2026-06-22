@@ -314,7 +314,7 @@ def _run_migrations(conn):
         """
     )
 
-    # Migración de compras_bulk (costo_reparto)
+    # Migración de compras_bulk (costo_reparto y trazabilidad)
     if _table_exists(conn, "compras_bulk"):
         if is_pg:
             bulk_existing = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'compras_bulk'")}
@@ -325,6 +325,9 @@ def _run_migrations(conn):
             pg_type = "DOUBLE PRECISION"
             final_type = pg_type if is_pg else "REAL"
             conn.execute(f"ALTER TABLE compras_bulk ADD COLUMN costo_reparto {final_type} DEFAULT 0")
+        for col in ["numero_lote", "fecha_vencimiento", "proveedor"]:
+            if col not in bulk_existing:
+                conn.execute(f"ALTER TABLE compras_bulk ADD COLUMN {col} TEXT")
 
     # Migración de remitos_fracciones (costo_logistica_porcion)
     if _table_exists(conn, "remitos_fracciones"):
@@ -418,6 +421,8 @@ def _run_migrations(conn):
             ("entidad_id", "INTEGER"),
             ("usuario", "TEXT"),
             ("detalle", "TEXT"),
+            ("ip_address", "TEXT"),
+            ("user_agent", "TEXT"),
         ):
             if name not in audit_existing:
                 pg_type = "INTEGER" if col_type == "INTEGER" else "TEXT"
