@@ -1668,4 +1668,5 @@ const $ = id => document.getElementById(id);
         setInterval(updateWeather, 1800000); // 30 mins
 
         loadAll();
+        switchView('home');
         setInterval(loadAll, 60000);
