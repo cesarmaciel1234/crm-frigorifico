@@ -1016,3 +1016,36 @@ table:not(.data-table):not(.xls-table) tr:hover td { background: var(--bg-hover)
         font-size: 20px;
     }
 }
+
+@media (max-width: 768px) {
+    /* Responsive header for Client Profile */
+    #view-cliente-detalle .card-head {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+        padding-bottom: 12px !important;
+    }
+    #view-cliente-detalle .card-head h2 {
+        text-align: center !important;
+        font-size: 1.1rem !important;
+        margin: 5px 0 !important;
+    }
+    #view-cliente-detalle .card-head div {
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        width: 100% !important;
+        gap: 6px !important;
+    }
+    #view-cliente-detalle .card-head .btn {
+        flex: 1 1 calc(50% - 6px) !important;
+        text-align: center !important;
+        font-size: 10px !important;
+        padding: 6px 8px !important;
+    }
+    
+    /* Responsive grid of KPI cards in Client Profile */
+    .client-kpi-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+

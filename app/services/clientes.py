@@ -56,12 +56,12 @@ def list_clientes() -> list[dict]:
         # Consulta compatible con PostgreSQL (GROUP BY ANSI y sin aritmética de fecha nativa compleja)
         rows = conn.execute(
             """
-            SELECT c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.created_at, c.fecha_ultimo_pago,
+            SELECT c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.saldo_inicial, c.created_at, c.fecha_ultimo_pago,
                    c.telefono, c.cuit, c.direccion, c.email,
                    MIN(r.fecha) as oldest_unpaid
             FROM clientes c
             LEFT JOIN remitos_carga r ON c.id = r.cliente_id AND r.pagado = 0
-            GROUP BY c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.created_at, c.fecha_ultimo_pago,
+            GROUP BY c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.saldo_inicial, c.created_at, c.fecha_ultimo_pago,
                      c.telefono, c.cuit, c.direccion, c.email
             ORDER BY c.nombre ASC
             """
@@ -117,6 +117,7 @@ def list_clientes() -> list[dict]:
             "scoring": r["scoring"],
             "techo_deuda": r["techo_deuda"],
             "saldo_actual": r["saldo_actual"],
+            "saldo_inicial": r.get("saldo_inicial", 0.0),
             "limite_superado": limite_superado,
             "telefono": r.get("telefono"),
             "cuit": r.get("cuit"),
@@ -135,6 +136,12 @@ def recalcular_saldo_cliente(conn, cliente_id: int) -> float:
     Calcula la suma de remitos impagos (pagado = 0) para el cliente y actualiza saldo_actual.
     Debe ejecutarse dentro de la transacción activa (conn).
     """
+    row_ini = conn.execute(
+        "SELECT COALESCE(saldo_inicial, 0.0) AS saldo_inicial FROM clientes WHERE id = ?",
+        (cliente_id,)
+    ).fetchone()
+    saldo_inicial = float(row_ini["saldo_inicial"]) if row_ini else 0.0
+
     row = conn.execute(
         """
         SELECT COALESCE(SUM(precio_venta_total - COALESCE(monto_pagado, 0)), 0) AS saldo
@@ -142,7 +149,7 @@ def recalcular_saldo_cliente(conn, cliente_id: int) -> float:
         """,
         (cliente_id,)
     ).fetchone()
-    nuevo_saldo = float(row["saldo"])
+    nuevo_saldo = float(row["saldo"]) + saldo_inicial
     
     conn.execute(
         "UPDATE clientes SET saldo_actual = ? WHERE id = ?",
@@ -153,7 +160,7 @@ def recalcular_saldo_cliente(conn, cliente_id: int) -> float:
 def get_cliente_detalle(cliente_id: int) -> dict:
     with get_db() as conn:
         cli = conn.execute(
-            "SELECT id, nombre, scoring, techo_deuda, saldo_actual, telefono, cuit, direccion, email, created_at FROM clientes WHERE id = ?",
+            "SELECT id, nombre, scoring, techo_deuda, saldo_actual, saldo_inicial, telefono, cuit, direccion, email, created_at FROM clientes WHERE id = ?",
             (cliente_id,)
         ).fetchone()
         
@@ -202,6 +209,7 @@ def get_cliente_detalle(cliente_id: int) -> dict:
         "scoring": r_cli["scoring"],
         "techo_deuda": r_cli["techo_deuda"],
         "saldo_actual": r_cli["saldo_actual"],
+        "saldo_inicial": r_cli.get("saldo_inicial", 0.0),
         "limite_superado": limite_superado,
         "created_at": r_cli["created_at"],
         "remitos": list_rem
@@ -392,3 +400,31 @@ def list_perdidas_acumuladas() -> list[dict]:
             "monto_total": round(monto_total, 2)
         })
     return out
+
+
+def actualizar_saldo_inicial(cliente_id: int, saldo_inicial: float) -> float:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE clientes SET saldo_inicial = ? WHERE id = ?",
+            (saldo_inicial, cliente_id)
+        )
+        nuevo_saldo = recalcular_saldo_cliente(conn, cliente_id)
+    return nuevo_saldo
+
+
+def eliminar_cliente(cliente_id: int):
+    from app.services.remitos import eliminar_remito_logic
+    with get_db() as conn:
+        # 1. Obtener todos los remitos del cliente
+        remitos = conn.execute("SELECT id FROM remitos_carga WHERE cliente_id = ?", (cliente_id,)).fetchall()
+        
+        # 2. Eliminar cada remito devolviendo su stock a compras_bulk
+        for rem in remitos:
+            eliminar_remito_logic(conn, rem["id"])
+            
+        # 3. Eliminar pérdidas acumuladas del cliente (si las hay)
+        conn.execute("DELETE FROM perdidas_acumuladas WHERE cliente_id = ?", (cliente_id,))
+        
+        # 4. Eliminar el cliente
+        conn.execute("DELETE FROM clientes WHERE id = ?", (cliente_id,))
+

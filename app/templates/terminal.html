@@ -1034,7 +1034,26 @@
         </div>
     </div>
 
-    <div class="toast" id="toast"></div>
+    <!-- Modal Factura Original -->
+    <div class="modal-overlay" id="modalFacturaOriginal">
+        <div class="modal" style="max-width: 600px; width: 90%; max-height: 85vh; display: flex; flex-direction: column; padding: 0;">
+            <div class="modal-head" style="padding: 20px 24px 14px; border-bottom: 1px solid #f1f5f9;">
+                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                    <div>
+                        <h3 style="margin:0; font-size:16px; font-weight:800; color:#0f172a;">Comprobante de Venta</h3>
+                        <span style="font-size:11px; color:#64748b;" id="facturaOriginalSub">Detalles del remito #000</span>
+                    </div>
+                    <button type="button" class="btn btn-ghost" onclick="cerrarModalFacturaOriginal()" style="padding:4px 8px; font-size:18px; line-height:1; cursor:pointer;">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body" style="padding: 20px 24px; overflow-y: auto; flex: 1;" id="facturaOriginalBody">
+                <!-- Se inyecta dinámicamente -->
+            </div>
+            <div class="modal-actions" id="facturaOriginalActions" style="padding: 14px 24px 20px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 0; width: 100%; box-sizing: border-box;">
+                <button type="button" class="btn btn-primary" onclick="cerrarModalFacturaOriginal()">Cerrar Comprobante</button>
+            </div>
+        </div>
+    </div>
 
 
 

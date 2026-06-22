@@ -741,7 +741,7 @@ const $ = id => document.getElementById(id);
                 const badge = r.pagado || (r.estado_cobro === 'cobrado') 
                     ? '<div style="margin-bottom:4px"><span class="badge badge-success" style="font-size:9px;padding:2px 4px">Cobrado</span></div>' 
                     : '<div style="margin-bottom:4px"><span class="badge badge-danger" style="font-size:9px;padding:2px 4px">Pendiente</span></div>';
-                return `<tr>
+                return `<tr style="cursor:pointer;" onclick="abrirModalFacturaOriginal(${r.id})">
                     <td>
                         <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.cliente || '—')}</div>
                         <div style="font-size:9px;color:var(--text-muted);margin-top:2px">#${r.id} · ${r.fecha.slice(5)}</div>
@@ -773,7 +773,7 @@ const $ = id => document.getElementById(id);
                 const ventaText = '$' + fmtCompact(r.precio_venta_total);
                 const margenText = '$' + fmtCompact(r.margen);
 
-                return `<tr>
+                return `<tr style="cursor:pointer;" onclick="abrirModalFacturaOriginal(${r.id})">
                     <td>
                         <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.cliente || '—')}</div>
                         <div style="font-size:9px;color:var(--text-muted);margin-top:2px">#${r.id} · ${r.fecha.slice(5)}</div>
@@ -1236,8 +1236,8 @@ const $ = id => document.getElementById(id);
             let remitosHtml = '';
             if (filteredRemitos.length > 0) {
                 remitosHtml = `
-                <div class="table-wrap" style="max-height: 40vh; overflow-y: auto;">
-                    <table class="data-table" style="font-size:0.85rem; width:100%;">
+                <div class="table-wrap" style="max-height: 40vh; overflow-y: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;">
+                    <table class="data-table" style="font-size:0.85rem; width:100%; min-width: 600px; border-collapse: collapse;">
                         <thead>
                             <tr style="background:var(--bg);position:sticky;top:0;z-index:10;">
                                 <th style="text-align:left;padding:8px;">Remito</th>
@@ -1252,20 +1252,20 @@ const $ = id => document.getElementById(id);
                         <tbody>
                             ${filteredRemitos.map(r => {
                                 const est = remitoEstado(r.estado_cobro ?? r.pagado);
-                                const pagadoAmnt = Number(r.monto_pagado || 0);
-                                const saldoAmnt = remitoSaldoPendiente(r);
                                 const btn = est.cobrable
                                     ? `<button class="btn btn-ghost btn-sm btn-cobrar-remito-drawer" data-rid="${r.id}" style="color:var(--brand); border:1px solid var(--brand); padding:2px 8px; font-size:10px; border-radius:6px; cursor:pointer;">Registrar Pago</button>` 
                                     : '';
+                                const pagadoAmnt = Number(r.monto_pagado || 0);
+                                const saldoAmnt = remitoSaldoPendiente(r);
                                     
-                                return `<tr style="border-bottom:1px solid #e5e7eb;">
+                                return `<tr style="border-bottom:1px solid #e5e7eb; cursor:pointer;" onclick="abrirModalFacturaOriginal(${r.id})">
                                     <td style="padding:8px;">
                                         <div style="font-weight:600;color:#111827;">#${r.id}</div>
                                         <div style="font-size:10px;color:#6b7280;margin-top:2px;">${r.fecha}</div>
                                     </td>
                                     <td style="padding:8px;">
                                         <div style="font-size:12px;color:#111827;font-weight:600;">${r.tipo_corte || '-'}</div>
-                                        <div style="font-size:10px;color:#6b7280;margin-top:2px;">${remitoCantidad(r)} u · ${fmt(r.kg)} kg${remitoPesosPiezas(r).length ? ' · ' + remitoPesosPiezas(r).map(p => fmt(p)).join(' ') : ''}</div>
+                                        <div style="font-size:10px;color:#6b7280;margin-top:2px;">${remitoCantidad(r)} u · ${fmt(r.kg)} kg${remitoPesosPiezas(r).length ? ' · <span style="color:var(--brand); text-decoration:underline;">Ver detalle</span>' : ''}</div>
                                     </td>
                                     <td style="text-align:right;padding:8px;font-weight:600;color:#111827;">$${fmt(r.precio_venta_total)}</td>
                                     <td style="text-align:right;padding:8px;color:#10b981;">$${fmt(pagadoAmnt)}</td>
@@ -1291,13 +1291,16 @@ const $ = id => document.getElementById(id);
             $('viewClientBody').innerHTML = `
                 <div style="display:flex; flex-direction:column; gap:20px; font-family:'Segoe UI',sans-serif;">
                     <!-- Top KPI cards -->
-                    <div style="display:flex; gap:15px; flex-wrap:wrap;">
-                        <div style="flex:1; min-width:200px; padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                    <div class="client-kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:15px; width: 100%;">
+                        <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);">
                             <div style="font-size:11px; color:#6b7280; font-weight:800; letter-spacing:0.5px;">DEUDA TOTAL ACUMULADA</div>
                             <div style="font-size:32px; font-weight:900; color:${c.saldo_actual > 0 ? '#ef4444' : '#10b981'}; margin-top:8px;">$${fmt(c.saldo_actual)}</div>
-                            <div style="font-size:12px; color:#6b7280; margin-top:8px;">Límite Autorizado: <span style="font-weight:bold;color:#111827;">$${fmt(c.techo_deuda)}</span></div>
+                            <div style="font-size:12px; color:#6b7280; margin-top:8px; display:flex; justify-content:space-between; gap: 10px; flex-wrap: wrap;">
+                                <span>Límite: <span style="font-weight:bold;color:#111827;">$${fmt(c.techo_deuda)}</span></span>
+                                ${c.saldo_inicial > 0 ? `<span>Saldo inicial: <span style="font-weight:bold;color:#4b5563;">$${fmt(c.saldo_inicial)}</span></span>` : ''}
+                            </div>
                         </div>
-                        <div style="flex:1; min-width:200px; padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                        <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);">
                             <div style="font-size:11px; color:#6b7280; font-weight:800; letter-spacing:0.5px;">ESTADO DEL CRÉDITO</div>
                             <div style="font-size:18px; font-weight:bold; margin-top:12px;">${limitStatus}</div>
                             <div style="display:flex; gap:10px; margin-top:16px;">
@@ -1306,7 +1309,7 @@ const $ = id => document.getElementById(id);
                             </div>
                         </div>
                         ${(c.cuit || c.telefono || c.direccion || c.email) ? `
-                        <div style="flex:1.2; min-width:260px; padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05); display:flex; flex-direction:column; gap:6px;">
+                        <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05); display:flex; flex-direction:column; gap:6px;">
                             <div style="font-size:11px; color:#6b7280; font-weight:800; letter-spacing:0.5px; margin-bottom:6px;">DATOS COMERCIALES</div>
                             ${c.cuit ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">CUIT:</span> <span style="font-weight:700; color:#111827;">${esc(c.cuit)}</span></div>` : ''}
                             ${c.direccion ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">Dirección:</span> <span style="font-weight:700; color:#111827;">${esc(c.direccion)}</span></div>` : ''}
@@ -1314,6 +1317,15 @@ const $ = id => document.getElementById(id);
                             ${c.email ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">Email:</span> <span style="font-weight:700; color:#111827;">${esc(c.email)}</span></div>` : ''}
                         </div>
                         ` : ''}
+                        
+                        <!-- CARD DE ADMINISTRACIÓN -->
+                        <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05); display:flex; flex-direction:column; gap:10px;">
+                            <div style="font-size:11px; color:#e11d48; font-weight:800; letter-spacing:0.5px; margin-bottom:2px;">ADMINISTRACIÓN (Clave 2094)</div>
+                            <div style="display:grid; grid-template-columns: 1fr; gap:8px;">
+                                <button class="btn btn-ghost btn-sm" onclick="cargarSaldoViejo(${c.id})" style="border: 1px solid #cbd5e1; padding:8px; font-size:11px; font-weight:bold; color:#475569; border-radius:8px; cursor:pointer; background:#ffffff;">⚙️ Cargar Saldo Viejo</button>
+                                <button class="btn btn-danger btn-sm" onclick="eliminarCliente(${c.id})" style="padding:8px; font-size:11px; font-weight:bold; border-radius:8px; cursor:pointer;">❌ Eliminar Cliente</button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- History and Filters -->
@@ -1779,6 +1791,7 @@ const $ = id => document.getElementById(id);
         $('modalPagoGlobal')?.addEventListener('click', ev => { if (ev.target === $('modalPagoGlobal')) cerrarModalPagoGlobal(); });
         $('inpMontoPagoGlobal')?.addEventListener('keydown', ev => { if (ev.key === 'Enter') confirmarPagoGlobal(); });
         $('modalEmpresa')?.addEventListener('click', ev => { if (ev.target === $('modalEmpresa')) cerrarModalEmpresa(); });
+        $('modalFacturaOriginal')?.addEventListener('click', ev => { if (ev.target === $('modalFacturaOriginal')) cerrarModalFacturaOriginal(); });
         $('formEmpresa')?.addEventListener('submit', ev => {
             ev.preventDefault();
             const data = {
@@ -2053,6 +2066,217 @@ const $ = id => document.getElementById(id);
 
         window.cerrarModalEmpresa = function() {
             $('modalEmpresa').classList.remove('open');
+        };
+
+        window.abrirModalFacturaOriginal = async function(remitoId) {
+            $('facturaOriginalSub').textContent = `Cargando comprobante de remito #${remitoId}...`;
+            $('facturaOriginalBody').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:30px">Obteniendo detalles del servidor...</div>';
+            $('modalFacturaOriginal').classList.add('open');
+            
+            try {
+                const r = await api('/api/remitos/' + remitoId);
+                $('facturaOriginalSub').textContent = `Detalles del remito #${String(r.id).padStart(3, '0')}`;
+                
+                const emp = getEmpresaDatos();
+                const initials = emp.nombre
+                    .split(' ')
+                    .map(w => w[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2) || 'MT';
+                    
+                const pagado = Number(r.monto_pagado || 0);
+                const saldo = Math.max(0, r.precio_venta_total - pagado);
+                const estado = remitoEstado(r.estado_cobro ?? r.pagado);
+                
+                // Generar lista de pesos piezas en cuadrícula si existen
+                let piezasHtml = '';
+                if (Array.isArray(r.pesos_piezas) && r.pesos_piezas.length) {
+                    piezasHtml = `
+                    <div style="margin-top: 15px;">
+                        <h4 style="font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Detalle de Pesos por Pieza</h4>
+                        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                            ${r.pesos_piezas.map((p, idx) => `
+                                <div style="font-family: monospace; font-size: 11px; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 6px; color: #1e293b;">
+                                    U#${idx+1}: <strong>${fmt(p)} kg</strong>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>`;
+                }
+
+                $('facturaOriginalBody').innerHTML = `
+                <div style="font-family:'Segoe UI',system-ui,sans-serif; display:flex; flex-direction:column; gap:16px;">
+                    <!-- Cabecera de la empresa -->
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:12px; border-bottom:2px solid var(--brand, #0d6efd);">
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <div style="width:40px; height:40px; background:var(--brand, #0d6efd); color:#fff; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;">${esc(initials)}</div>
+                            <div>
+                                <div style="font-weight:700; font-size:14px; color:#0f172a;">${esc(emp.nombre)}</div>
+                                <div style="font-size:9px; color:#64748b;">Distribuidora de Carne</div>
+                            </div>
+                        </div>
+                        <div style="text-align:right; font-size:10px; color:#475569; line-height:1.3;">
+                            ${emp.cuit ? `CUIT: ${esc(emp.cuit)}<br>` : ''}
+                            ${emp.telefono ? `Tel: ${esc(emp.telefono)}<br>` : ''}
+                            ${emp.email ? `Email: ${esc(emp.email)}` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Datos del cliente y factura -->
+                    <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:12px; font-size:11px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                        <div>
+                            <h4 style="font-size:9px; color:#64748b; font-weight:bold; text-transform:uppercase; margin-bottom:4px; letter-spacing:0.04em;">Cliente Facturado</h4>
+                            <div style="font-weight:700; color:#0f172a; font-size:12px; margin-bottom:4px;">${esc(r.cliente_nombre || r.cliente)}</div>
+                            ${r.cliente_cuit ? `<div style="color:#475569;">CUIT: ${esc(r.cliente_cuit)}</div>` : ''}
+                            ${r.cliente_direccion ? `<div style="color:#475569;">Dir: ${esc(r.cliente_direccion)}</div>` : ''}
+                            ${r.cliente_telefono ? `<div style="color:#475569;">Tel: ${esc(r.cliente_telefono)}</div>` : ''}
+                        </div>
+                        <div style="text-align:right;">
+                            <h4 style="font-size:9px; color:#64748b; font-weight:bold; text-transform:uppercase; margin-bottom:4px; letter-spacing:0.04em;">Detalle Remito</h4>
+                            <div style="color:#475569;">Emisión: <span style="font-weight:600; color:#111827;">${r.fecha}</span></div>
+                            <div style="color:#475569;">Plazo acordado: <span style="font-weight:600; color:#111827;">${r.plazo_cobro_dias} días</span></div>
+                            <div style="margin-top:6px;"><span class="badge ${estado.badgeClass}" style="font-size:9px; padding:3px 8px;">${estado.label.toUpperCase()}</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Tabla de productos -->
+                    <table style="width:100%; border-collapse:collapse; font-size:11px; margin-top:5px;">
+                        <thead>
+                            <tr style="background:#0f172a; color:#ffffff;">
+                                <th style="text-align:left; padding:8px; border-radius:6px 0 0 6px;">Corte / Concepto</th>
+                                <th style="text-align:right; padding:8px;">Cant.</th>
+                                <th style="text-align:right; padding:8px;">Kilos</th>
+                                <th style="text-align:right; padding:8px;">Precio Unit.</th>
+                                <th style="text-align:right; padding:8px; border-radius:0 6px 6px 0;">Importe</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom:1px solid #e2e8f0; background:#ffffff;">
+                                <td style="padding:10px 8px; font-weight:700; color:#0f172a;">${esc((r.tipo_corte || 'Carne').toUpperCase())}</td>
+                                <td style="padding:10px 8px; text-align:right;">${remitoCantidad(r)}</td>
+                                <td style="padding:10px 8px; text-align:right;">${fmt(r.kg)} kg</td>
+                                <td style="padding:10px 8px; text-align:right;">$${fmt(r.precio_por_kg || (r.kg > 0 ? (r.precio_venta_total - r.costo_total_logistica) / r.kg : 0))}</td>
+                                <td style="padding:10px 8px; text-align:right; font-weight:600; color:#0f172a;">$${fmt(r.precio_venta_total - r.costo_total_logistica)}</td>
+                            </tr>
+                            ${r.costo_total_logistica > 0 ? `
+                            <tr style="border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+                                <td style="padding:10px 8px; color:#475569;" colspan="4">Servicio de Reparto (Logística Distribuida FIFO)</td>
+                                <td style="padding:10px 8px; text-align:right; font-weight:600; color:#0f172a;">$${fmt(r.costo_total_logistica)}</td>
+                            </tr>
+                            ` : ''}
+                        </tbody>
+                    </table>
+
+                    <!-- Piezas en detalle -->
+                    ${piezasHtml}
+
+                    <!-- Cuadro de Totales -->
+                    <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                        <div style="width:220px; display:flex; flex-direction:column; gap:6px; font-size:11px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px;">
+                            <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Subtotal:</span><span style="font-weight:600; color:#0f172a;">$${fmt(r.precio_venta_total)}</span></div>
+                            <div style="display:flex; justify-content:space-between;"><span style="color:#10b981; font-weight:600;">Monto Cobrado:</span><span style="font-weight:700; color:#10b981;">$${fmt(pagado)}</span></div>
+                            <div style="display:flex; justify-content:space-between; border-top:1px solid #cbd5e1; padding-top:6px; font-size:12px;"><span style="font-weight:700; color:#0f172a;">SALDO PENDIENTE:</span><span style="font-weight:800; color:${saldo > 0 ? '#ef4444' : '#111827'};">$${fmt(saldo)}</span></div>
+                        </div>
+                    </div>
+                </div>`;
+                
+                let actionsHtml = '';
+                if (pagado > 0) {
+                    actionsHtml += `<button type="button" class="btn btn-warning btn-sm" onclick="restablecerPagoFactura(${r.id})" style="font-size: 11px; padding: 6px 10px; font-weight:bold; cursor:pointer;">⚠️ Restablecer Pago</button>`;
+                }
+                actionsHtml += `<button type="button" class="btn btn-danger btn-sm" onclick="eliminarFactura(${r.id})" style="font-size: 11px; padding: 6px 10px; font-weight:bold; cursor:pointer;">❌ Eliminar Factura</button>`;
+                actionsHtml += `<button type="button" class="btn btn-primary" onclick="cerrarModalFacturaOriginal()" style="font-size: 11px; padding: 6px 12px; cursor:pointer; margin-left: auto;">Cerrar</button>`;
+                
+                $('facturaOriginalActions').innerHTML = actionsHtml;
+            } catch (e) {
+                $('facturaOriginalBody').innerHTML = `<div style="color:var(--danger);text-align:center;padding:30px">Error al cargar comprobante: ${esc(e.message)}</div>`;
+                $('facturaOriginalActions').innerHTML = `<button type="button" class="btn btn-primary" onclick="cerrarModalFacturaOriginal()">Cerrar</button>`;
+            }
+        };
+
+        window.cerrarModalFacturaOriginal = function() {
+            $('modalFacturaOriginal').classList.remove('open');
+        };
+
+        window.cargarSaldoViejo = async function(clientId) {
+            const val = prompt("Ingrese el saldo viejo/anterior del cliente (ej: 15000):");
+            if (val === null) return;
+            const parsed = parseFloat(val);
+            if (isNaN(parsed) || parsed < 0) {
+                toast("Monto inválido", true);
+                return;
+            }
+            const pass = prompt("Ingrese la contraseña maestra:");
+            if (pass === null) return;
+            try {
+                const res = await api('/api/clientes/' + clientId + '/saldo-inicial', {
+                    method: 'POST',
+                    body: JSON.stringify({ saldo_inicial: parsed, password: pass })
+                });
+                toast(res.message || "Saldo actualizado");
+                await loadAll();
+                await openClientDrawer(clientId);
+            } catch(e) {
+                toast(e.message, true);
+            }
+        };
+
+        window.eliminarCliente = async function(clientId) {
+            if (!confirm("⚠️ ¿ESTÁ SEGURO DE ELIMINAR ESTE CLIENTE?\nSe borrarán todas sus facturas/remitos y se devolverán los kilos al stock.")) return;
+            const pass = prompt("Ingrese la contraseña maestra:");
+            if (pass === null) return;
+            try {
+                const res = await api('/api/clientes/' + clientId, {
+                    method: 'DELETE',
+                    body: JSON.stringify({ password: pass })
+                });
+                toast(res.message || "Cliente eliminado");
+                await loadAll();
+                switchView('clientes');
+            } catch(e) {
+                toast(e.message, true);
+            }
+        };
+
+        window.restablecerPagoFactura = async function(remitoId) {
+            if (!confirm("⚠️ ¿Está seguro de restablecer el pago de esta factura?\nEl monto pagado volverá a cero y se sumará a la deuda del cliente.")) return;
+            const pass = prompt("Ingrese la contraseña maestra:");
+            if (pass === null) return;
+            try {
+                const res = await api('/api/remitos/' + remitoId + '/reset-pago', {
+                    method: 'POST',
+                    body: JSON.stringify({ password: pass })
+                });
+                toast(res.message || "Pago restablecido");
+                cerrarModalFacturaOriginal();
+                await loadAll();
+                if (selectedClienteId) {
+                    await openClientDrawer(selectedClienteId);
+                }
+            } catch(e) {
+                toast(e.message, true);
+            }
+        };
+
+        window.eliminarFactura = async function(remitoId) {
+            if (!confirm("⚠️ ¿Está seguro de eliminar esta factura?\nSe descontará de la deuda del cliente y los kilos volverán a estar disponibles en compras_bulk.")) return;
+            const pass = prompt("Ingrese la contraseña maestra:");
+            if (pass === null) return;
+            try {
+                const res = await api('/api/remitos/' + remitoId, {
+                    method: 'DELETE',
+                    body: JSON.stringify({ password: pass })
+                });
+                toast(res.message || "Factura eliminada");
+                cerrarModalFacturaOriginal();
+                await loadAll();
+                if (selectedClienteId) {
+                    await openClientDrawer(selectedClienteId);
+                }
+            } catch(e) {
+                toast(e.message, true);
+            }
         };
 
         function buildReporteClienteHtml(c) {

@@ -122,3 +122,61 @@ class TestAPI:
         )
         assert r.status_code == 201
         assert r.get_json()["count"] == 1
+
+    def test_saldos_y_eliminaciones_autorizadas(self, client):
+        rc = client.post("/api/clientes", json={"nombre": "Test Admin", "techo_deuda": 500000})
+        assert rc.status_code == 201
+        cid = rc.get_json()["id"]
+
+        r_saldo_fail = client.post(f"/api/clientes/{cid}/saldo-inicial", json={"saldo_inicial": 10000, "password": "wrong"})
+        assert r_saldo_fail.status_code == 403
+
+        r_saldo_ok = client.post(f"/api/clientes/{cid}/saldo-inicial", json={"saldo_inicial": 10000, "password": "2094"})
+        assert r_saldo_ok.status_code == 200
+        assert r_saldo_ok.get_json()["saldo_actual"] == 10000
+
+        client.post("/api/bulk", json={"kg_totales": 100, "costo_total_bulk": 80000})
+        r_rem = client.post("/api/remitos", json={
+            "cliente": "Test Admin",
+            "tipo_corte": "media res",
+            "kg": 20,
+            "precio_por_kg": 1000,
+            "plazo_cobro_dias": 30
+        })
+        assert r_rem.status_code == 201
+        rid = r_rem.get_json()["id"]
+
+        r_cli_det = client.get(f"/api/clientes/{cid}").get_json()
+        assert r_cli_det["saldo_actual"] == 30000
+        
+        r_bulk = client.get("/api/bulk").get_json()
+        assert r_bulk[0]["kg_remanentes"] == 80
+
+        client.post(f"/api/remitos/{rid}/cobrar", json={"monto_pagado": 5000})
+        r_cli_det2 = client.get(f"/api/clientes/{cid}").get_json()
+        assert r_cli_det2["saldo_actual"] == 25000
+
+        r_reset_fail = client.post(f"/api/remitos/{rid}/reset-pago", json={"password": "wrong"})
+        assert r_reset_fail.status_code == 403
+
+        r_reset_ok = client.post(f"/api/remitos/{rid}/reset-pago", json={"password": "2094"})
+        assert r_reset_ok.status_code == 200
+        r_cli_det3 = client.get(f"/api/clientes/{cid}").get_json()
+        assert r_cli_det3["saldo_actual"] == 30000
+
+        r_del_rem_fail = client.delete(f"/api/remitos/{rid}", json={"password": "wrong"})
+        assert r_del_rem_fail.status_code == 403
+
+        r_del_rem_ok = client.delete(f"/api/remitos/{rid}", json={"password": "2094"})
+        assert r_del_rem_ok.status_code == 200
+        
+        r_cli_det4 = client.get(f"/api/clientes/{cid}").get_json()
+        assert r_cli_det4["saldo_actual"] == 10000
+        r_bulk2 = client.get("/api/bulk").get_json()
+        assert r_bulk2[0]["kg_remanentes"] == 100
+
+        r_del_cli = client.delete(f"/api/clientes/{cid}", json={"password": "2094"})
+        assert r_del_cli.status_code == 200
+        r_cli_det5 = client.get(f"/api/clientes/{cid}")
+        assert r_cli_det5.status_code == 404
+

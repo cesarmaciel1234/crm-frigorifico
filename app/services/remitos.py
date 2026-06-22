@@ -132,3 +132,112 @@ def marcar_remito_pagado(remito_id: int):
             raise ValueError("Remito no encontrado")
         saldo = float(row["precio_venta_total"]) - float(row["monto_pagado"] or 0)
     registrar_pago_remito(remito_id, saldo)
+
+
+def get_remito_detalle(remito_id: int) -> dict:
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT r.id, r.fecha, r.cliente_id, r.tipo_corte, r.cantidad, r.pesos_piezas, r.kg,
+                   r.precio_por_kg, r.costo_total_logistica, r.precio_venta_total,
+                   r.plazo_cobro_dias, r.costo_carne, r.pagado, COALESCE(r.monto_pagado, 0) AS monto_pagado, r.created_at,
+                   c.nombre AS cliente_nombre, c.cuit AS cliente_cuit, c.direccion AS cliente_direccion,
+                   c.telefono AS cliente_telefono, c.email AS cliente_email
+            FROM remitos_carga r
+            LEFT JOIN clientes c ON r.cliente_id = c.id
+            WHERE r.id = ?
+            """,
+            (remito_id,)
+        ).fetchone()
+        
+        if not row:
+            raise ValueError("Remito no encontrado")
+            
+        r_dict = dict(row)
+        
+        # Obtener fracciones
+        fracs = conn.execute(
+            """
+            SELECT id, lote_id, kg_descontados, costo_porcion, costo_logistica_porcion
+            FROM remitos_fracciones
+            WHERE remito_id = ?
+            """,
+            (remito_id,)
+        ).fetchall()
+        
+    margen = r_dict["precio_venta_total"] - r_dict["costo_total_logistica"] - r_dict["costo_carne"]
+    pagado = int(r_dict["pagado"] or 0)
+    monto_pagado = float(r_dict.get("monto_pagado") or 0)
+    
+    from app.utils import pesos_piezas_from_json
+    
+    return {
+        "id": r_dict["id"],
+        "fecha": r_dict["fecha"],
+        "cliente_id": r_dict["cliente_id"],
+        "cliente_nombre": r_dict["cliente_nombre"] or "",
+        "cliente_cuit": r_dict["cliente_cuit"] or "",
+        "cliente_direccion": r_dict["cliente_direccion"] or "",
+        "cliente_telefono": r_dict["cliente_telefono"] or "",
+        "cliente_email": r_dict["cliente_email"] or "",
+        "tipo_corte": r_dict["tipo_corte"],
+        "cantidad": int(r_dict["cantidad"] or 0),
+        "pesos_piezas": pesos_piezas_from_json(r_dict["pesos_piezas"]),
+        "kg": r_dict["kg"],
+        "precio_por_kg": r_dict["precio_por_kg"],
+        "costo_total_logistica": r_dict["costo_total_logistica"],
+        "precio_venta_total": r_dict["precio_venta_total"],
+        "plazo_cobro_dias": r_dict["plazo_cobro_dias"],
+        "costo_carne": r_dict["costo_carne"],
+        "pagado": pagado,
+        "monto_pagado": monto_pagado,
+        "estado_cobro": _estado_cobro(pagado, monto_pagado),
+        "margen": round(margen, 2),
+        "created_at": r_dict["created_at"],
+        "fracciones": [dict(f) for f in fracs]
+    }
+
+
+def eliminar_remito_logic(conn, remito_id: int):
+    # 1. Obtener las fracciones descontadas por FIFO para este remito
+    fracs = conn.execute(
+        "SELECT lote_id, kg_descontados FROM remitos_fracciones WHERE remito_id = ?",
+        (remito_id,)
+    ).fetchall()
+    
+    # 2. Devolver los kg a los lotes originales de compras_bulk
+    for frac in fracs:
+        conn.execute(
+            """
+            UPDATE compras_bulk
+            SET kg_remanentes = CASE 
+                WHEN kg_remanentes + ? > kg_totales THEN kg_totales 
+                ELSE kg_remanentes + ? 
+            END
+            WHERE id = ?
+            """,
+            (frac["kg_descontados"], frac["kg_descontados"], frac["lote_id"])
+        )
+        
+    # 3. Eliminar los registros de remitos_fracciones
+    conn.execute("DELETE FROM remitos_fracciones WHERE remito_id = ?", (remito_id,))
+    
+    # 4. Eliminar el remito de remitos_carga
+    conn.execute("DELETE FROM remitos_carga WHERE id = ?", (remito_id,))
+
+
+def eliminar_remito(remito_id: int) -> int:
+    from app.services.clientes import recalcular_saldo_cliente
+    with get_db() as conn:
+        row = conn.execute("SELECT cliente_id FROM remitos_carga WHERE id = ?", (remito_id,)).fetchone()
+        if not row:
+            raise ValueError("Remito no encontrado")
+        cliente_id = row["cliente_id"]
+        
+        eliminar_remito_logic(conn, remito_id)
+        
+        if cliente_id:
+            recalcular_saldo_cliente(conn, cliente_id)
+            
+    return cliente_id
+

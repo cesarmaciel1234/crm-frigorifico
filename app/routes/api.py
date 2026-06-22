@@ -547,6 +547,16 @@ def api_remito_cobrar_endpoint(rid: int):
     except Exception as e:
         return jsonify({"error": f"Error al registrar cobro de remito: {str(e)}"}), 500
 
+@api_bp.route("/remitos/<int:rid>", methods=["GET"])
+def api_remito_detalle_endpoint(rid: int):
+    try:
+        from app.services.remitos import get_remito_detalle
+        return jsonify(get_remito_detalle(rid))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": f"Error al cargar detalle de remito: {str(e)}"}), 500
+
 @api_bp.route("/clientes/<int:cid>/incobrable", methods=["POST"])
 def api_cliente_incobrable_endpoint(cid: int):
     try:
@@ -578,3 +588,88 @@ def api_ventas_mostrador_sync():
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Error al sincronizar ventas offline: {str(e)}"}), 500
+
+
+@api_bp.route("/clientes/<int:cid>/saldo-inicial", methods=["POST"])
+def api_cliente_saldo_inicial_endpoint(cid: int):
+    try:
+        d = request.get_json(silent=True) or {}
+        password = d.get("password")
+        if password != "2094":
+            return jsonify({"error": "Contraseña maestra incorrecta"}), 403
+            
+        monto = float(d.get("saldo_inicial", 0.0))
+        if monto < 0:
+            raise ValueError("El saldo inicial no puede ser negativo")
+            
+        from app.services.clientes import actualizar_saldo_inicial
+        nuevo_saldo = actualizar_saldo_inicial(cid, monto)
+        return jsonify({"ok": True, "saldo_actual": nuevo_saldo, "message": "Saldo inicial actualizado con éxito"})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al actualizar saldo inicial: {str(e)}"}), 500
+
+
+@api_bp.route("/clientes/<int:cid>", methods=["DELETE"])
+def api_eliminar_cliente_endpoint(cid: int):
+    try:
+        d = request.get_json(silent=True) or {}
+        password = d.get("password")
+        if password != "2094":
+            return jsonify({"error": "Contraseña maestra incorrecta"}), 403
+            
+        from app.services.clientes import eliminar_cliente
+        eliminar_cliente(cid)
+        return jsonify({"ok": True, "message": "Cliente y sus remitos eliminados con éxito (stock restituido)"})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al eliminar cliente: {str(e)}"}), 500
+
+
+@api_bp.route("/remitos/<int:rid>", methods=["DELETE"])
+def api_eliminar_remito_endpoint(rid: int):
+    try:
+        d = request.get_json(silent=True) or {}
+        password = d.get("password") or request.args.get("password")
+        if password != "2094":
+            return jsonify({"error": "Contraseña maestra incorrecta"}), 403
+            
+        from app.services.remitos import eliminar_remito
+        cliente_id = eliminar_remito(rid)
+        return jsonify({"ok": True, "cliente_id": cliente_id, "message": "Remito eliminado con éxito (stock restituido)"})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al eliminar remito: {str(e)}"}), 500
+
+
+@api_bp.route("/remitos/<int:rid>/reset-pago", methods=["POST"])
+def api_remito_reset_pago_endpoint(rid: int):
+    try:
+        d = request.get_json(silent=True) or {}
+        password = d.get("password")
+        if password != "2094":
+            return jsonify({"error": "Contraseña maestra incorrecta"}), 403
+            
+        from app.services.clientes import recalcular_saldo_cliente
+        with get_db() as conn:
+            row = conn.execute("SELECT cliente_id FROM remitos_carga WHERE id = ?", (rid,)).fetchone()
+            if not row:
+                raise ValueError("Remito no encontrado")
+            cliente_id = row["cliente_id"]
+            
+            conn.execute(
+                "UPDATE remitos_carga SET monto_pagado = 0.0, pagado = 0 WHERE id = ?",
+                (rid,)
+            )
+            if cliente_id:
+                recalcular_saldo_cliente(conn, cliente_id)
+                
+        return jsonify({"ok": True, "message": "Pago restablecido con éxito. La deuda ha vuelto al cliente."})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al restablecer pago: {str(e)}"}), 500
+

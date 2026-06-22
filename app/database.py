@@ -212,6 +212,7 @@ def _run_migrations(conn):
 
     cliente_cols = {
         "fecha_ultimo_pago": "TEXT",
+        "saldo_inicial": "REAL NOT NULL DEFAULT 0.0",
     }
     if _table_exists(conn, "clientes"):
         if is_pg:
@@ -220,7 +221,9 @@ def _run_migrations(conn):
             cliente_existing = {row[1] for row in conn.execute("PRAGMA table_info(clientes)")}
         for name, col_type in cliente_cols.items():
             if name not in cliente_existing:
-                conn.execute(f"ALTER TABLE clientes ADD COLUMN {name} {col_type}")
+                pg_type = "DOUBLE PRECISION DEFAULT 0.0" if col_type.startswith("REAL") else col_type
+                final_type = pg_type if is_pg else col_type
+                conn.execute(f"ALTER TABLE clientes ADD COLUMN {name} {final_type}")
 
     # Migración de clientes
     conn.executescript(
@@ -231,6 +234,7 @@ def _run_migrations(conn):
             scoring TEXT NOT NULL DEFAULT 'A',
             techo_deuda REAL NOT NULL DEFAULT 500000,
             saldo_actual REAL NOT NULL DEFAULT 0,
+            saldo_inicial REAL NOT NULL DEFAULT 0.0,
             created_at TEXT DEFAULT (datetime('now', 'localtime')),
             fecha_ultimo_pago TEXT
         );
