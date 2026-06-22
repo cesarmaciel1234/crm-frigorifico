@@ -319,6 +319,17 @@ def _run_migrations(conn):
             final_type = pg_type if is_pg else "REAL"
             conn.execute(f"ALTER TABLE remitos_fracciones ADD COLUMN costo_logistica_porcion {final_type} DEFAULT 0")
 
+    # Migración de clientes (telefono, cuit, direccion, email)
+    if _table_exists(conn, "clientes"):
+        if is_pg:
+            cli_existing = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'clientes'")}
+        else:
+            cli_existing = {row[1] for row in conn.execute("PRAGMA table_info(clientes)")}
+        
+        for col in ["telefono", "cuit", "direccion", "email"]:
+            if col not in cli_existing:
+                conn.execute(f"ALTER TABLE clientes ADD COLUMN {col} TEXT")
+
     # Migración ventas mostrador (POS offline sync)
     conn.executescript(
         """

@@ -1305,6 +1305,15 @@ const $ = id => document.getElementById(id);
                                 <div style="background:#f3f4f6; padding:4px 10px; border-radius:6px; font-size:11px; color:#6b7280;">Alta: ${(c.created_at || '').slice(0, 10)}</div>
                             </div>
                         </div>
+                        ${(c.cuit || c.telefono || c.direccion || c.email) ? `
+                        <div style="flex:1.2; min-width:260px; padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05); display:flex; flex-direction:column; gap:6px;">
+                            <div style="font-size:11px; color:#6b7280; font-weight:800; letter-spacing:0.5px; margin-bottom:6px;">DATOS COMERCIALES</div>
+                            ${c.cuit ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">CUIT:</span> <span style="font-weight:700; color:#111827;">${esc(c.cuit)}</span></div>` : ''}
+                            ${c.direccion ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">Dirección:</span> <span style="font-weight:700; color:#111827;">${esc(c.direccion)}</span></div>` : ''}
+                            ${c.telefono ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">Teléfono:</span> <span style="font-weight:700; color:#111827;">${esc(c.telefono)}</span></div>` : ''}
+                            ${c.email ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">Email:</span> <span style="font-weight:700; color:#111827;">${esc(c.email)}</span></div>` : ''}
+                        </div>
+                        ` : ''}
                     </div>
 
                     <!-- History and Filters -->
@@ -1934,7 +1943,11 @@ const $ = id => document.getElementById(id);
                     body: JSON.stringify({
                         nombre: fd.get('nombre'),
                         techo_deuda: fd.get('techo_deuda'),
-                        scoring: fd.get('scoring')
+                        scoring: fd.get('scoring'),
+                        telefono: fd.get('telefono') || undefined,
+                        cuit: fd.get('cuit') || undefined,
+                        direccion: fd.get('direccion') || undefined,
+                        email: fd.get('email') || undefined
                     })
                 });
                 toast('Cliente registrado con éxito');
@@ -2270,6 +2283,10 @@ const $ = id => document.getElementById(id);
         <div class="info-card">
             <h4>Datos del cliente</h4>
             <div class="info-row"><span class="lbl">Razón social</span><span class="val">${esc(c.nombre)}</span></div>
+            ${c.cuit ? `<div class="info-row"><span class="lbl">CUIT</span><span class="val">${esc(c.cuit)}</span></div>` : ''}
+            ${c.direccion ? `<div class="info-row"><span class="lbl">Dirección</span><span class="val">${esc(c.direccion)}</span></div>` : ''}
+            ${c.telefono ? `<div class="info-row"><span class="lbl">Teléfono</span><span class="val">${esc(c.telefono)}</span></div>` : ''}
+            ${c.email ? `<div class="info-row"><span class="lbl">Email</span><span class="val">${esc(c.email)}</span></div>` : ''}
             <div class="info-row"><span class="lbl">Scoring de crédito</span><span class="val">${esc(c.scoring)}</span></div>
             <div class="info-row"><span class="lbl">Techo de deuda</span><span class="val">$${fmt(c.techo_deuda)}</span></div>
         </div>

@@ -15,7 +15,15 @@ from app.utils import pesos_piezas_from_json
 # una cuenta para pagar a fin de mes. El experto le pregunta su nombre y cuánto
 # es lo máximo que le podemos fiar (techo_deuda).
 # ------------------------------------------------------------------------------
-def registrar_cliente(nombre: str, techo_deuda: float, scoring: str = "A") -> int:
+def registrar_cliente(
+    nombre: str,
+    techo_deuda: float,
+    scoring: str = "A",
+    telefono: str = None,
+    cuit: str = None,
+    direccion: str = None,
+    email: str = None
+) -> int:
     nombre = nombre.strip()
     # 1. El experto es estricto: ¡No puedes abrir una cuenta sin decir tu nombre!
     if not nombre:
@@ -32,10 +40,10 @@ def registrar_cliente(nombre: str, techo_deuda: float, scoring: str = "A") -> in
     with get_db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO clientes (nombre, scoring, techo_deuda, saldo_actual)
-            VALUES (?, ?, ?, 0)
+            INSERT INTO clientes (nombre, scoring, techo_deuda, saldo_actual, telefono, cuit, direccion, email)
+            VALUES (?, ?, ?, 0, ?, ?, ?, ?)
             """,
-            (nombre, scoring, techo_deuda)
+            (nombre, scoring, techo_deuda, telefono, cuit, direccion, email)
         )
         cliente_id = cur.lastrowid
         
@@ -49,10 +57,12 @@ def list_clientes() -> list[dict]:
         rows = conn.execute(
             """
             SELECT c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.created_at, c.fecha_ultimo_pago,
+                   c.telefono, c.cuit, c.direccion, c.email,
                    MIN(r.fecha) as oldest_unpaid
             FROM clientes c
             LEFT JOIN remitos_carga r ON c.id = r.cliente_id AND r.pagado = 0
-            GROUP BY c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.created_at, c.fecha_ultimo_pago
+            GROUP BY c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.created_at, c.fecha_ultimo_pago,
+                     c.telefono, c.cuit, c.direccion, c.email
             ORDER BY c.nombre ASC
             """
         ).fetchall()
@@ -108,6 +118,10 @@ def list_clientes() -> list[dict]:
             "techo_deuda": r["techo_deuda"],
             "saldo_actual": r["saldo_actual"],
             "limite_superado": limite_superado,
+            "telefono": r.get("telefono"),
+            "cuit": r.get("cuit"),
+            "direccion": r.get("direccion"),
+            "email": r.get("email"),
             "created_at": r["created_at"],
             "fecha_ultimo_pago": r.get("fecha_ultimo_pago"),
             "oldest_unpaid": r.get("oldest_unpaid"),
@@ -139,7 +153,7 @@ def recalcular_saldo_cliente(conn, cliente_id: int) -> float:
 def get_cliente_detalle(cliente_id: int) -> dict:
     with get_db() as conn:
         cli = conn.execute(
-            "SELECT id, nombre, scoring, techo_deuda, saldo_actual, created_at FROM clientes WHERE id = ?",
+            "SELECT id, nombre, scoring, techo_deuda, saldo_actual, telefono, cuit, direccion, email, created_at FROM clientes WHERE id = ?",
             (cliente_id,)
         ).fetchone()
         

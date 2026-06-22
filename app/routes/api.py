@@ -473,12 +473,33 @@ def api_clientes_endpoint():
         nombre = str(d.get("nombre") or "").strip()
         techo_deuda = _f(d.get("techo_deuda"), "techo_deuda")
         scoring = str(d.get("scoring") or "A").strip().upper()
+        telefono = d.get("telefono")
+        if telefono is not None:
+            telefono = str(telefono).strip() or None
+        cuit = d.get("cuit")
+        if cuit is not None:
+            cuit = str(cuit).strip() or None
+        direccion = d.get("direccion")
+        if direccion is not None:
+            direccion = str(direccion).strip() or None
+        email = d.get("email")
+        if email is not None:
+            email = str(email).strip() or None
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
     try:
-        cid = registrar_cliente(nombre, techo_deuda, scoring)
-        return jsonify({"id": cid, "nombre": nombre, "techo_deuda": techo_deuda, "scoring": scoring}), 201
+        cid = registrar_cliente(nombre, techo_deuda, scoring, telefono, cuit, direccion, email)
+        return jsonify({
+            "id": cid,
+            "nombre": nombre,
+            "techo_deuda": techo_deuda,
+            "scoring": scoring,
+            "telefono": telefono,
+            "cuit": cuit,
+            "direccion": direccion,
+            "email": email
+        }), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
