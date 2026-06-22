@@ -13,7 +13,7 @@ class Config:
 
     SECRET_KEY = os.environ.get("SECRET_KEY", "")
     MT_API_KEY = os.environ.get("MT_API_KEY", "")
-    AUDIT_DELETE_PASSWORD = os.environ.get("AUDIT_DELETE_PASSWORD", "")
+    AUDIT_DELETE_PASSWORD = os.environ.get("AUDIT_DELETE_PASSWORD", "2094")
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
