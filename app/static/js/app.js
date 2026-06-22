@@ -1076,9 +1076,16 @@ const $ = id => document.getElementById(id);
 
         function getGreeting() {
             const h = new Date().getHours();
-            if (h >= 5 && h < 12) return '☀️ Buenos días, jefe';
-            if (h >= 12 && h < 20) return '🌤️ Buenas tardes, jefe';
-            return '🌙 Buenas noches, jefe';
+            let emoji = '🌙'; let text = 'Buenas noches,';
+            if (h >= 5 && h < 12) { emoji = '☀️'; text = 'Buenos días,'; }
+            else if (h >= 12 && h < 20) { emoji = '🌤️'; text = 'Buenas tardes,'; }
+            return `<div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 28px; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1)); margin-right: 4px;">${emoji}</span>
+                        <div style="display: flex; flex-direction: column; line-height: 1.15; font-weight: 700; font-size: 16px; color: #111827;">
+                            <span>${text}</span>
+                            <span>jefe</span>
+                        </div>
+                    </div>`;
         }
 
         function switchView(name) {
@@ -1095,7 +1102,7 @@ const $ = id => document.getElementById(id);
             }
 
             const [t, s, bc] = titles[name] || ['', '', name];
-            if ($('pageTitle')) $('pageTitle').textContent = t;
+            if ($('pageTitle')) $('pageTitle').innerHTML = t;
             if ($('pageSub')) $('pageSub').textContent = s;
             if ($('breadcrumbPage')) $('breadcrumbPage').textContent = bc || t;
             if (name === 'remitos') renderRemitosFull();
