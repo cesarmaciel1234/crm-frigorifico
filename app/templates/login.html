@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Acceso — Master Total</title>
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#2563eb">
+    <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Master Total">
@@ -13,6 +13,23 @@
     <link rel="icon" type="image/png" href="/static/icons/icon-192.png">
     <link rel="stylesheet" href="/static/enterprise.css">
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+        :root {
+            --bg-base: #080c14;
+            --bg-surface: rgba(17, 24, 39, 0.75);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --brand-primary: #4f46e5;
+            --brand-secondary: #2563eb;
+            --brand-gradient: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
+            --brand-shadow: rgba(79, 70, 229, 0.35);
+            --success: #10b981;
+            --error: #f43f5e;
+        }
+
         body {
             display: flex;
             align-items: center;
@@ -21,41 +38,397 @@
             min-height: 100dvh;
             margin: 0;
             padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
-            background: var(--bg-base, #0f172a);
+            background: radial-gradient(circle at top right, rgba(99, 102, 241, 0.15), transparent 400px),
+                        radial-gradient(circle at bottom left, rgba(37, 99, 235, 0.12), transparent 400px),
+                        var(--bg-base);
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             -webkit-tap-highlight-color: transparent;
+            color: var(--text-primary);
         }
-        .login-card { width: min(400px, 100%); padding: 32px; background: var(--bg-surface, #1e293b); border-radius: 16px; border: 1px solid var(--border-subtle, rgba(255,255,255,.08)); }
-        h1 { font-size: 1.25rem; margin: 0 0 8px; color: var(--text-primary, #f8fafc); }
-        p { color: var(--text-muted, #94a3b8); font-size: 0.875rem; margin: 0 0 24px; }
-        label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; }
-        input { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: #0f172a; color: #f8fafc; font-size: 16px; box-sizing: border-box; min-height: 48px; margin-bottom: 12px; }
-        button { width: 100%; margin-top: 8px; padding: 14px; border: none; border-radius: 10px; background: #2563eb; color: #fff; font-weight: 600; font-size: 1rem; cursor: pointer; min-height: 48px; }
-        .error { color: #f87171; font-size: 0.85rem; margin-top: 12px; }
-        .hint { color: #64748b; font-size: 0.75rem; margin-top: 16px; }
+
+        .login-card {
+            width: min(420px, 100%);
+            padding: 40px 32px 32px;
+            background: var(--bg-surface);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            border: 1px solid var(--border-subtle);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5),
+                        0 0 50px 0 rgba(99, 102, 241, 0.05);
+            box-sizing: border-box;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .brand {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .logo {
+            width: 52px;
+            height: 52px;
+            background: var(--brand-gradient);
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.5rem;
+            color: #fff;
+            box-shadow: 0 8px 16px var(--brand-shadow);
+            margin-bottom: 16px;
+            animation: float 4s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-6px); }
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin: 0 0 6px;
+            letter-spacing: -0.5px;
+            background: linear-gradient(120deg, #fff 40%, #a5b4fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin: 0;
+            line-height: 1.4;
+        }
+
+        .field {
+            margin-bottom: 16px;
+            position: relative;
+        }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(15, 23, 42, 0.6);
+            color: #fff;
+            font-size: 0.95rem;
+            font-family: inherit;
+            box-sizing: border-box;
+            transition: all 0.25s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #6366f1;
+            background: rgba(15, 23, 42, 0.9);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+            transform: scale(1.01);
+        }
+
+        .btn-glorious {
+            width: 100%;
+            margin-top: 10px;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            background: var(--brand-gradient);
+            color: #fff;
+            font-weight: 700;
+            font-size: 1rem;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 8px 20px -4px var(--brand-shadow);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-glorious:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px -4px var(--brand-shadow);
+            filter: brightness(1.1);
+        }
+
+        .btn-glorious:active {
+            transform: translateY(0px) scale(0.98);
+        }
+
+        .error-box {
+            color: #fff;
+            background: rgba(244, 63, 94, 0.15);
+            border: 1px solid rgba(244, 63, 94, 0.25);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: shake 0.4s ease;
+        }
+
+        .success-box {
+            color: #fff;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-6px); }
+            75% { transform: translateX(6px); }
+        }
+
+        .auth-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 24px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .auth-footer a {
+            color: #818cf8;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s ease;
+        }
+
+        .auth-footer a:hover {
+            color: #a5b4fc;
+            text-decoration: underline;
+        }
+
+        .hint {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-align: center;
+            margin: 28px 0 0;
+            line-height: 1.5;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 20px;
+        }
+
+        .hint strong {
+            color: var(--text-secondary);
+        }
+
+        .auth-view {
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .auth-view.hidden {
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
+        }
     </style>
 </head>
 <body>
     <div class="login-card">
-        <h1>Master Total</h1>
-        <p>Ingresá con usuario y contraseña, o con la clave de acceso API.</p>
-        <form method="post" action="/login{% if next %}?next={{ next | urlencode }}{% endif %}">
-            <label for="username">Usuario</label>
-            <input type="text" id="username" name="username" autocomplete="username" placeholder="admin">
-            <label for="password">Contraseña</label>
-            <input type="password" id="password" name="password" autocomplete="current-password">
-            <label for="api_key">O clave API (alternativa)</label>
-            <input type="password" id="api_key" name="api_key" autocomplete="off" placeholder="Opcional si usás usuario">
-            {% if error %}
-            <div class="error">{{ error }}</div>
-            {% endif %}
-            <button type="submit">Entrar</button>
-            <p class="hint">El usuario admin se crea al primer arranque si configurás ADMIN_INITIAL_PASSWORD o MASTER_PASSWORD.</p>
-        </form>
+        <div class="brand">
+            <div class="logo">MT</div>
+            <h1>Master Total</h1>
+            <p id="card-desc">Ingresá con tu cuenta para acceder al sistema</p>
+        </div>
+
+        <!-- VIEW 1: LOGIN -->
+        <div id="view-login" class="auth-view active">
+            <form method="post" action="/login{% if next %}?next={{ next | urlencode }}{% endif %}">
+                <div class="field">
+                    <label for="username">Usuario</label>
+                    <input type="text" id="username" name="username" autocomplete="username" placeholder="Ej: rumaul" required>
+                </div>
+                <div class="field">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" name="password" autocomplete="current-password" placeholder="••••••••" required>
+                </div>
+                <div class="field">
+                    <label for="api_key">O clave API (alternativa)</label>
+                    <input type="password" id="api_key" name="api_key" autocomplete="off" placeholder="Opcional si usás usuario">
+                </div>
+                {% if error %}
+                <div class="error-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                    {{ error }}
+                </div>
+                {% endif %}
+                <button type="submit" class="btn-glorious">Iniciar Sesión</button>
+            </form>
+            <div class="auth-footer">
+                <div>¿Sos nuevo? <a href="#" onclick="switchAuthView('register')">Crear cuenta</a></div>
+                <div>¿Olvidaste tu clave? <a href="#" onclick="switchAuthView('reset')">Restablecer</a></div>
+            </div>
+        </div>
+
+        <!-- VIEW 2: REGISTER -->
+        <div id="view-register" class="auth-view hidden">
+            <form id="form-register">
+                <div class="field">
+                    <label for="reg-username">Usuario nuevo</label>
+                    <input type="text" id="reg-username" placeholder="Mínimo 3 caracteres" required minlength="3">
+                </div>
+                <div class="field">
+                    <label for="reg-nombre">Nombre completo</label>
+                    <input type="text" id="reg-nombre" placeholder="Ej: Juan Pérez">
+                </div>
+                <div class="field">
+                    <label for="reg-password">Contraseña</label>
+                    <input type="password" id="reg-password" placeholder="Mínimo 8 caracteres" required minlength="8">
+                </div>
+                <div id="reg-error" class="error-box hidden"></div>
+                <button type="submit" class="btn-glorious">Registrarse y Entrar</button>
+            </form>
+            <div class="auth-footer" style="justify-content: center;">
+                <div>¿Ya tenés cuenta? <a href="#" onclick="switchAuthView('login')">Iniciar sesión</a></div>
+            </div>
+        </div>
+
+        <!-- VIEW 3: RESET PASSWORD -->
+        <div id="view-reset" class="auth-view hidden">
+            <form id="form-reset">
+                <div class="field">
+                    <label for="reset-username">Usuario</label>
+                    <input type="text" id="reset-username" placeholder="Usuario a restablecer" required>
+                </div>
+                <div class="field">
+                    <label for="reset-password">Nueva contraseña</label>
+                    <input type="password" id="reset-password" placeholder="Mínimo 8 caracteres" required minlength="8">
+                </div>
+                <div class="field">
+                    <label for="reset-masterkey">Clave maestra</label>
+                    <input type="password" id="reset-masterkey" placeholder="Ej: 209470" required>
+                </div>
+                <div id="reset-error" class="error-box hidden"></div>
+                <div id="reset-success" class="success-box hidden"></div>
+                <button type="submit" class="btn-glorious">Restablecer Contraseña</button>
+            </form>
+            <div class="auth-footer" style="justify-content: center;">
+                <a href="#" onclick="switchAuthView('login')">Volver al inicio de sesión</a>
+            </div>
+        </div>
+
+        <p class="hint">Usuario por defecto: <strong>rumaul</strong> (clave: <strong>admin</strong>) para acceder a los datos cargados.</p>
     </div>
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js').catch(() => {});
         }
+
+        function switchAuthView(mode) {
+            const views = {
+                login: { el: document.getElementById('view-login'), desc: 'Ingresá con tu cuenta para acceder al sistema' },
+                register: { el: document.getElementById('view-register'), desc: 'Registrá un usuario nuevo con permisos de administrador' },
+                reset: { el: document.getElementById('view-reset'), desc: 'Restablecé tu contraseña ingresando la clave maestra' }
+            };
+
+            for (const key in views) {
+                views[key].el.classList.add('hidden');
+                views[key].el.classList.remove('active');
+            }
+
+            const selected = views[mode];
+            if (selected) {
+                selected.el.classList.remove('hidden');
+                setTimeout(() => selected.el.classList.add('active'), 50);
+                document.getElementById('card-desc').textContent = selected.desc;
+            }
+        }
+
+        document.getElementById('form-register')?.addEventListener('submit', async ev => {
+            ev.preventDefault();
+            const errorBox = document.getElementById('reg-error');
+            errorBox.classList.add('hidden');
+            
+            const username = document.getElementById('reg-username').value.trim();
+            const nombre = document.getElementById('reg-nombre').value.trim();
+            const password = document.getElementById('reg-password').value;
+
+            try {
+                const res = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, nombre, password })
+                });
+                
+                const data = await res.json();
+                if (res.ok && data.ok) {
+                    const params = new URLSearchParams(window.location.search);
+                    const next = params.get('next') || '/';
+                    window.location.href = next.startsWith('/') ? next : '/';
+                } else {
+                    errorBox.textContent = data.error || 'Ocurrió un error al registrar';
+                    errorBox.classList.remove('hidden');
+                }
+            } catch (e) {
+                errorBox.textContent = 'Error de red. Intentá de nuevo.';
+                errorBox.classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('form-reset')?.addEventListener('submit', async ev => {
+            ev.preventDefault();
+            const errorBox = document.getElementById('reset-error');
+            const successBox = document.getElementById('reset-success');
+            errorBox.classList.add('hidden');
+            successBox.classList.add('hidden');
+
+            const username = document.getElementById('reset-username').value.trim();
+            const password = document.getElementById('reset-password').value;
+            const master_key = document.getElementById('reset-masterkey').value.trim();
+
+            try {
+                const res = await fetch('/auth/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, master_key })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.ok) {
+                    successBox.innerHTML = '¡Contraseña restablecida con éxito! Redirigiendo...';
+                    successBox.classList.remove('hidden');
+                    setTimeout(() => {
+                        document.getElementById('username').value = username;
+                        document.getElementById('password').value = '';
+                        switchAuthView('login');
+                        document.getElementById('form-reset').reset();
+                    }, 2000);
+                } else {
+                    errorBox.textContent = data.error || 'Error al restablecer la contraseña';
+                    errorBox.classList.remove('hidden');
+                }
+            } catch (e) {
+                errorBox.textContent = 'Error de red. Intentá de nuevo.';
+                errorBox.classList.remove('hidden');
+            }
+        });
     </script>
 </body>
 </html>

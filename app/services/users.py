@@ -26,22 +26,31 @@ def _row_to_user(row) -> dict[str, Any]:
 
 
 def ensure_default_admin() -> None:
-    """Crea usuario admin si no hay usuarios (solo bootstrap)."""
+    """Crea usuarios admin y rumaul por defecto si no existen."""
     with get_db() as conn:
-        n = conn.execute("SELECT COUNT(*) AS c FROM usuarios").fetchone()["c"]
-        if int(n) > 0:
-            return
-        pwd = Config.ADMIN_INITIAL_PASSWORD or Config.master_password()
-        if not pwd:
-            return
-        username = Config.ADMIN_USERNAME or "admin"
-        conn.execute(
-            """
-            INSERT INTO usuarios (username, nombre, password_hash, role, activo)
-            VALUES (?, ?, ?, 'admin', 1)
-            """,
-            (username, "Administrador", generate_password_hash(pwd)),
-        )
+        # Check and insert admin
+        admin_exists = conn.execute("SELECT 1 FROM usuarios WHERE username = 'admin'").fetchone()
+        if not admin_exists:
+            pwd = Config.ADMIN_INITIAL_PASSWORD or Config.master_password() or "admin"
+            conn.execute(
+                """
+                INSERT INTO usuarios (username, nombre, password_hash, role, activo)
+                VALUES ('admin', 'Administrador', ?, 'admin', 1)
+                """,
+                (generate_password_hash(pwd),),
+            )
+        
+        # Check and insert rumaul
+        rumaul_exists = conn.execute("SELECT 1 FROM usuarios WHERE username = 'rumaul'").fetchone()
+        if not rumaul_exists:
+            conn.execute(
+                """
+                INSERT INTO usuarios (username, nombre, password_hash, role, activo)
+                VALUES ('rumaul', 'Rumaul', ?, 'admin', 1)
+                """,
+                (generate_password_hash("admin"),),
+            )
+
 
 
 def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
@@ -79,6 +88,9 @@ def create_user(username: str, password: str, role: str = "operador", nombre: st
     if len(password) < 8:
         raise ValueError("La contraseña debe tener al menos 8 caracteres")
     with get_db() as conn:
+        exists = conn.execute("SELECT 1 FROM usuarios WHERE username = ?", (username,)).fetchone()
+        if exists:
+            raise ValueError("El nombre de usuario ya está registrado")
         cur = conn.execute(
             """
             INSERT INTO usuarios (username, nombre, password_hash, role, activo)

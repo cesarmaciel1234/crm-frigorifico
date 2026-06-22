@@ -108,3 +108,38 @@ class TestSecurity:
 
         lista = client.get("/api/ventas_mostrador", headers=headers).get_json()
         assert len([v for v in lista if v.get("producto") == "Bife"]) == 1
+
+    def test_auth_register_and_reset_password(self, secured_app):
+        client = secured_app.test_client()
+        
+        # Test default user rumaul exists
+        r_login = client.post("/login", data={"username": "rumaul", "password": "admin"}, follow_redirects=False)
+        assert r_login.status_code in (302, 303)
+        
+        # Register new user
+        reg_payload = {"username": "newuser", "password": "securepassword123", "nombre": "Nuevo Usuario"}
+        r_reg = client.post("/auth/register", json=reg_payload)
+        assert r_reg.status_code == 200
+        assert r_reg.get_json()["ok"] is True
+        
+        # Try registering duplicate
+        r_dup = client.post("/auth/register", json=reg_payload)
+        assert r_dup.status_code == 400
+        assert "registrado" in r_dup.get_json()["error"]
+        
+        # Reset password with master key
+        reset_payload = {"username": "newuser", "password": "newpassword456", "master_key": "209470"}
+        r_reset = client.post("/auth/reset-password", json=reset_payload)
+        assert r_reset.status_code == 200
+        assert r_reset.get_json()["ok"] is True
+        
+        # Authenticate with new password
+        user_auth = client.post("/auth/login", json={"username": "newuser", "password": "newpassword456"})
+        assert user_auth.status_code == 200
+        assert user_auth.get_json()["ok"] is True
+        
+        # Test reset password with wrong master key
+        reset_payload_wrong = {"username": "newuser", "password": "anotherpassword789", "master_key": "wrong_key"}
+        r_reset_wrong = client.post("/auth/reset-password", json=reset_payload_wrong)
+        assert r_reset_wrong.status_code == 403
+
