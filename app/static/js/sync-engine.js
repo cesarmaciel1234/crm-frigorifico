@@ -1,9 +1,10 @@
 /**
  * Motor de sincronización: caché local (IndexedDB) ↔ motor central (API) ↔ nodos de dispositivo.
- * Cada empresa tiene caché aislada; hasta 10 dispositivos sirven como nodos de backup.
+ * Fase 1: push outbox → pull servidor → publicar nodo backup (nunca al revés).
  */
 (function (global) {
     const MAX_NODOS = 10;
+    const SYNC_STATES = { IDLE: 'idle', PUSHING: 'pushing', PULLING: 'pulling' };
 
     function deviceStorageKey(empresaId) {
         return 'crm_device_id_' + empresaId;
@@ -15,6 +16,7 @@
         empresaId: 1,
         deviceId: '',
         etiqueta: '',
+        _state: SYNC_STATES.IDLE,
 
         init(db, sessionUser) {
             this._db = db;
@@ -34,6 +36,10 @@
 
         setApi(fn) {
             this._api = fn;
+        },
+
+        utcNow() {
+            return new Date().toISOString();
         },
 
         cacheKey(name) {
@@ -72,20 +78,41 @@
             await this.putCache('fullBackup', data);
         },
 
-        /** Servidor → caché local */
-        async pullFromServer() {
-            if (!this._api || !navigator.onLine) return null;
-            const bundle = await this._api('/api/sync/pull?_=' + Date.now());
-            if (bundle?.appData) {
-                await this.putAppData(bundle.appData);
-            }
-            if (bundle?.fullBackup) {
-                await this.putFullBackup(bundle.fullBackup);
-            }
-            return bundle;
+        /** Cola legacy: solicitudes_pendientes + transacciones sin ack */
+        async hasPendingOutbox() {
+            if (!this._db) return false;
+            const solicitudes = await this._db.solicitudes_pendientes.count();
+            let transacciones = 0;
+            try {
+                transacciones = await this._db.transacciones.where('status').equals(0).count();
+            } catch (_) {}
+            return solicitudes > 0 || transacciones > 0;
         },
 
-        /** Caché local → nodo de backup en el motor central */
+        /** Servidor → caché local (solo si outbox vacío) */
+        async pullFromServer() {
+            if (!this._api || !navigator.onLine) return null;
+            if (await this.hasPendingOutbox()) {
+                return { blocked: true, reason: 'outbox_not_empty' };
+            }
+            if (this._state !== SYNC_STATES.IDLE) return null;
+
+            this._state = SYNC_STATES.PULLING;
+            try {
+                const bundle = await this._api('/api/sync/pull?_=' + Date.now());
+                if (bundle?.appData) {
+                    await this.putAppData(bundle.appData);
+                }
+                if (bundle?.fullBackup) {
+                    await this.putFullBackup(bundle.fullBackup);
+                }
+                return bundle;
+            } finally {
+                this._state = SYNC_STATES.IDLE;
+            }
+        },
+
+        /** Caché local → nodo de backup (después de sync exitoso, no en cada escritura) */
         async pushNode(snapshot) {
             if (!this._api || !navigator.onLine || !snapshot) return null;
             return this._api('/api/sync/nodo', {
@@ -95,19 +122,50 @@
                     device_id: this.deviceId,
                     etiqueta: this.etiqueta,
                     snapshot,
+                    updated_at_utc: this.utcNow(),
                 }),
             });
         },
 
-        /** Bidireccional: bajar del motor y publicar caché como nodo */
-        async syncBidirectional(getSnapshot) {
+        /**
+         * Flujo seguro offline-first:
+         * 1) drenar outbox (callback)
+         * 2) pull solo si outbox vacío
+         * 3) publicar nodo backup
+         */
+        async syncSafe(options) {
+            options = options || {};
             if (!navigator.onLine) return { offline: true };
-            const pulled = await this.pullFromServer();
-            const snap = typeof getSnapshot === 'function' ? getSnapshot() : await this.getAppData();
-            if (snap) {
-                await this.pushNode(snap);
+
+            if (typeof options.drainOutbox === 'function') {
+                await options.drainOutbox();
             }
-            return { pulled: !!pulled, published: !!snap };
+
+            const pending = await this.hasPendingOutbox();
+            if (pending) {
+                return { blocked: true, reason: 'outbox_not_empty' };
+            }
+
+            let pulled = null;
+            try {
+                pulled = await this.pullFromServer();
+            } catch (err) {
+                console.warn('sync/pull falló:', err);
+            }
+
+            const snap = typeof options.getSnapshot === 'function'
+                ? options.getSnapshot()
+                : await this.getAppData();
+            if (snap && !pulled?.blocked) {
+                await this.pushNode(snap).catch(() => {});
+            }
+
+            return { pulled: !!pulled && !pulled?.blocked, published: !!snap, blocked: !!pulled?.blocked };
+        },
+
+        /** @deprecated Usar syncSafe */
+        async syncBidirectional(getSnapshot) {
+            return this.syncSafe({ getSnapshot });
         },
 
         async listNodes() {

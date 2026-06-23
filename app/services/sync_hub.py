@@ -19,6 +19,10 @@ MAX_NODOS = 10
 MAX_SNAPSHOT_CHARS = 2_500_000
 
 
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def _metricas_flotantes(enemigos: list[dict], estrategia: dict) -> dict[str, Any]:
     sangre_diaria = 0.0
     interes_diario = 0.0
@@ -142,6 +146,8 @@ def save_sync_nodo(device_id: str, etiqueta: str, snapshot: dict) -> dict[str, A
     if len(raw) > MAX_SNAPSHOT_CHARS:
         raise ValueError("El snapshot supera el tamaño máximo permitido para nodos")
 
+    ts = _utc_now()
+
     with get_db() as conn:
         ensure_tenant_migrations(conn)
         exists = conn.execute(
@@ -152,18 +158,18 @@ def save_sync_nodo(device_id: str, etiqueta: str, snapshot: dict) -> dict[str, A
             conn.execute(
                 """
                 UPDATE sync_nodos
-                SET etiqueta = ?, snapshot_json = ?, updated_at = datetime('now', 'localtime')
+                SET etiqueta = ?, snapshot_json = ?, updated_at = ?
                 WHERE device_id = ?
                 """,
-                ((etiqueta or "")[:120], raw, device_id),
+                ((etiqueta or "")[:120], raw, ts, device_id),
             )
         else:
             conn.execute(
                 """
                 INSERT INTO sync_nodos (device_id, etiqueta, snapshot_json, updated_at)
-                VALUES (?, ?, ?, datetime('now', 'localtime'))
+                VALUES (?, ?, ?, ?)
                 """,
-                (device_id, (etiqueta or "")[:120], raw),
+                (device_id, (etiqueta or "")[:120], raw, ts),
             )
         count = conn.execute("SELECT COUNT(*) AS c FROM sync_nodos").fetchone()["c"]
         if count > MAX_NODOS:

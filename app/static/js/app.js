@@ -38,17 +38,19 @@ const $ = id => document.getElementById(id);
             }
         }
 
-        async function intentarSincronizar() {
+        async function intentarSincronizar(opts) {
+            opts = opts || {};
             if (!navigator.onLine) {
                 console.log("Sin conexión. Los datos están seguros en el dispositivo.");
-                return;
+                return { syncCount: 0 };
             }
             const pendientes = await db.transacciones.where('status').equals(0).toArray();
             let syncCount = 0;
             for (const item of pendientes) {
                 try {
                     let responseOk = false;
-                    
+                    let responseStatus = 0;
+
                     if (MODO_PRUEBA) {
                         console.log("[MODO PRUEBA] Simulación de envío a la nube:", item.uuid);
                         await new Promise(r => setTimeout(r, 300));
@@ -61,25 +63,92 @@ const $ = id => document.getElementById(id);
                             body: JSON.stringify(item)
                         });
                         responseOk = response.ok;
+                        responseStatus = response.status;
                     }
 
                     if (responseOk) {
                         await db.transacciones.update(item.id, { status: 1 });
                         console.log("Sincronizado con éxito:", item.uuid);
                         syncCount++;
+                    } else if (responseStatus >= 500 || responseStatus === 408) {
+                        break;
                     }
                 } catch (error) {
                     console.warn("Error de conexión al sincronizar:", error);
                     break;
                 }
             }
-            if (syncCount > 0) {
+            if (syncCount > 0 && !opts.skipReload) {
                 toast(`Sincronizados ${syncCount} registros pendientes`);
                 loadAll();
             }
+            return { syncCount };
         }
 
-        window.addEventListener('online', intentarSincronizar);
+        async function countPendingOutbox() {
+            const solicitudes = await db.solicitudes_pendientes.count();
+            const transacciones = await db.transacciones.where('status').equals(0).count();
+            return solicitudes + transacciones;
+        }
+
+        async function drainSolicitudesPendientes() {
+            if (!navigator.onLine) return { exito: 0, fallo: 0 };
+            const pendientes = await db.solicitudes_pendientes.orderBy('id').toArray();
+            let exitoCount = 0;
+            let falloCount = 0;
+
+            for (const item of pendientes) {
+                try {
+                    const response = await (window.CrmSafe?.apiFetch || fetch)(item.url, {
+                        method: item.method,
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: item.body
+                    });
+
+                    if (response.ok) {
+                        await db.solicitudes_pendientes.delete(item.id);
+                        exitoCount++;
+                    } else if (response.status >= 500 || response.status === 408) {
+                        console.warn('Reintentar solicitud pendiente más tarde:', item.url, response.status);
+                        break;
+                    } else {
+                        const d = await response.json().catch(() => ({}));
+                        console.error('Error al sincronizar operación:', d.error || response.statusText);
+                        await db.solicitudes_pendientes.update(item.id, {
+                            failed: true,
+                            last_status: response.status,
+                            last_error: d.error || response.statusText,
+                        });
+                        falloCount++;
+                    }
+                } catch (error) {
+                    console.warn('Fallo de red en sincronización, deteniendo cola:', error);
+                    break;
+                }
+            }
+            return { exito: exitoCount, fallo: falloCount };
+        }
+
+        async function drainOutboxAll() {
+            await intentarSincronizar({ skipReload: true });
+            return drainSolicitudesPendientes();
+        }
+
+        async function publishNodeBackupAfterSync() {
+            if (window.CrmSync && data && navigator.onLine) {
+                await CrmSync.pushNode(data).catch(() => {});
+            }
+        }
+
+        window.addEventListener('online', async () => {
+            await drainOutboxAll();
+            if ((await countPendingOutbox()) === 0) {
+                await loadAll();
+            } else {
+                actualizarUIOffline();
+            }
+        });
         // -----------------------------------
         const fmt = n => Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         const fmtFecha = (iso, time=false) => {
@@ -165,9 +234,6 @@ const $ = id => document.getElementById(id);
         }
         async function tenantCachePut(name, payload) {
             await db.cache.put({ key: tenantCacheKey(name), data: payload, updated_at: Date.now() });
-            if (name === 'appData' && window.CrmSync && navigator.onLine) {
-                CrmSync.pushNode(payload).catch(() => {});
-            }
         }
 
         let histPagosFiltro = '';
@@ -281,40 +347,13 @@ const $ = id => document.getElementById(id);
         }
 
         async function sincronizarSolicitudesPendientes() {
-            if (!navigator.onLine) return;
-            const pendientes = await db.solicitudes_pendientes.orderBy('id').toArray();
-            if (!pendientes.length) return;
-            
-            let exitoCount = 0;
-            let falloCount = 0;
-            
-            for (const item of pendientes) {
-                try {
-                    const response = await (window.CrmSafe?.apiFetch || fetch)(item.url, {
-                        method: item.method,
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'same-origin',
-                        body: item.body
-                    });
-                    
-                    if (response.ok) {
-                        await db.solicitudes_pendientes.delete(item.id);
-                        exitoCount++;
-                    } else {
-                        const d = await response.json().catch(() => ({}));
-                        console.error("Error al sincronizar operación:", d.error || response.statusText);
-                        await db.solicitudes_pendientes.delete(item.id);
-                        falloCount++;
-                    }
-                } catch (error) {
-                    console.warn("Fallo de red en sincronización, deteniendo cola:", error);
-                    break;
-                }
-            }
-            
-            if (exitoCount > 0 || falloCount > 0) {
-                toast(`🔄 Sincronización completa: ${exitoCount} éxito, ${falloCount} error.`);
-                await loadAll();
+            const r = await drainSolicitudesPendientes();
+            await intentarSincronizar({ skipReload: true });
+            const pending = await countPendingOutbox();
+
+            if (r.exito > 0 || r.fallo > 0) {
+                toast(`🔄 Sincronización: ${r.exito} éxito, ${r.fallo} pendiente de revisión.`);
+                if (!pending) await loadAll();
             }
             actualizarUIOffline();
         }
@@ -326,8 +365,10 @@ const $ = id => document.getElementById(id);
                 
                 // 1. Crear cliente
                 if (url.includes('/api/clientes') && method === 'POST' && !url.includes('/cobrar') && !url.includes('/saldo-inicial') && !url.includes('/incobrable')) {
+                    const clientUuid = parsedBody.uuid || crypto.randomUUID();
                     const newCli = {
-                        id: 'temp_' + Date.now(),
+                        id: 'temp_' + clientUuid,
+                        uuid: clientUuid,
                         nombre: parsedBody.nombre || 'Nuevo Cliente (Offline)',
                         techo_deuda: parseFloat(parsedBody.techo_deuda || 0),
                         scoring: parseFloat(parsedBody.scoring || 5),
@@ -352,8 +393,10 @@ const $ = id => document.getElementById(id);
                     const kg = parseFloat(parsedBody.kg || 0);
                     const total = precio * kg;
                     
+                    const remitoUuid = parsedBody.uuid || crypto.randomUUID();
                     const newRemito = {
-                        id: 'temp_' + Date.now(),
+                        id: 'temp_' + remitoUuid,
+                        uuid: remitoUuid,
                         cliente: c ? c.nombre : clientVal,
                         tipo_corte: parsedBody.tipo_corte || '',
                         cantidad: parseInt(parsedBody.cantidad || 1, 10),
@@ -383,7 +426,7 @@ const $ = id => document.getElementById(id);
                             c.saldo_actual = (c.saldo_actual || 0) - monto;
                             c.pagos = c.pagos || [];
                             c.pagos.push({
-                                id: 'temp_' + Date.now(),
+                                id: 'temp_' + crypto.randomUUID(),
                                 monto: monto,
                                 fecha: new Date().toISOString().split('T')[0],
                                 tipo: 'COBRO'
@@ -2621,11 +2664,31 @@ const $ = id => document.getElementById(id);
                     }
                 }
 
+                if (navigator.onLine) {
+                    await drainOutboxAll();
+                }
+
+                const pending = await countPendingOutbox();
+                if (pending > 0) {
+                    console.warn('Outbox con pendientes: no se pisa la caché local con pull del servidor.');
+                    if (!data) {
+                        const cached = await tenantCacheGet('appData');
+                        if (cached) {
+                            data = cached;
+                            renderAll();
+                        }
+                    }
+                    actualizarUIOffline();
+                    return;
+                }
+
                 let freshData = null;
                 if (navigator.onLine && window.CrmSync) {
                     try {
                         const bundle = await CrmSync.pullFromServer();
-                        if (bundle?.appData) {
+                        if (bundle?.blocked) {
+                            console.warn('Pull bloqueado: outbox no vacío.');
+                        } else if (bundle?.appData) {
                             freshData = bundle.appData;
                             if (bundle.fullBackup && backupTieneDatos(bundle.fullBackup)) {
                                 await tenantCachePut('fullBackup', bundle.fullBackup);
@@ -2677,6 +2740,8 @@ const $ = id => document.getElementById(id);
                 data = freshData;
                 await tenantCachePut('appData', data);
                 renderAll();
+                await publishNodeBackupAfterSync();
+
                 if (avisarSiVacio && !servidorTieneDatos(freshData)) {
                     try {
                         const nube = await api('/api/nube/resumen?_=' + Date.now());
