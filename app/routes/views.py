@@ -243,12 +243,11 @@ def limpiar_sistema_ahora():
             conn.execute("DELETE FROM empresas WHERE id > 1 OR slug != 'rumaul'")
             
             if is_postgres():
-                cur = conn.cursor()
-                cur.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'empresa_%'")
-                for row in cur.fetchall():
-                    s = row[0]
+                rows = conn.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'empresa_%'").fetchall()
+                for row in rows:
+                    s = row[0] if isinstance(row, (tuple, list)) else row['schema_name']
                     if s != 'empresa_1':
-                        cur.execute(f"DROP SCHEMA IF EXISTS {s} CASCADE")
+                        conn.execute(f"DROP SCHEMA IF EXISTS {s} CASCADE")
                 conn.execute("SELECT setval('empresas_id_seq', (SELECT coalesce(MAX(id), 1) FROM empresas))")
                 
         return "<h1>¡LIMPIEZA COMPLETADA CON ÉXITO!</h1><p>Maciel y todas las empresas de prueba han sido eliminadas por completo. Rumaul (id=1) está 100% seguro.</p><p>Ya puedes volver a la página de inicio y registrar a la empresa 'maciel' de cero.</p>"
@@ -257,11 +256,18 @@ def limpiar_sistema_ahora():
 
 @views_bp.route('/debug-db')
 def debug_db():
-    from app.database import get_db
+    from app.database import get_db, is_postgres
     try:
         with get_db(empresa_id=0) as conn:
             empresas = [dict(r) for r in conn.execute("SELECT * FROM empresas").fetchall()]
             usuarios = [dict(r) for r in conn.execute("SELECT id, username, empresa_id, role FROM usuarios").fetchall()]
-        return jsonify({"empresas": empresas, "usuarios": usuarios})
+            
+            tablas_empresa_2 = []
+            if is_postgres():
+                tablas_empresa_2 = [
+                    r[0] for r in conn.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'empresa_2'").fetchall()
+                ]
+                
+        return jsonify({"empresas": empresas, "usuarios": usuarios, "tablas_empresa_2": tablas_empresa_2})
     except Exception as e:
         return str(e)
