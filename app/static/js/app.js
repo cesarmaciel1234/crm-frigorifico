@@ -2085,6 +2085,25 @@ const $ = id => document.getElementById(id);
                 created_at: e.created_at || null,
             };
         }
+        function empresaDatosParaBackup() {
+            try {
+                const raw = JSON.parse(localStorage.getItem('empresa_datos') || '{}');
+                const razon = (raw.nombre || raw.razon_social || '').trim();
+                if (!razon && !raw.cuit && !raw.direccion && !raw.telefono && !raw.email) {
+                    return null;
+                }
+                return {
+                    razon_social: razon || 'Master Total',
+                    cuit: raw.cuit || '',
+                    direccion: raw.direccion || '',
+                    telefono: raw.telefono || '',
+                    email: raw.email || '',
+                    cotizacion_usd: parseFloat(raw.cotizacion_usd) || 1000.0,
+                };
+            } catch (_) {
+                return null;
+            }
+        }
         function convertirAppDataABackup(appData) {
             if (!appData) return null;
             const clientes = (appData.clientes || []).map(c => ({
@@ -2136,15 +2155,13 @@ const $ = id => document.getElementById(id);
                 monto_pagado: r.monto_pagado ?? 0,
                 created_at: r.created_at || null,
             }));
-            let empresa = {};
-            try { empresa = JSON.parse(localStorage.getItem('empresa_datos') || '{}'); } catch (_) {}
             const fuenteOps = appData.enemigos?.length ? appData.enemigos : (appData.historial || []);
             const operaciones_financieras = fuenteOps.map(enemigoAOperacion).filter(Boolean);
-            return {
+            const empresa = empresaDatosParaBackup();
+            const payload = {
                 version: 2,
                 exported_at: new Date().toISOString(),
                 source: 'appData_cache',
-                empresa,
                 clientes,
                 compras_bulk,
                 entidades_bancarias,
@@ -2158,6 +2175,8 @@ const $ = id => document.getElementById(id);
                 ventas_mostrador: [],
                 auditoria_operaciones: appData.auditoria || [],
             };
+            if (empresa) payload.empresa = empresa;
+            return payload;
         }
         function normalizarBackupParaImport(raw) {
             if (!raw) return null;
@@ -2273,6 +2292,7 @@ const $ = id => document.getElementById(id);
                 }
                 toast('Datos subidos al servidor correctamente');
                 cerrarModalBackup();
+                await syncEmpresaFromServer();
                 await loadAll();
             } catch (e) {
                 toast('Error al subir: ' + (e.message || ''), true);

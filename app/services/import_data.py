@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 
 from app.database import get_db, is_postgres
+from app.services.users import save_empresa_config
 
 CLEAR_ORDER = [
     "aplicacion_pagos",
@@ -175,16 +176,13 @@ def import_all_data(json_data: dict) -> None:
         for table in CLEAR_ORDER:
             conn.execute(f"DELETE FROM {table}")
 
-        if json_data.get("empresa"):
-            payload = json.dumps(json_data["empresa"], ensure_ascii=False)
-            exists = conn.execute("SELECT 1 FROM empresa_config WHERE id = 1").fetchone()
-            if exists:
-                conn.execute(
-                    "UPDATE empresa_config SET datos = ?, updated_at = datetime('now', 'localtime') WHERE id = 1",
-                    (payload,),
-                )
-            else:
-                conn.execute("INSERT INTO empresa_config (id, datos) VALUES (1, ?)", (payload,))
+        empresa_raw = json_data.get("empresa")
+        if empresa_raw:
+            try:
+                save_empresa_config(empresa_raw)
+            except Exception:
+                # La empresa es opcional: no debe bloquear la restauración de datos.
+                pass
 
         clientes = []
         for c in tables["clientes"]:

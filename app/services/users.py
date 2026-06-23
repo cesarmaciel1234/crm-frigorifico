@@ -12,6 +12,34 @@ from app.config import Config
 ROLES = frozenset({"admin", "operador", "visor"})
 ROLE_RANK = {"visor": 0, "operador": 1, "admin": 2}
 
+EMPRESA_DEFAULTS: dict[str, Any] = {
+    "razon_social": "Master Total",
+    "cuit": "",
+    "direccion": "",
+    "telefono": "",
+    "email": "",
+    "cotizacion_usd": 1000.0,
+}
+
+
+def normalize_empresa_config(data: dict | None) -> dict[str, Any]:
+    """Unifica nombre/razon_social y completa campos faltantes."""
+    if not data or not isinstance(data, dict):
+        return dict(EMPRESA_DEFAULTS)
+    try:
+        cotizacion = float(data.get("cotizacion_usd") or EMPRESA_DEFAULTS["cotizacion_usd"])
+    except (TypeError, ValueError):
+        cotizacion = EMPRESA_DEFAULTS["cotizacion_usd"]
+    razon = (data.get("razon_social") or data.get("nombre") or "").strip()
+    return {
+        "razon_social": razon or EMPRESA_DEFAULTS["razon_social"],
+        "cuit": str(data.get("cuit") or "").strip(),
+        "direccion": str(data.get("direccion") or "").strip(),
+        "telefono": str(data.get("telefono") or "").strip(),
+        "email": str(data.get("email") or "").strip(),
+        "cotizacion_usd": cotizacion,
+    }
+
 
 def _row_to_user(row) -> dict[str, Any]:
     r = dict(row)
@@ -131,27 +159,18 @@ def get_empresa_config() -> dict[str, Any]:
     with get_db() as conn:
         row = conn.execute("SELECT datos FROM empresa_config WHERE id = 1").fetchone()
     if not row or not row["datos"]:
-        return {
-            "razon_social": "Master Total",
-            "cuit": "",
-            "direccion": "",
-            "telefono": "",
-            "email": "",
-            "cotizacion_usd": 1000.0,
-        }
+        return dict(EMPRESA_DEFAULTS)
     try:
         data = json.loads(row["datos"])
         if isinstance(data, dict):
-            if "cotizacion_usd" not in data:
-                data["cotizacion_usd"] = 1000.0
-            return data
-        return {}
+            return normalize_empresa_config(data)
+        return dict(EMPRESA_DEFAULTS)
     except (TypeError, json.JSONDecodeError):
-        return {}
+        return dict(EMPRESA_DEFAULTS)
 
 
 def save_empresa_config(datos: dict[str, Any]) -> dict[str, Any]:
-    payload = json.dumps(datos, ensure_ascii=False)
+    payload = json.dumps(normalize_empresa_config(datos), ensure_ascii=False)
     with get_db() as conn:
         exists = conn.execute("SELECT 1 FROM empresa_config WHERE id = 1").fetchone()
         if exists:
