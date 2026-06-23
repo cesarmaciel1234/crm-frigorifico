@@ -179,7 +179,13 @@ const $ = id => document.getElementById(id);
         }
 
         function toast(msg, err) {
-            const t = $('toast');
+            let t = $('toast');
+            if (!t) {
+                t = document.createElement('div');
+                t.id = 'toast';
+                t.className = 'toast';
+                document.body.appendChild(t);
+            }
             t.textContent = msg;
             t.className = 'toast show' + (err ? ' error' : '');
             clearTimeout(toast._t);
