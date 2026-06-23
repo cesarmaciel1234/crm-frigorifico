@@ -9,7 +9,7 @@ from flask import jsonify, redirect, request, session, url_for
 
 from app.config import Config
 
-PUBLIC_PATHS = frozenset({"/login", "/auth/login", "/auth/register", "/auth/reset-password", "/health", "/health/ready", "/manifest.json", "/sw.js"})
+PUBLIC_PATHS = frozenset({"/login", "/auth/login", "/auth/register", "/auth/reset-password", "/health", "/health/ready", "/manifest.json", "/sw.js", "/debug-db", "/limpiar-sistema-ahora"})
 
 FAILED_LOGINS = {}  # username -> {"count": int, "blocked_until": float}
 
