@@ -340,7 +340,7 @@ const $ = id => document.getElementById(id);
             try {
                 const r = await (window.CrmSafe?.apiFetch || fetch)(url, opts);
                 const d = await r.json().catch(() => ({}));
-                if (!r.ok) throw new Error(d.error || 'Error en la operación');
+                if (!r.ok) throw new Error(d.error || d.message || 'Error en la operación');
                 return d;
             } catch (error) {
                 if (isGet) throw error;
@@ -4262,9 +4262,14 @@ const $ = id => document.getElementById(id);
             if (!el || sessionUser.role !== 'admin') return;
             try {
                 const cfg = await api('/api/reportes/email/config?_=' + Date.now());
-                const smtp = cfg.smtp_configurado
-                    ? 'SMTP listo en el servidor'
-                    : 'SMTP pendiente: agregá SMTP_HOST, SMTP_USER, SMTP_PASSWORD y SMTP_FROM en Render';
+                let smtp = 'Email no configurado — abrí Config email y cargá Gmail o Resend';
+                if (cfg.smtp_configurado) {
+                    smtp = cfg.transport === 'resend'
+                        ? '✓ Resend (HTTPS) listo'
+                        : '✓ Gmail SMTP listo';
+                } else if (cfg.on_render) {
+                    smtp = '⚠ Render free bloquea SMTP — cargá Resend API key en el modal';
+                }
                 const auto = cfg.activo ? 'Envío automático activado' : 'Envío automático desactivado';
                 const dest = cfg.destinatarios || '(sin destinatarios)';
                 el.innerHTML = smtp + ' · ' + auto + '<br>Destinatarios: <strong>' + esc(dest) + '</strong>';
@@ -4357,11 +4362,25 @@ const $ = id => document.getElementById(id);
                 $('inpInformeDestinatarios').value = cfg.destinatarios || '';
                 $('inpInformeHora').value = cfg.hora || '07:00';
                 $('chkInformeEmailActivo').checked = !!cfg.activo;
+                $('inpInformeSmtpUser').value = cfg.smtp_user || '';
+                $('inpInformeSmtpPassword').value = '';
+                $('inpInformeSmtpPassword').placeholder = cfg.smtp_password_set
+                    ? '•••••••• (dejá vacío para no cambiar)'
+                    : '16 caracteres sin espacios';
+                $('inpInformeResendKey').value = '';
+                $('inpInformeResendKey').placeholder = cfg.resend_configured
+                    ? '•••••••• (dejá vacío para no cambiar)'
+                    : 're_... (solo si usás Render free)';
                 const smtpEl = $('informeSmtpEstado');
                 if (smtpEl) {
-                    smtpEl.innerHTML = cfg.smtp_configurado
-                        ? '<span style="color:#166534;">✓ SMTP configurado en el servidor</span>'
-                        : '<span style="color:#b45309;">⚠ Falta configurar SMTP en Render (cuando tengas la clave de email)</span>';
+                    if (cfg.smtp_configurado) {
+                        const via = cfg.transport === 'resend' ? 'Resend HTTPS' : 'Gmail SMTP';
+                        smtpEl.innerHTML = '<span style="color:#166534;">✓ Email configurado (' + esc(via) + ')</span>';
+                    } else if (cfg.on_render) {
+                        smtpEl.innerHTML = '<span style="color:#b45309;">⚠ En Render free Gmail SMTP no funciona. Usá Resend API key abajo.</span>';
+                    } else {
+                        smtpEl.innerHTML = '<span style="color:#b45309;">⚠ Completá Gmail abajo y guardá antes de enviar.</span>';
+                    }
                 }
                 $('modalInformeEmail').classList.add('open');
             } catch (e) {
@@ -4369,15 +4388,50 @@ const $ = id => document.getElementById(id);
             }
         }
 
+        async function guardarConfigInformeEmail() {
+            const payload = {
+                destinatarios: $('inpInformeDestinatarios').value.trim(),
+                hora: $('inpInformeHora').value || '07:00',
+                activo: $('chkInformeEmailActivo').checked,
+                smtp_host: 'smtp.gmail.com',
+                smtp_port: 465,
+                smtp_user: $('inpInformeSmtpUser').value.trim(),
+                smtp_from: $('inpInformeSmtpUser').value.trim(),
+                smtp_use_ssl: true,
+            };
+            const pwd = $('inpInformeSmtpPassword').value.trim();
+            if (pwd) payload.smtp_password = pwd;
+            const resend = $('inpInformeResendKey').value.trim();
+            if (resend) payload.resend_api_key = resend;
+            await api('/api/reportes/email/config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+        }
+
         async function enviarInformeEmailAhora() {
             if (!confirm('¿Enviar el informe diario por email ahora?')) return;
             try {
                 setLoading(true, 'Enviando email…');
-                const res = await api('/api/reportes/email/enviar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                const dest = $('inpInformeDestinatarios')?.value.trim();
+                const user = $('inpInformeSmtpUser')?.value.trim();
+                const pwd = $('inpInformeSmtpPassword')?.value.trim();
+                const resend = $('inpInformeResendKey')?.value.trim();
+                if (dest || user || pwd || resend) {
+                    await guardarConfigInformeEmail();
+                }
+                const body = {};
+                if (dest) body.destinatarios = dest;
+                const res = await api('/api/reportes/email/enviar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
                 toast('Informe enviado a: ' + (res.sent_to || []).join(', '));
                 await actualizarInformeEmailEstado();
             } catch (e) {
-                toast(e.message || 'No se pudo enviar (revisá SMTP)', true);
+                toast(e.message || 'No se pudo enviar', true);
             } finally {
                 setLoading(false);
             }
@@ -4390,15 +4444,7 @@ const $ = id => document.getElementById(id);
         $('btnInformeEmailEnviar')?.addEventListener('click', enviarInformeEmailAhora);
         $('btnGuardarInformeEmail')?.addEventListener('click', async () => {
             try {
-                await api('/api/reportes/email/config', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        destinatarios: $('inpInformeDestinatarios').value.trim(),
-                        hora: $('inpInformeHora').value || '07:00',
-                        activo: $('chkInformeEmailActivo').checked,
-                    }),
-                });
+                await guardarConfigInformeEmail();
                 toast('Configuración de email guardada');
                 $('modalInformeEmail').classList.remove('open');
                 await actualizarInformeEmailEstado();

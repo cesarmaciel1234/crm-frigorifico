@@ -17,7 +17,7 @@ def _money(n: float | int | None) -> float:
         return 0.0
 
 
-def build_daily_report() -> dict[str, Any]:
+def build_daily_report(*, include_details: bool = True) -> dict[str, Any]:
     """Arma el briefing del día: cobrar, pagar, clientes, deudas y salud financiera."""
     estrategia = panel_estrategia()
     activo = estrategia.get("activo") or {}
@@ -25,7 +25,6 @@ def build_daily_report() -> dict[str, Any]:
     enemigos = ranking_enemigos()
     clientes = list_clientes()
     historial = historial_vencimientos()
-    remitos = list_remitos(12)
     empresa = get_empresa_config()
 
     clientes_con_saldo = [c for c in clientes if _money(c.get("saldo_actual")) > 0]
@@ -48,7 +47,7 @@ def build_daily_report() -> dict[str, Any]:
     total_pagar_vencido = sum(_money(h.get("total_pagar")) for h in vencidos)
 
     hoy = date.today()
-    return {
+    result: dict[str, Any] = {
         "version": "informe_diario_v1",
         "fecha": hoy.isoformat(),
         "fecha_legible": hoy.strftime("%d/%m/%Y"),
@@ -78,7 +77,7 @@ def build_daily_report() -> dict[str, Any]:
         "clientes_a_cobrar": sorted(
             clientes_con_saldo,
             key=lambda x: -_money(x.get("saldo_actual")),
-        )[:40],
+        )[:40 if include_details else 20],
         "clientes_en_mora": sorted(
             clientes_mora,
             key=lambda x: -_money(x.get("saldo_actual")),
@@ -86,7 +85,12 @@ def build_daily_report() -> dict[str, Any]:
         "obligaciones_a_pagar": sorted(
             obligaciones,
             key=lambda x: -_money(x.get("saldo_pendiente") or x.get("pagar")),
-        )[:30],
+        )[:30 if include_details else 15],
+    }
+    if not include_details:
+        return result
+
+    result.update({
         "vencimientos_vencidos": sorted(
             vencidos,
             key=lambda x: -_money(x.get("total_pagar")),
@@ -96,5 +100,6 @@ def build_daily_report() -> dict[str, Any]:
             [e for e in enemigos if e.get("cfr") is not None],
             key=lambda x: -(x.get("cfr") or 0),
         )[:10],
-        "remitos_recientes": remitos,
-    }
+        "remitos_recientes": list_remitos(12),
+    })
+    return result

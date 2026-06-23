@@ -1594,8 +1594,14 @@
                 <button type="button" class="modal-close" onclick="$('modalInformeEmail').classList.remove('open')" aria-label="Cerrar">&times;</button>
             </div>
             <div class="modal-body" style="padding:0 20px 20px;">
-                <p style="font-size:0.85rem; color:#64748b; margin-bottom:14px;">El servidor envía el PDF automáticamente cada mañana cuando configures las variables SMTP en Render (<code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASSWORD</code>, <code>SMTP_FROM</code>) y el cron con <code>REPORT_CRON_SECRET</code>.</p>
                 <div id="informeSmtpEstado" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:14px; font-size:0.85rem;"></div>
+                <p style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">Gmail: usá una <strong>contraseña de aplicación</strong> (Google → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones). En Render plan free el SMTP está bloqueado: usá <strong>Resend API</strong> (HTTPS).</p>
+                <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Cuenta Gmail (remitente)</label>
+                <input type="email" id="inpInformeSmtpUser" placeholder="tu@gmail.com" style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:10px;">
+                <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Contraseña de aplicación Gmail</label>
+                <input type="password" id="inpInformeSmtpPassword" placeholder="16 caracteres sin espacios" autocomplete="new-password" style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:10px;">
+                <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Resend API key (opcional, para Render free)</label>
+                <input type="password" id="inpInformeResendKey" placeholder="re_..." autocomplete="new-password" style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:14px;">
                 <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Destinatarios (emails separados por coma)</label>
                 <input type="text" id="inpInformeDestinatarios" placeholder="jefe@empresa.com, contador@..." style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:12px;">
                 <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Hora preferida (referencia)</label>
@@ -1686,6 +1692,6 @@
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
     <script src="/static/js/sync-engine.js?v=2.2"></script>
-    <script src="/static/js/app.js?v=2.69"></script>
+    <script src="/static/js/app.js?v=2.71"></script>
 </body>
 </html>

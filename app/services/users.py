@@ -41,6 +41,13 @@ def normalize_empresa_config(data: dict | None) -> dict[str, Any]:
         "reporte_email_destinatarios": str(data.get("reporte_email_destinatarios") or "").strip(),
         "reporte_email_activo": bool(data.get("reporte_email_activo")),
         "reporte_email_hora": str(data.get("reporte_email_hora") or "07:00").strip() or "07:00",
+        "smtp_host": str(data.get("smtp_host") or "").strip(),
+        "smtp_port": int(data.get("smtp_port") or 465),
+        "smtp_user": str(data.get("smtp_user") or "").strip(),
+        "smtp_password": str(data.get("smtp_password") or "").strip(),
+        "smtp_from": str(data.get("smtp_from") or "").strip(),
+        "smtp_use_ssl": bool(data.get("smtp_use_ssl", True)),
+        "resend_api_key": str(data.get("resend_api_key") or "").strip(),
     }
 
 

@@ -52,6 +52,8 @@ class Config:
     ) != "0"
     REPORT_EMAIL_TO = os.environ.get("REPORT_EMAIL_TO", "")
     REPORT_CRON_SECRET = os.environ.get("REPORT_CRON_SECRET", "")
+    RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+    ON_RENDER = os.environ.get("RENDER") == "true"
 
     @classmethod
     def master_password(cls) -> str:

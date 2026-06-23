@@ -51,3 +51,5 @@ services:
         sync: false
       - key: REPORT_CRON_SECRET
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
