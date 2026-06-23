@@ -15,12 +15,16 @@ with app.app_context():
     
     with get_db(empresa_id=0) as conn:
         try:
-            # Borrar usuarios de empresas de prueba
-            cur = conn.execute("DELETE FROM usuarios WHERE empresa_id > 1")
-            print(f"- Usuarios de prueba eliminados: {cur.rowcount}")
+            # 1. Asegurarnos de borrar el usuario 'maciel' esté donde esté (por si se coló en Rumaul)
+            cur = conn.execute("DELETE FROM usuarios WHERE username = 'maciel' OR username = 'MACIEL'")
+            print(f"- Usuario específico 'maciel' eliminado: {cur.rowcount}")
+
+            # 2. Borrar usuarios de empresas de prueba (o sin empresa asignada)
+            cur = conn.execute("DELETE FROM usuarios WHERE (empresa_id > 1 OR empresa_id IS NULL) AND username != 'admin'")
+            print(f"- Otros usuarios de prueba eliminados: {cur.rowcount}")
             
-            # Borrar empresas de prueba
-            cur = conn.execute("DELETE FROM empresas WHERE id > 1")
+            # 3. Borrar empresas de prueba
+            cur = conn.execute("DELETE FROM empresas WHERE id > 1 OR slug != 'rumaul'")
             print(f"- Empresas de prueba eliminadas: {cur.rowcount}")
             
             if is_postgres():
