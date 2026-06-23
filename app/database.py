@@ -273,17 +273,15 @@ def init_db():
                     );
                     """
                 )
-                try:
-                    conn.execute("ALTER TABLE usuarios ADD COLUMN empresa_id INTEGER")
-                except Exception:
-                    pass
                 c1 = conn.execute("SELECT 1 FROM empresas WHERE id = 1").fetchone()
                 if not c1:
                     conn.execute("INSERT INTO empresas (id, nombre, slug) VALUES (1, 'Rumaul', 'rumaul')")
-                try:
-                    conn.execute("SELECT setval(pg_get_serial_sequence('empresas', 'id'), (SELECT MAX(id) FROM empresas))")
-                except Exception:
-                    pass
+                max_row = conn.execute("SELECT MAX(id) AS max_id FROM empresas").fetchone()
+                max_id = max_row["max_id"] if max_row else None
+                if max_id:
+                    conn.execute(
+                        "SELECT setval(pg_get_serial_sequence('empresas', 'id'), (SELECT MAX(id) FROM empresas))"
+                    )
             with get_db(empresa_id=1) as conn:
                 if not table_exists(conn, "clientes"):
                     with open(Config.SCHEMA_PATH, encoding="utf-8") as f:
