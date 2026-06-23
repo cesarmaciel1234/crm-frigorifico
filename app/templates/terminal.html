@@ -589,22 +589,53 @@
             <!-- VIEW: Historial pagos -->
 
             <!-- VIEW: CLIENTE DETALLE CORPORATIVO -->
-            <div class="view" id="view-cliente-detalle">
-                <div class="card" style="margin-top: 10px;">
-                    <div class="card-head" style="display:flex; align-items:center; gap:15px; border-bottom: 1px solid var(--border); padding-bottom:15px;">
-                        <button class="btn btn-ghost" onclick="volverDesdeClienteDetalle()" style="padding: 6px 12px; font-weight:bold; color:var(--text-muted);">← Volver</button>
-                        <h2 id="viewClientTitle" style="margin:0; font-size: 1.2rem; color: #111827;">Perfil Corporativo</h2>
-                        <div style="margin-left:auto; display:flex; gap:10px;">
-                            <button class="btn btn-success btn-sm" id="btnNuevaVenta" onclick="abrirNuevaVenta()">➕ Nueva Venta</button>
-                            <button class="btn btn-primary btn-sm" id="btnClientPrint">🖨 Imprimir Reporte</button>
-                            <button class="btn btn-danger btn-sm" id="btnClientIncobrable" style="display:none;">Declarar Incobrable</button>
-                        </div>
+            <div class="view" id="view-cliente-detalle" style="flex-direction:column; height: 100%; background: #efeae2; margin:-20px; border-radius: 20px 20px 0 0; overflow:hidden;">
+                <!-- Header WhatsApp Style -->
+                <div style="display:flex; align-items:center; gap:12px; background:#075e54; color:#fff; padding:12px 15px; flex-shrink:0; cursor:pointer;" id="wspHeader">
+                    <button class="btn btn-ghost" onclick="volverDesdeClienteDetalle()" style="padding:0; color:#fff; min-width:unset; margin-right:5px; font-size:1.2rem;">←</button>
+                    <div style="width:42px; height:42px; border-radius:50%; background:#ccc; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#555; font-size:1.1rem; flex-shrink:0;" id="wspAvatar"></div>
+                    <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;" onclick="abrirPerfilCliente()">
+                        <div id="viewClientTitle" style="font-weight:600; font-size:1.1rem; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Cargando...</div>
+                        <div id="viewClientSubtitle" style="font-size:0.8rem; opacity:0.9; margin-top:2px;">Toca para info del cliente</div>
                     </div>
-                    <div class="card-body" id="viewClientBody" style="padding: 20px;">
-                        <div style="color:var(--text-muted);text-align:center;padding:20px">Cargando detalles corporativos...</div>
+                    <!-- Right Actions in Header -->
+                    <div style="display:flex; gap:15px; align-items:center;">
+                        <span id="btnClientPrintWsp" style="font-size:1.3rem; cursor:pointer;" onclick="document.getElementById('btnClientPrint').click()">🖨️</span>
                     </div>
                 </div>
+
+                <!-- Chat Body (Messages) -->
+                <div id="viewClientBody" style="flex:1; overflow-y:auto; padding:20px 15px; display:flex; flex-direction:column; gap:8px;">
+                    <div style="color:var(--text-muted);text-align:center;padding:20px; background:rgba(255,255,255,0.7); border-radius:10px; align-self:center; font-size:0.9rem;">Cargando historial...</div>
+                </div>
+
+                <!-- Input Action Bar (WhatsApp Style) -->
+                <div style="background:#f0f0f0; padding:8px; display:flex; align-items:center; gap:8px; flex-shrink:0; position:sticky; bottom:0;">
+                    <button class="btn btn-ghost" id="btnNuevaVentaWsp" onclick="abrirNuevaVenta()" style="font-size:1.5rem; padding:0 8px; color:#54656f;" title="Nueva Venta">+</button>
+                    
+                    <!-- Center Pill -->
+                    <div style="flex:1; background:#fff; border-radius:24px; padding:8px 15px; display:flex; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
+                        <div style="display:flex; flex-direction:column; width:100%;">
+                            <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:#888; text-transform:uppercase; letter-spacing:0.5px;">
+                                <span>Atrasado</span>
+                                <span>Actual</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1.05rem;">
+                                <span id="wspSaldoAtrasado" style="color:#ef4444;">$0</span>
+                                <span id="wspSaldoActual" style="color:#111827;">$0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Buttons -->
+                    <button class="btn btn-ghost" id="btnDeleteSeleccionados" style="font-size:1.3rem; padding:0 8px; color:#ef4444; display:none;" onclick="eliminarFacturasSeleccionadas()">🗑️</button>
+                    <button id="btnWspCobrar" onclick="abrirCobranzaWsp()" style="background:#00a884; color:#fff; width:46px; height:46px; border-radius:50%; border:none; display:flex; align-items:center; justify-content:center; font-size:1.3rem; box-shadow:0 1px 3px rgba(0,0,0,0.2); cursor:pointer; flex-shrink:0; transition: transform 0.1s;">
+                        💵
+                    </button>
+                </div>
             </div>
+            
+            <button class="btn btn-primary btn-sm field-hidden" id="btnClientPrint">Hidden Print</button>
 
             <!-- VIEW: VENTAS EXPRESS (Remito general) -->
             <div class="view" id="view-ventas-express">
@@ -1008,6 +1039,23 @@
         </div>
     </div>
 
+    <!-- Modal Info Perfil Wsp -->
+    <div class="modal-overlay" id="modalWspProfile">
+        <div class="modal">
+            <h3>Perfil del Cliente</h3>
+            <div class="modal-body" style="padding: 15px 0;">
+                <div id="wspProfileContent" style="font-size:1rem; color:var(--text-primary); margin-bottom: 20px; line-height: 1.5;"></div>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button type="button" class="btn btn-danger" id="btnClientIncobrableWsp" style="width:100%; display:none;">Declarar Incobrable</button>
+                    <button type="button" class="btn btn-ghost" id="btnClientEliminarWsp" style="width:100%; border:1px solid #ef4444; color:#ef4444;">Eliminar Cliente</button>
+                </div>
+            </div>
+            <div class="modal-actions" style="margin-top:0;">
+                <button type="button" class="btn btn-primary" onclick="$('modalWspProfile').classList.remove('open')" style="width:100%;">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal acción pago centralizado -->
     <div class="modal-overlay" id="modalPagoCentralAccion">
         <div class="modal">
@@ -1344,6 +1392,109 @@
         #cobBarClientesMora { color: #ea580c; }
         #cobBarMontoMora { color: #ef4444; }
         #cobBarCapitalTotal { color: #2563eb; }
+
+        /* Estilos View Cliente Detalle Wsp */
+        #view-cliente-detalle.active {
+            display: flex !important;
+        }
+        .wsp-bubble {
+            max-width: 85%;
+            padding: 8px 12px;
+            border-radius: 8px;
+            position: relative;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+        .wsp-bubble:active {
+            opacity: 0.8;
+        }
+        .wsp-bubble.sent {
+            background-color: #dcf8c6;
+            align-self: flex-end;
+            border-top-right-radius: 0;
+        }
+        .wsp-bubble.received {
+            background-color: #ffffff;
+            align-self: flex-start;
+            border-top-left-radius: 0;
+        }
+        .wsp-bubble-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .wsp-bubble-title {
+            font-weight: bold;
+            font-size: 0.85rem;
+            color: #075e54;
+        }
+        .wsp-bubble-body {
+            color: #111827;
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+        }
+        .wsp-bubble-amount {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        .wsp-bubble-footer {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.7rem;
+            color: #888;
+            margin-top: 2px;
+        }
+        .wsp-bubble-check {
+            font-size: 0.8rem;
+        }
+        .wsp-bubble-check.read {
+            color: #34b7f1;
+        }
+        
+        .wsp-date-divider {
+            background: rgba(225, 245, 254, 0.9);
+            color: #444;
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 12px;
+            align-self: center;
+            margin: 10px 0;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+            font-weight: 500;
+        }
+
+        .wsp-bubble-select-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+        }
+        .wsp-checkbox {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            background: transparent;
+            color: transparent;
+            transition: all 0.2s;
+        }
+        .wsp-checkbox.checked {
+            background: #00a884;
+            border-color: #00a884;
+            color: white;
+        }
     </style>
 
     <div class="modal-overlay" id="modalNuevoUsuario">

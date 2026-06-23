@@ -1564,15 +1564,7 @@ const $ = id => document.getElementById(id);
                 btn.addEventListener('click', ev => {
                     ev.stopPropagation();
                     abrirAccionPagoCentral(parseInt(btn.dataset.deudaId, 10));
-                });
-            });
-        }
-
-        let currentClientData = null;
-        let currentClientFilter = 'all';
-        let clientDetailReturnView = 'clientes';
-
-        async function openClientDrawer(clientId) {
+                     async function openClientDrawer(clientId) {
             if (!$('view-cliente-detalle')) {
                 toast('Actualizando aplicación...', false);
                 setTimeout(() => window.location.reload(), 500);
@@ -1584,7 +1576,7 @@ const $ = id => document.getElementById(id);
             }
             selectedClienteId = clientId;
             switchView('cliente-detalle');
-            $('viewClientBody').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">Cargando detalles corporativos...</div>';
+            $('viewClientBody').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px; background:rgba(255,255,255,0.7); border-radius:10px; align-self:center; margin-top:20px;">Cargando historial de chat...</div>';
             
             try {
                 const c = await api('/api/clientes/' + clientId);
@@ -1592,19 +1584,31 @@ const $ = id => document.getElementById(id);
                 
                 currentClientData = c;
                 currentClientFilter = 'all';
-                const titleEl = $('viewClientTitle');
-                if (titleEl) titleEl.textContent = c.nombre;
+                $('viewClientTitle').textContent = c.nombre;
+                
+                const initials = c.nombre.substring(0, 2).toUpperCase();
+                $('wspAvatar').textContent = initials;
+                
+                if (c.saldo_actual > 0) {
+                    $('viewClientSubtitle').innerHTML = `Deuda: <span style="color:#ef4444; font-weight:bold;">$${fmt(c.saldo_actual)}</span>`;
+                } else {
+                    $('viewClientSubtitle').innerHTML = `En línea`;
+                }
+                
+                $('wspSaldoAtrasado').textContent = '$' + fmt(c.saldo_actual);
+                
+                const unpaid = (c.remitos || []).filter(r => remitoSaldoPendiente(r) > 0);
+                // Si hay facturas impagas, tomamos la más reciente como "Factura Actual"
+                const saldoActual = unpaid.length > 0 ? remitoSaldoPendiente(unpaid[unpaid.length - 1]) : 0;
+                $('wspSaldoActual').textContent = '$' + fmt(saldoActual);
+                
+                window.wspSelectedInvoices = [];
+                $('btnDeleteSeleccionados').style.display = 'none';
                 
                 renderClientDashboard();
                 
-                if (c.saldo_actual > 0 && c.scoring !== 'D') {
-                    $('btnClientIncobrable').style.display = 'inline-block';
-                } else {
-                    $('btnClientIncobrable').style.display = 'none';
-                }
-                
             } catch (e) {
-                $('viewClientBody').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px">Error al cargar detalles: ${esc(e.message)}</div>`;
+                $('viewClientBody').innerHTML = `<div style="color:var(--danger);text-align:center;padding:20px; background:#fff; border-radius:10px; align-self:center; margin-top:20px;">Error al cargar detalles: ${esc(e.message)}</div>`;
             }
         }
         window.openClientDrawer = openClientDrawer;
@@ -1614,6 +1618,49 @@ const $ = id => document.getElementById(id);
         }
         window.volverDesdeClienteDetalle = volverDesdeClienteDetalle;
 
+        function abrirPerfilCliente() {
+            $('modalWspProfile').classList.add('open');
+        }
+        window.abrirPerfilCliente = abrirPerfilCliente;
+
+        function toggleSelectFactura(el, rid, saldoAmnt) {
+            el.classList.toggle('checked');
+            if (el.classList.contains('checked')) {
+                window.wspSelectedInvoices.push(rid);
+            } else {
+                window.wspSelectedInvoices = window.wspSelectedInvoices.filter(id => id !== rid);
+            }
+            $('btnDeleteSeleccionados').style.display = window.wspSelectedInvoices.length > 0 ? 'inline-block' : 'none';
+        }
+        window.toggleSelectFactura = toggleSelectFactura;
+
+        async function eliminarFacturasSeleccionadas() {
+            if (!window.wspSelectedInvoices || window.wspSelectedInvoices.length === 0) return;
+            const ids = window.wspSelectedInvoices;
+            const pass = await promptMasterPasswordAsync("Eliminar " + ids.length + " factura(s)");
+            if (!pass) return;
+            
+            try {
+                for (const rid of ids) {
+                    await api('/api/remitos/' + rid, {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json', 'X-Master-Password': pass }
+                    });
+                }
+                toast('Facturas eliminadas');
+                openClientDrawer(selectedClienteId);
+                await loadAll();
+            } catch (e) {
+                toast(e.message, true);
+            }
+        }
+        window.eliminarFacturasSeleccionadas = eliminarFacturasSeleccionadas;
+
+        function abrirCobranzaWsp() {
+            abrirCobranzaClienteGlobal(selectedClienteId);
+        }
+        window.abrirCobranzaWsp = abrirCobranzaWsp;
+
         function renderClientDashboard() {
             if (!currentClientData) return;
             const c = currentClientData;
@@ -1622,178 +1669,122 @@ const $ = id => document.getElementById(id);
                 ? '<span style="color:var(--danger)">Bloqueado (Límite superado)</span>' 
                 : '<span style="color:var(--success)">Activo y Operativo</span>';
                 
-            let filteredRemitos = c.remitos || [];
-            if (currentClientFilter === 'pending') {
-                filteredRemitos = filteredRemitos.filter(r => (r.pagado ?? r.estado_cobro) !== 'cobrado' && (r.pagado ?? r.estado_cobro) !== 1 && (r.pagado ?? r.estado_cobro) !== 2);
-            } else if (currentClientFilter === 'paid') {
-                filteredRemitos = filteredRemitos.filter(r => (r.pagado ?? r.estado_cobro) === 'cobrado' || (r.pagado ?? r.estado_cobro) === 1 || (r.pagado ?? r.estado_cobro) === 2);
+            const items = [];
+            (c.remitos || []).forEach(r => items.push({ type: 'remito', date: r.fecha, data: r }));
+            (c.pagos || []).forEach(p => items.push({ type: 'pago', date: p.fecha, data: p }));
+            
+            items.sort((a, b) => new Date(a.date) - new Date(b.date));
+            
+            let html = '';
+            let lastDate = '';
+            
+            if (items.length === 0) {
+                html = `<div style="color:#6b7280;text-align:center;padding:20px;background:rgba(255,255,255,0.8);border-radius:12px; align-self:center; margin-top:20px;">No hay mensajes en este chat.</div>`;
             }
             
-            let remitosHtml = '';
-            if (filteredRemitos.length > 0) {
-                remitosHtml = `
-                <div class="table-wrap" style="max-height: 40vh; overflow-y: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;">
-                    <table class="data-table" style="font-size:0.85rem; width:100%; min-width: 600px; border-collapse: collapse;">
-                        <thead>
-                            <tr style="background:var(--bg);position:sticky;top:0;z-index:10;">
-                                <th style="text-align:left;padding:8px;">Remito</th>
-                                <th style="text-align:left;padding:8px;">Detalle</th>
-                                <th style="text-align:right;padding:8px;">Total</th>
-                                <th style="text-align:right;padding:8px;">Pagado</th>
-                                <th style="text-align:right;padding:8px;">Saldo</th>
-                                <th style="text-align:center;padding:8px;">Estado</th>
-                                <th style="text-align:center;padding:8px;">Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${filteredRemitos.map(r => {
-                                const est = remitoEstado(r.estado_cobro ?? r.pagado);
-                                const btn = est.cobrable
-                                    ? `<button class="btn btn-ghost btn-sm btn-cobrar-remito-drawer" data-rid="${r.id}" style="color:var(--brand); border:1px solid var(--brand); padding:2px 8px; font-size:10px; border-radius:6px; cursor:pointer;">Registrar Pago</button>` 
-                                    : '';
-                                const pagadoAmnt = Number(r.monto_pagado || 0);
-                                const saldoAmnt = remitoSaldoPendiente(r);
-                                    
-                                return `<tr style="border-bottom:1px solid #e5e7eb; cursor:pointer;" onclick="abrirModalFacturaOriginal(${r.id})">
-                                    <td style="padding:8px;">
-                                        <div style="font-weight:600;color:#111827;">#${r.id}</div>
-                                        <div style="font-size:10px;color:#6b7280;margin-top:2px;">${r.fecha}</div>
-                                    </td>
-                                    <td style="padding:8px;">
-                                        <div style="font-size:12px;color:#111827;font-weight:600;">${r.tipo_corte || '-'}</div>
-                                        <div style="font-size:10px;color:#6b7280;margin-top:2px;">${remitoCantidad(r)} u · ${fmt(r.kg)} kg${remitoPesosPiezas(r).length ? ' · <span style="color:var(--brand); text-decoration:underline;">Ver detalle</span>' : ''}</div>
-                                    </td>
-                                    <td style="text-align:right;padding:8px;font-weight:600;color:#111827;">$${fmt(r.precio_venta_total)}</td>
-                                    <td style="text-align:right;padding:8px;color:#10b981;">$${fmt(pagadoAmnt)}</td>
-                                    <td style="text-align:right;padding:8px;color:${saldoAmnt > 0 ? '#ef4444' : '#111827'};font-weight:bold;">$${fmt(saldoAmnt)}</td>
-                                    <td style="text-align:center;padding:8px;">
-                                        <span class="badge ${est.badgeClass}" style="padding:4px 8px;font-size:10px;">${est.label}</span>
-                                    </td>
-                                    <td style="text-align:center;padding:8px;">${btn}</td>
-                                </tr>`;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                </div>
-                `;
-            } else {
-                remitosHtml = `<div style="color:#6b7280;text-align:center;padding:30px;font-size:0.9rem;background:#f9fafb;border-radius:12px;">No se encontraron facturas/remitos para este filtro.</div>`;
-            }
-
-            // SECCIÓN PAGOS
-            let pagosHtml = '';
-            const pagos = c.pagos || [];
-            if (pagos.length > 0) {
-                pagosHtml = `
-                <div style="background:#ffffff; border-radius:16px; border:1px solid #e5e7eb; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-top:20px;">
-                    <div style="padding:16px 20px; border-bottom:1px solid #e5e7eb; background:#f9fafb;">
-                        <h3 style="margin:0; font-size:14px; color:#111827;">Historial de Pagos Globales</h3>
-                    </div>
-                    <table class="data-table" style="font-size:0.85rem; width:100%; min-width: 600px; border-collapse: collapse;">
-                        <thead>
-                            <tr style="background:var(--bg);position:sticky;top:0;z-index:10;">
-                                <th style="text-align:left;padding:8px;">ID Pago</th>
-                                <th style="text-align:left;padding:8px;">Fecha</th>
-                                <th style="text-align:right;padding:8px;">Monto</th>
-                                <th style="text-align:center;padding:8px;">Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${pagos.map(p => {
-                                return `<tr style="border-bottom:1px solid #e5e7eb;">
-                                    <td style="padding:8px;font-weight:600;color:#111827;">#${p.id}</td>
-                                    <td style="padding:8px;color:#6b7280;">${p.fecha}</td>
-                                    <td style="text-align:right;padding:8px;color:#10b981;font-weight:bold;">$${fmt(p.monto)}</td>
-                                    <td style="text-align:center;padding:8px;">
-                                        <button class="btn btn-danger btn-sm" onclick="eliminarPagoCliente(${p.id})" style="padding:4px 8px; font-size:10px; font-weight:bold; border-radius:6px; cursor:pointer;">❌ Eliminar Pago</button>
-                                    </td>
-                                </tr>`;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                </div>`;
-            }
-            
-            const btnStyle = (filter) => currentClientFilter === filter 
-                ? 'background:var(--brand); color:white; border-color:var(--brand); padding:6px 12px; border-radius:20px; font-size:11px; font-weight:bold; cursor:pointer; border:1px solid transparent;'
-                : 'background:transparent; color:var(--text-muted); border-color:var(--border); padding:6px 12px; border-radius:20px; font-size:11px; cursor:pointer; border:1px solid var(--border);';
+            items.forEach(item => {
+                const day = item.date.slice(0, 10);
+                if (day !== lastDate) {
+                    html += `<div class="wsp-date-divider">${day}</div>`;
+                    lastDate = day;
+                }
                 
-            $('viewClientBody').innerHTML = `
-                <div style="display:flex; flex-direction:column; gap:20px; font-family:'Segoe UI',sans-serif;">
-                    <!-- Top KPI cards -->
-                    <div class="client-kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:15px; width: 100%;">
-                        <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-                            <div style="font-size:11px; color:#6b7280; font-weight:800; letter-spacing:0.5px;">DEUDA TOTAL ACUMULADA</div>
-                            <div style="font-size:32px; font-weight:900; color:${c.saldo_actual > 0 ? '#ef4444' : '#10b981'}; margin-top:8px;">$${fmt(c.saldo_actual)}</div>
-                            <div style="font-size:12px; color:#6b7280; margin-top:8px; display:flex; justify-content:space-between; gap: 10px; flex-wrap: wrap;">
-                                <span>Límite: <span style="font-weight:bold;color:#111827;">$${fmt(c.techo_deuda)}</span></span>
-                                ${c.saldo_inicial > 0 ? `<span>Saldo inicial: <span style="font-weight:bold;color:#4b5563;">$${fmt(c.saldo_inicial)}</span></span>` : ''}
+                const time = item.date.slice(11, 16) || '12:00';
+                
+                if (item.type === 'remito') {
+                    const r = item.data;
+                    const est = remitoEstado(r.estado_cobro ?? r.pagado);
+                    const pagadoAmnt = Number(r.monto_pagado || 0);
+                    const saldoAmnt = remitoSaldoPendiente(r);
+                    const isPaid = (r.pagado ?? r.estado_cobro) === 'cobrado' || (r.pagado ?? r.estado_cobro) === 1 || (r.pagado ?? r.estado_cobro) === 2;
+                    
+                    const bubbleClass = isPaid ? 'wsp-bubble sent' : 'wsp-bubble received';
+                    const checkClass = isPaid ? 'wsp-bubble-check read' : 'wsp-bubble-check';
+                    const ticks = isPaid ? '✓✓' : '✓';
+                    const totalColor = isPaid ? 'inherit' : '#ef4444';
+                    const checkedState = (window.wspSelectedInvoices || []).includes(r.id) ? 'checked' : '';
+                    
+                    html += `
+                    <div class="wsp-bubble-select-wrap">
+                        <div class="wsp-checkbox ${checkedState}" data-rid="${r.id}" onclick="toggleSelectFactura(this, ${r.id}, ${saldoAmnt})">✓</div>
+                        <div class="${bubbleClass}" onclick="abrirModalFacturaOriginal(${r.id})" style="flex:1;">
+                            <div class="wsp-bubble-header">
+                                <span class="wsp-bubble-title">Factura #${r.id}</span>
+                                <span style="font-size:0.7rem; background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:10px; color:#555;">${est.label}</span>
+                            </div>
+                            <div class="wsp-bubble-body">
+                                ${r.tipo_corte || 'Variedad'} · ${remitoCantidad(r)} u · ${fmt(r.kg)} kg
+                            </div>
+                            <div class="wsp-bubble-amount" style="color: ${totalColor};">
+                                Total: $${fmt(r.precio_venta_total)}
+                            </div>
+                            ${saldoAmnt > 0 && pagadoAmnt > 0 ? `<div style="font-size:0.8rem; color:#f59e0b; margin-top:2px;">Saldo: $${fmt(saldoAmnt)}</div>` : ''}
+                            <div class="wsp-bubble-footer">
+                                <span>${time}</span>
+                                <span class="${checkClass}">${ticks}</span>
                             </div>
                         </div>
-                        <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-                            <div style="font-size:11px; color:#6b7280; font-weight:800; letter-spacing:0.5px;">ESTADO DEL CRÉDITO</div>
-                            <div style="font-size:18px; font-weight:bold; margin-top:12px;">${limitStatus}</div>
-                            <div style="display:flex; gap:10px; margin-top:16px;">
-                                <div style="background:#f3f4f6; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; color:#111827;">Scoring: ${c.scoring}</div>
-                                <div style="background:#f3f4f6; padding:4px 10px; border-radius:6px; font-size:11px; color:#6b7280;">Alta: ${(c.created_at || '').slice(0, 10)}</div>
-                            </div>
+                    </div>`;
+                } else if (item.type === 'pago') {
+                    const p = item.data;
+                    html += `
+                    <div class="wsp-bubble sent" style="align-self: center; background:#e0f2fe; text-align:center; box-shadow:0 1px 2px rgba(0,0,0,0.15); max-width:60%;">
+                        <div style="font-size:0.75rem; color:#0284c7; font-weight:bold; text-transform:uppercase;">Pago Registrado #${p.id}</div>
+                        <div style="font-size:1.1rem; font-weight:900; color:#0369a1; margin:4px 0;">$${fmt(p.monto)}</div>
+                        <div style="font-size:0.7rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center;">
+                            <span>${time}</span>
+                            <button onclick="eliminarPagoCliente(${p.id})" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:0.8rem; padding:0;">❌</button>
                         </div>
-                        ${(c.cuit || c.telefono || c.direccion || c.email) ? `
-                        <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05); display:flex; flex-direction:column; gap:6px;">
-                            <div style="font-size:11px; color:#6b7280; font-weight:800; letter-spacing:0.5px; margin-bottom:6px;">DATOS COMERCIALES</div>
-                            ${c.cuit ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">CUIT:</span> <span style="font-weight:700; color:#111827;">${esc(c.cuit)}</span></div>` : ''}
-                            ${c.direccion ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">Dirección:</span> <span style="font-weight:700; color:#111827;">${esc(c.direccion)}</span></div>` : ''}
-                            ${c.telefono ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">Teléfono:</span> <span style="font-weight:700; color:#111827;">${esc(c.telefono)}</span></div>` : ''}
-                            ${c.email ? `<div style="font-size:12px; color:#4b5563;"><span style="color:#9ca3af; font-weight:600; width:70px; display:inline-block;">Email:</span> <span style="font-weight:700; color:#111827;">${esc(c.email)}</span></div>` : ''}
-                        </div>
-                        ` : ''}
-                        
-                        ${sessionUser.role === 'admin' ? `
-                        <!-- CARD DE ADMINISTRACIÓN -->
-                        <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.05); display:flex; flex-direction:column; gap:10px;">
-                            <div style="font-size:11px; color:#e11d48; font-weight:800; letter-spacing:0.5px; margin-bottom:2px;">ADMINISTRACIÓN</div>
-                            <div style="display:grid; grid-template-columns: 1fr; gap:8px;">
-                                <button class="btn btn-ghost btn-sm" onclick="cargarSaldoViejo(${c.id})" style="border: 1px solid #cbd5e1; padding:8px; font-size:11px; font-weight:bold; color:#475569; border-radius:8px; cursor:pointer; background:#ffffff;">⚙️ Cargar Saldo Viejo</button>
-                                <button class="btn btn-danger btn-sm" onclick="eliminarCliente(${c.id})" style="padding:8px; font-size:11px; font-weight:bold; border-radius:8px; cursor:pointer;">❌ Eliminar Cliente</button>
-                            </div>
-                        </div>
-                        ` : ''}
+                    </div>`;
+                }
+            });
+            
+            $('viewClientBody').innerHTML = html;
+            
+            setTimeout(() => {
+                const b = $('viewClientBody');
+                b.scrollTop = b.scrollHeight;
+            }, 50);
+            
+            let profileHtml = `
+                <div style="display:flex; flex-direction:column; align-items:center; gap:10px; margin-bottom:20px;">
+                    <div style="width:80px; height:80px; border-radius:50%; background:#ccc; display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:bold; color:#555;">
+                        ${c.nombre.substring(0, 2).toUpperCase()}
                     </div>
-
-                    <!-- History and Filters -->
-                    <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:16px; overflow:hidden;">
-                        <div style="padding:15px 20px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background:#f9fafb;">
-                            <h4 style="margin:0; font-size:14px; font-weight:800; color:#111827;">Historial de Facturación</h4>
-                            <div style="display:flex; gap:8px;">
-                                <button class="btn-filter-drawer" data-filter="all" style="${btnStyle('all')}">Todas</button>
-                                <button class="btn-filter-drawer" data-filter="pending" style="${btnStyle('pending')}">Impagas / Parciales</button>
-                                <button class="btn-filter-drawer" data-filter="paid" style="${btnStyle('paid')}">Pagadas</button>
-                            </div>
-                        </div>
-                        <div style="padding:0;">
-                            ${remitosHtml}
-                        </div>
+                    <div style="font-size:1.5rem; font-weight:bold; text-align:center;">${c.nombre}</div>
+                    <div style="font-size:1.1rem; color:${c.saldo_actual > 0 ? '#ef4444' : '#10b981'}; font-weight:bold;">
+                        Deuda: $${fmt(c.saldo_actual)}
                     </div>
+                </div>
+                <div style="background:#f9fafb; padding:15px; border-radius:10px; border:1px solid #e5e7eb; font-size:0.95rem;">
+                    <div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Estado:</strong> <span>${limitStatus}</span></div>
+                    <div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Scoring:</strong> <span>${c.scoring}</span></div>
+                    <div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Límite:</strong> <span>$${fmt(c.techo_deuda)}</span></div>
+                    <div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Alta:</strong> <span>${(c.created_at || '').slice(0, 10)}</span></div>
+                    ${c.cuit ? `<div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>CUIT:</strong> <span>${esc(c.cuit)}</span></div>` : ''}
+                    ${c.direccion ? `<div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Dirección:</strong> <span>${esc(c.direccion)}</span></div>` : ''}
+                    ${c.telefono ? `<div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Teléfono:</strong> <span>${esc(c.telefono)}</span></div>` : ''}
+                    ${c.email ? `<div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Email:</strong> <span>${esc(c.email)}</span></div>` : ''}
                 </div>
             `;
+            $('wspProfileContent').innerHTML = profileHtml;
             
-            // Re-bind filter events
-            $('viewClientBody').querySelectorAll('.btn-filter-drawer').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    currentClientFilter = btn.dataset.filter;
-                    renderClientDashboard();
-                });
-            });
+            if (sessionUser.role === 'admin') {
+                $('btnClientEliminarWsp').style.display = 'block';
+                $('btnClientEliminarWsp').onclick = () => {
+                    $('modalWspProfile').classList.remove('open');
+                    eliminarCliente(c.id);
+                };
+            } else {
+                $('btnClientEliminarWsp').style.display = 'none';
+            }
             
-            // Re-bind action events
-            $('viewClientBody').querySelectorAll('.btn-cobrar-remito-drawer').forEach(btn => {
-                btn.addEventListener('click', ev => {
-                    ev.stopPropagation();
-                    const rid = parseInt(btn.dataset.rid, 10);
-                    const remito = currentClientData?.remitos?.find(r => r.id === rid);
-                    if (remito) abrirModalPagoRemito(remito);
-                });
-            });
+            if (c.saldo_actual > 0 && c.scoring !== 'D') {
+                $('btnClientIncobrableWsp').style.display = 'block';
+                // Attach correct action if incobrable is supported
+            } else {
+                $('btnClientIncobrableWsp').style.display = 'none';
+            }
         }
 
         function closeClientDrawer() {
