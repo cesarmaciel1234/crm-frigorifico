@@ -104,9 +104,10 @@ const $ = id => document.getElementById(id);
             let pendingSync = 0;
             try {
                 pendingSync = await db.pending_sync
-                    .where('status').anyOf(['pending', 'pushing', 'failed']).count();
+                    .where('status').anyOf(['pending', 'pushing']).count();
             } catch (_) {}
-            const solicitudes = await db.solicitudes_pendientes.count();
+            const solicitudesRows = await db.solicitudes_pendientes.toArray();
+            const solicitudes = solicitudesRows.filter(s => !s.failed).length;
             const transacciones = await db.transacciones.where('status').equals(0).count();
             return pendingSync + solicitudes + transacciones;
         }
@@ -433,7 +434,7 @@ const $ = id => document.getElementById(id);
             actualizarUIOffline();
         }
 
-        function aplicarCambioOptimista(url, method, body) {
+        async function aplicarCambioOptimista(url, method, body) {
             try {
                 if (!data) return;
                 const parsedBody = body ? JSON.parse(body) : {};
@@ -2744,15 +2745,8 @@ const $ = id => document.getElementById(id);
                 }
 
                 const pending = await countPendingOutbox();
-                if (pending > 0) {
+                if (pending > 0 && data) {
                     console.warn('Outbox con pendientes: no se pisa la caché local con pull del servidor.');
-                    if (!data) {
-                        const cached = await tenantCacheGet('appData');
-                        if (cached) {
-                            data = cached;
-                            renderAll();
-                        }
-                    }
                     actualizarUIOffline();
                     return;
                 }
@@ -3058,7 +3052,7 @@ const $ = id => document.getElementById(id);
             });
         }
 
-        $('menuToggle').addEventListener('click', () => setSidebarOpen(!$('sidebar').classList.contains('open')));
+        $('menuToggle')?.addEventListener('click', () => setSidebarOpen(!$('sidebar').classList.contains('open')));
         if ($('sidebarCloseMobile')) $('sidebarCloseMobile').addEventListener('click', () => setSidebarOpen(false));
         $('sidebarBackdrop')?.addEventListener('click', () => setSidebarOpen(false));
         document.addEventListener('click', ev => {
@@ -3070,8 +3064,8 @@ const $ = id => document.getElementById(id);
                 }
             }
         });
-        $('drawerClose').addEventListener('click', closeDrawer);
-        $('drawerOverlay').addEventListener('click', ev => { if (ev.target === $('drawerOverlay')) closeDrawer(); });
+        $('drawerClose')?.addEventListener('click', closeDrawer);
+        $('drawerOverlay')?.addEventListener('click', ev => { if (ev.target === $('drawerOverlay')) closeDrawer(); });
 
         document.body.addEventListener('blur', ev => {
             if (ev.target && ev.target.classList.contains('calc-input')) {
@@ -3094,7 +3088,7 @@ const $ = id => document.getElementById(id);
             }
         }, true);
 
-        $('drawerPagar').addEventListener('click', abrirModalPago);
+        $('drawerPagar')?.addEventListener('click', abrirModalPago);
         $('drawerDelete').addEventListener('click', async () => {
             if (!selectedDeuda) return;
             const pw = await window.promptMasterPasswordAsync('Ingrese la contraseña maestra para eliminar la deuda:');

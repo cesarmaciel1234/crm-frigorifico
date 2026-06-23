@@ -121,9 +121,10 @@
             let pendingSync = 0;
             try {
                 pendingSync = await this._db.pending_sync
-                    .where('status').anyOf(['pending', 'pushing', 'failed']).count();
+                    .where('status').anyOf(['pending', 'pushing']).count();
             } catch (_) {}
-            const solicitudes = await this._db.solicitudes_pendientes.count();
+            const solicitudesRows = await this._db.solicitudes_pendientes.toArray();
+            const solicitudes = solicitudesRows.filter(s => !s.failed).length;
             let transacciones = 0;
             try {
                 transacciones = await this._db.transacciones.where('status').equals(0).count();
