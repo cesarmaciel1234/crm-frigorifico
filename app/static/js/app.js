@@ -2577,13 +2577,14 @@ const $ = id => document.getElementById(id);
             } catch (e) { toast(e.message, true); }
         });
         
-        $('btnClientIncobrable').addEventListener('click', async () => {
+        $('btnClientIncobrableWsp').addEventListener('click', async () => {
             if (!currentClientData) return;
             if (!confirm('⚠️ ¿ESTÁ SEGURO DE DECLARAR ESTE CLIENTE COMO INCOBRABLE?\nSu deuda de saldo pendiente se pasará a pérdidas y el crédito se bloqueará a $0 para siempre.')) return;
             try {
                 await api('/api/clientes/' + currentClientData.id + '/incobrable', { method: 'POST' });
                 toast('Cliente declarado como Incobrable');
                 await loadAll();
+                $('modalWspProfile').classList.remove('open');
                 await openClientDrawer(currentClientData.id);
             } catch (e) { toast(e.message, true); }
         });
