@@ -131,7 +131,10 @@ def auth_register():
             if not slug:
                 slug = "empresa"
             if conn.execute("SELECT 1 FROM empresas WHERE slug = ?", (slug,)).fetchone():
-                return jsonify({"error": "La empresa o usuario ya está registrado. Por favor, inicie sesión o elija otro nombre."}), 409
+                return jsonify({"error": "La empresa ya está registrada. Por favor, inicie sesión o elija otro nombre."}), 409
+            
+            if conn.execute("SELECT 1 FROM usuarios WHERE username = ?", (slug,)).fetchone():
+                return jsonify({"error": "El nombre de usuario ya está registrado. Por favor, elija otro nombre para la empresa."}), 409
             # Insertar la empresa
             cur_emp = conn.execute(
                 "INSERT INTO empresas (nombre, slug) VALUES (?, ?)",
