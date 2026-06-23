@@ -1679,9 +1679,6 @@ const $ = id => document.getElementById(id);
             
             items.sort((a, b) => new Date(a.date) - new Date(b.date));
             
-            let html = '';
-            let lastDate = '';
-            
             let html = '<div style="font-weight:800; font-size:1.1rem; color:#0f172a; margin-bottom:16px; padding:0 4px;">Historial de Cuenta</div>';
             let lastDate = '';
             
