@@ -3026,9 +3026,14 @@ const $ = id => document.getElementById(id);
                     const saldo = Math.max(0, r.precio_venta_total - pagado);
                     const plazo = r.plazo_cobro_dias != null ? `${r.plazo_cobro_dias} días` : '—';
                     const importe = r.precio_venta_total;
+                    const logisticaHtml = r.costo_total_logistica > 0
+                        ? `<div style="font-size:10px; color:#334155; margin-top:6px; display:inline-flex; align-items:center; background:#f8fafc; padding:3px 8px; border-radius:12px; border:1px solid #e2e8f0; font-weight:500;">
+                               <span style="margin-right:4px;">🚚</span> Logística: $${fmt(r.costo_total_logistica)} <span style="color:#64748b; font-size:9px; margin-left:4px; font-weight:400;">($${fmt(r.costo_total_logistica / (r.kg || 1))}/kg)</span>
+                           </div>`
+                        : '';
                     const detalleHtml = piezas.length
-                        ? `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span>${pesosPiezasHtml(piezas)}${r.costo_total_logistica > 0 ? `<div style="font-size:8px;color:#475569;margin-top:2px;">Flete/Logística: $${fmt(r.costo_total_logistica)}</div>` : ''}</div>`
-                        : `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span><span class="sin-piezas">${fmt(r.kg)} kg total</span>${r.costo_total_logistica > 0 ? `<div style="font-size:8px;color:#475569;margin-top:2px;">Flete/Logística: $${fmt(r.costo_total_logistica)}</div>` : ''}</div>`;
+                        ? `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span>${pesosPiezasHtml(piezas)}${logisticaHtml}</div>`
+                        : `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span><span class="sin-piezas">${fmt(r.kg)} kg total</span>${logisticaHtml}</div>`;
                     return `
                         <tr>
                             <td>${fmtFechaRemito(r.fecha)}</td>
