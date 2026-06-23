@@ -2363,7 +2363,7 @@ const $ = id => document.getElementById(id);
             const backupWasOpen = $('modalBackup')?.classList.contains('open');
             if (backupWasOpen) $('modalBackup')?.classList.remove('open');
             const password = await window.promptMasterPasswordAsync(
-                'Subir al servidor (' + resumen + '). Reemplazará la nube actual. Contraseña maestra:'
+                'REEMPLAZO TOTAL de la nube (' + resumen + '). Se borrarán todos los datos actuales y se cargará el backup. Contraseña maestra:'
             );
             if (!password) {
                 if (backupWasOpen) $('modalBackup')?.classList.add('open');

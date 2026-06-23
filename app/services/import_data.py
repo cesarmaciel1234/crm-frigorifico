@@ -268,7 +268,7 @@ def _reset_pg_sequences(conn) -> None:
 
 
 def import_all_data(json_data: dict) -> dict[str, Any]:
-    """Restaura todos los datos del tenant. Devuelve resumen de filas importadas."""
+    """Restaura todos los datos del tenant (reemplazo total: borra y vuelve a cargar)."""
     if not json_data:
         raise ValueError("El backup está vacío")
     if not isinstance(json_data, dict):

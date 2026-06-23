@@ -86,7 +86,31 @@ def test_import_merges_fullbackup_with_appdata_enemigos(tenant_db):
     assert summary["tablas"]["clientes"]["insertados"] == 1
 
 
-def test_import_skips_invalid_operacion_rows(tenant_db):
+def test_import_replaces_existing_rows(tenant_db):
+    seed = {
+        "version": 2,
+        "clientes": [{"id": 1, "nombre": "Viejo", "scoring": "A", "techo_deuda": 1, "saldo_actual": 0}],
+        "operaciones_financieras": [{
+            "id": 1, "alias": "Vieja", "tipo": "tarjeta", "recibido": 100, "pagar": 110,
+            "meses": 1, "cuotas": 1, "cuotas_pagadas": 0,
+        }],
+    }
+    import_all_data(seed)
+    replacement = {
+        "version": 2,
+        "clientes": [{"id": 2, "nombre": "Nuevo", "scoring": "A", "techo_deuda": 1, "saldo_actual": 0}],
+        "enemigos": [{
+            "id": 2, "alias": "Nueva", "tipo": "tarjeta", "recibido": 200, "pagar": 220,
+            "meses": 1, "cuotas": 1,
+        }],
+    }
+    import_all_data(replacement)
+    with get_db() as conn:
+        clientes = [r["nombre"] for r in conn.execute("SELECT nombre FROM clientes").fetchall()]
+        ops = [r["alias"] for r in conn.execute("SELECT alias FROM operaciones_financieras").fetchall()]
+    assert clientes == ["Nuevo"]
+    assert ops == ["Nueva"]
+
     payload = {
         "version": 2,
         "enemigos": [
