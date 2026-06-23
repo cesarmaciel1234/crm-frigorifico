@@ -2124,15 +2124,42 @@ const $ = id => document.getElementById(id);
             const bulk = freshData.bulk?.length || 0;
             return ops + cli + rem + bulk > 0;
         }
+        const SESSION_SNAPSHOT_KEY = 'session_snapshot';
+
+        function sessionUserFromLocalSnapshot() {
+            try {
+                const snap = localStorage.getItem(SESSION_SNAPSHOT_KEY);
+                if (snap) return JSON.parse(snap);
+            } catch (_) {}
+            return {
+                role: localStorage.getItem('session_role') || 'admin',
+                username: localStorage.getItem('sync_user') || 'jefe',
+                empresa_id: parseInt(localStorage.getItem('sync_empresa') || '1', 10),
+                empresa_nombre: localStorage.getItem('session_empresa_nombre') || '',
+            };
+        }
+
+        function persistSessionSnapshot(user) {
+            try {
+                localStorage.setItem(SESSION_SNAPSHOT_KEY, JSON.stringify(user));
+                localStorage.setItem('session_role', user.role || 'admin');
+                localStorage.setItem('session_empresa_nombre', user.empresa_nombre || '');
+            } catch (_) {}
+        }
+
         async function loadSession() {
+            let fromServer = false;
             try {
                 const s = await api('/auth/session?_=' + Date.now());
+                if (s.authenticated === false) throw new Error('no autenticado');
                 sessionUser = {
                     role: s.role || 'admin',
                     username: s.username || 'jefe',
                     empresa_id: s.empresa_id || 1,
                     empresa_nombre: s.empresa_nombre || '',
                 };
+                fromServer = true;
+                persistSessionSnapshot(sessionUser);
                 const nameEl = document.querySelector('.topbar-greeting-block div div:last-child');
                 if (nameEl) {
                     const etiqueta = sessionUser.empresa_nombre || sessionUser.username;
@@ -2140,7 +2167,13 @@ const $ = id => document.getElementById(id);
                     nameEl.title = 'Cuenta: ' + sessionUser.username + ' (empresa #' + sessionUser.empresa_id + ')';
                 }
             } catch (_) {
-                sessionUser = { role: 'admin', username: 'jefe', empresa_id: 1, empresa_nombre: '' };
+                sessionUser = sessionUserFromLocalSnapshot();
+                const nameEl = document.querySelector('.topbar-greeting-block div div:last-child');
+                if (nameEl) {
+                    const etiqueta = sessionUser.empresa_nombre || sessionUser.username;
+                    nameEl.textContent = etiqueta;
+                    nameEl.title = 'Cuenta: ' + sessionUser.username + ' (empresa #' + sessionUser.empresa_id + ')';
+                }
             }
             if (window.CrmSync) {
                 CrmSync.init(db, sessionUser);
@@ -2148,16 +2181,22 @@ const $ = id => document.getElementById(id);
             }
             void syncEmpresaFromServer();
             applyRoleUi();
+            return fromServer;
         }
 
         async function logout() {
             try {
-                // Limpiar la caché local de IndexedDB para evitar que el siguiente usuario vea los datos del anterior
                 await Promise.all([
                     db.transacciones.clear(),
                     db.cache.clear(),
                     db.solicitudes_pendientes.clear()
                 ]);
+                try { await db.pending_sync.clear(); } catch (_) {}
+                localStorage.removeItem(SESSION_SNAPSHOT_KEY);
+                localStorage.removeItem('session_role');
+                localStorage.removeItem('session_empresa_nombre');
+                localStorage.removeItem('sync_user');
+                localStorage.removeItem('sync_empresa');
                 await api('/auth/logout', { method: 'POST' });
             } catch (_) {}
             window.location.href = '/login';
@@ -2785,8 +2824,15 @@ const $ = id => document.getElementById(id);
 
                 if (!navigator.onLine) {
                     if (!data) {
-                        toast('Sin conexión y sin datos en este dispositivo', true);
+                        const cached = await tenantCacheGet('appData');
+                        if (cached) {
+                            data = cached;
+                            renderAll();
+                        } else {
+                            toast('Sin conexión y sin datos en este dispositivo', true);
+                        }
                     }
+                    actualizarUIOffline();
                     return;
                 }
 
@@ -4517,13 +4563,13 @@ const $ = id => document.getElementById(id);
         initIosInstallHint();
 
         async function boot() {
-            await loadSession();
+            const sessionFromServer = await loadSession();
             const prevUser = localStorage.getItem('sync_user') || '';
             const prevEmpresa = localStorage.getItem('sync_empresa') || '';
             const curUser = sessionUser.username || '';
             const curEmpresa = String(sessionUser.empresa_id || '1');
-            const usuarioCambio = prevUser && prevUser !== curUser;
-            const empresaCambio = prevEmpresa && prevEmpresa !== curEmpresa;
+            const usuarioCambio = sessionFromServer && prevUser && prevUser !== curUser;
+            const empresaCambio = sessionFromServer && prevEmpresa && prevEmpresa !== curEmpresa;
             if (usuarioCambio || empresaCambio) {
                 await Promise.all([
                     db.cache.clear(),
