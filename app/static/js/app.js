@@ -3032,28 +3032,51 @@ const $ = id => document.getElementById(id);
                     const saldo = Math.max(0, r.precio_venta_total - pagado);
                     const plazo = r.plazo_cobro_dias != null ? `${r.plazo_cobro_dias} días` : '—';
                     const importe = r.precio_venta_total;
-                    const logisticaHtml = r.costo_total_logistica > 0
-                        ? `<div style="font-size:10px; color:#334155; margin-top:6px; display:inline-flex; align-items:center; background:#f8fafc; padding:3px 8px; border-radius:12px; border:1px solid #e2e8f0; font-weight:500;">
-                               <span style="margin-right:4px;">🚚</span> Logística: $${fmt(r.costo_total_logistica)} <span style="color:#64748b; font-size:9px; margin-left:4px; font-weight:400;">($${fmt(r.costo_total_logistica / (r.kg || 1))}/kg)</span>
-                           </div>`
-                        : '';
-                    const detalleHtml = piezas.length
-                        ? `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span>${pesosPiezasHtml(piezas)}${logisticaHtml}</div>`
-                        : `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span><span class="sin-piezas">${fmt(r.kg)} kg total</span>${logisticaHtml}</div>`;
-                    return `
-                        <tr>
-                            <td>${fmtFechaRemito(r.fecha)}</td>
-                            <td class="col-mono">${String(r.id).padStart(3, '0')}</td>
-                            <td class="col-qty">${cant}</td>
-                            <td class="col-detalle">${detalleHtml}</td>
-                            <td class="col-num">${Number(r.kg).toFixed(2)}</td>
-                            <td class="col-num">${Number(pxKg).toFixed(2)}</td>
-                            <td class="col-num col-total">$${fmt(importe)}</td>
-                            <td class="col-num">$${fmt(pagado)}</td>
-                            <td class="col-num col-saldo">$${fmt(saldo)}</td>
-                            <td class="col-plazo">${plazo}</td>
-                            <td class="col-estado"><span class="status ${reporteEstadoClass(est.label)}">${esc(est.label.toUpperCase())}</span></td>
-                        </tr>`;
+                    const detalleCarneHtml = piezas.length
+                        ? `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span>${pesosPiezasHtml(piezas)}</div>`
+                        : `<div class="detalle-cell"><span class="corte-nombre">${esc(corte)}</span><span class="sin-piezas">${fmt(r.kg)} kg total</span></div>`;
+
+                    if (r.costo_total_logistica > 0) {
+                        const importeCarne = r.precio_venta_total - r.costo_total_logistica;
+                        const logisticaPxKg = r.costo_total_logistica / (r.kg || 1);
+                        return `
+                            <tr style="border-bottom: none;">
+                                <td rowspan="2" style="vertical-align: middle; border-bottom: 1px solid #e2e8f0;">${fmtFechaRemito(r.fecha)}</td>
+                                <td rowspan="2" class="col-mono" style="vertical-align: middle; border-bottom: 1px solid #e2e8f0;">${String(r.id).padStart(3, '0')}</td>
+                                <td class="col-qty" style="border-bottom: none; padding-bottom: 4px;">${cant}</td>
+                                <td class="col-detalle" style="border-bottom: none; padding-bottom: 4px;">${detalleCarneHtml}</td>
+                                <td class="col-num" style="border-bottom: none; padding-bottom: 4px;">${Number(r.kg).toFixed(2)}</td>
+                                <td class="col-num" style="border-bottom: none; padding-bottom: 4px;">${Number(pxKg).toFixed(2)}</td>
+                                <td class="col-num col-total" style="border-bottom: none; padding-bottom: 4px;">$${fmt(importeCarne)}</td>
+                                <td rowspan="2" class="col-num" style="vertical-align: middle; border-bottom: 1px solid #e2e8f0;">$${fmt(pagado)}</td>
+                                <td rowspan="2" class="col-num col-saldo" style="vertical-align: middle; border-bottom: 1px solid #e2e8f0;">$${fmt(saldo)}</td>
+                                <td rowspan="2" class="col-plazo" style="vertical-align: middle; border-bottom: 1px solid #e2e8f0;">${plazo}</td>
+                                <td rowspan="2" class="col-estado" style="vertical-align: middle; border-bottom: 1px solid #e2e8f0;"><span class="status ${reporteEstadoClass(est.label)}">${esc(est.label.toUpperCase())}</span></td>
+                            </tr>
+                            <tr>
+                                <td class="col-qty" style="padding-top: 0; color: #94a3b8;">—</td>
+                                <td class="col-detalle" style="padding-top: 0;"><div class="detalle-cell"><span class="corte-nombre" style="color:#64748b; font-size: 11px;">🚚 LOGÍSTICA</span></div></td>
+                                <td class="col-num" style="color:#64748b; font-size: 11px; padding-top: 0;">${Number(r.kg).toFixed(2)}</td>
+                                <td class="col-num" style="color:#64748b; font-size: 11px; padding-top: 0;">${Number(logisticaPxKg).toFixed(2)}</td>
+                                <td class="col-num col-total" style="font-size: 12px; color: #475569; padding-top: 0;">$${fmt(r.costo_total_logistica)}</td>
+                            </tr>
+                        `;
+                    } else {
+                        return `
+                            <tr>
+                                <td>${fmtFechaRemito(r.fecha)}</td>
+                                <td class="col-mono">${String(r.id).padStart(3, '0')}</td>
+                                <td class="col-qty">${cant}</td>
+                                <td class="col-detalle">${detalleCarneHtml}</td>
+                                <td class="col-num">${Number(r.kg).toFixed(2)}</td>
+                                <td class="col-num">${Number(pxKg).toFixed(2)}</td>
+                                <td class="col-num col-total">$${fmt(importe)}</td>
+                                <td class="col-num">$${fmt(pagado)}</td>
+                                <td class="col-num col-saldo">$${fmt(saldo)}</td>
+                                <td class="col-plazo">${plazo}</td>
+                                <td class="col-estado"><span class="status ${reporteEstadoClass(est.label)}">${esc(est.label.toUpperCase())}</span></td>
+                            </tr>`;
+                    }
                 }).join('')
                 : '<tr><td colspan="11" class="empty-row">Sin movimientos registrados</td></tr>';
 
