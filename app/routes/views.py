@@ -102,23 +102,32 @@ def logout():
 
 @views_bp.route("/auth/register", methods=["POST"])
 def auth_register():
-    from app.services.users import create_user, authenticate_user, get_db
+    from app.services.users import authenticate_user, get_db
     from app.security import set_session_user
+    from werkzeug.security import generate_password_hash
     import re
     
     data = request.get_json(silent=True) or {}
-    username = (data.get("username") or request.form.get("username") or "").strip()
-    password = data.get("password") or request.form.get("password") or ""
-    nombre = (data.get("nombre") or request.form.get("nombre") or "").strip()
     empresa_nombre = (data.get("empresa_nombre") or request.form.get("empresa_nombre") or "").strip()
+    password = data.get("password") or request.form.get("password") or ""
+    password_confirm = data.get("password_confirm") or request.form.get("password_confirm") or ""
     
-    if not username or not password or not empresa_nombre:
-        return jsonify({"error": "Usuario, contraseña y nombre de la empresa son requeridos"}), 400
+    if not empresa_nombre or not password or not password_confirm:
+        return jsonify({"error": "Nombre de la empresa, contraseña y confirmación son requeridos"}), 400
         
+    if password != password_confirm:
+        return jsonify({"error": "Las contraseñas no coinciden"}), 400
+        
+    if len(password) < 8:
+        return jsonify({"error": "La contraseña debe tener al menos 8 caracteres"}), 400
+        
+    # Guardar el nombre de la empresa en MAYÚSCULAS
+    empresa_nombre_upper = empresa_nombre.upper()
+    
     try:
         with get_db(empresa_id=0) as conn:
-            # Generate slug
-            slug = re.sub(r'[^a-zA-Z0-9]', '', empresa_nombre.lower())
+            # Generar slug único para la empresa y usarlo como username del administrador
+            slug = re.sub(r'[^a-zA-Z0-9]', '', empresa_nombre_upper.lower())
             if not slug:
                 slug = "empresa"
             base_slug = slug
@@ -127,22 +136,33 @@ def auth_register():
                 slug = f"{base_slug}{counter}"
                 counter += 1
                 
+            # Insertar la empresa
             cur_emp = conn.execute(
                 "INSERT INTO empresas (nombre, slug) VALUES (?, ?)",
-                (empresa_nombre, slug)
+                (empresa_nombre_upper, slug)
             )
             empresa_id = cur_emp.lastrowid
             
-        create_user(username=username, password=password, role="admin", nombre=nombre, empresa_id=empresa_id)
+            # El username del administrador será el slug único de la empresa
+            username = slug
+            
+            # Insertar el usuario administrador
+            conn.execute(
+                """
+                INSERT INTO usuarios (username, nombre, password_hash, role, activo, empresa_id)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (username, empresa_nombre_upper, generate_password_hash(password), "admin", empresa_id),
+            )
+            
+        # Autenticar e iniciar sesión automáticamente
         user = authenticate_user(username, password)
         if user:
             set_session_user(user)
             return jsonify({"ok": True, "user": user})
         return jsonify({"ok": True})
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": "Error interno del servidor"}), 500
+        return jsonify({"error": f"Error al registrar la empresa: {str(e)}"}), 500
 
 
 @views_bp.route("/auth/reset-password", methods=["POST"])
@@ -170,14 +190,22 @@ def auth_reset_password():
     if len(new_password) < 8:
         return jsonify({"error": "La contraseña debe tener al menos 8 caracteres"}), 400
         
+    import re
+    raw_username = username.strip().lower()
+    slug_username = re.sub(r'[^a-zA-Z0-9]', '', raw_username)
+    
     with get_db(empresa_id=0) as conn:
-        user = conn.execute("SELECT id FROM usuarios WHERE username = ?", (username,)).fetchone()
+        user = conn.execute(
+            "SELECT id, username FROM usuarios WHERE username = ? OR username = ?",
+            (raw_username, slug_username)
+        ).fetchone()
         if not user:
-            return jsonify({"error": "El usuario no existe"}), 404
+            return jsonify({"error": "El usuario o empresa no existe"}), 404
             
+        matched_username = user["username"]
         conn.execute(
             "UPDATE usuarios SET password_hash = ? WHERE username = ?",
-            (generate_password_hash(new_password), username)
+            (generate_password_hash(new_password), matched_username)
         )
         
     return jsonify({"ok": True})

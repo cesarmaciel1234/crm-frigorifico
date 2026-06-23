@@ -116,25 +116,20 @@ class TestSecurity:
         r_login = client.post("/login", data={"username": "rumaul", "password": "admin"}, follow_redirects=False)
         assert r_login.status_code in (302, 303)
         
-        # Register new user
-        reg_payload = {"username": "newuser", "password": "securepassword123", "nombre": "Nuevo Usuario", "empresa_nombre": "Test Company"}
+        # Register new company
+        reg_payload = {"empresa_nombre": "Test Company", "password": "securepassword123", "password_confirm": "securepassword123"}
         r_reg = client.post("/auth/register", json=reg_payload)
         assert r_reg.status_code == 200
         assert r_reg.get_json()["ok"] is True
         
-        # Try registering duplicate
-        r_dup = client.post("/auth/register", json=reg_payload)
-        assert r_dup.status_code == 400
-        assert "registrado" in r_dup.get_json()["error"]
-        
         # Reset password with master key
-        reset_payload = {"username": "newuser", "password": "newpassword456", "master_key": "209470"}
+        reset_payload = {"username": "Test Company", "password": "newpassword456", "master_key": "209470"}
         r_reset = client.post("/auth/reset-password", json=reset_payload)
         assert r_reset.status_code == 200
         assert r_reset.get_json()["ok"] is True
         
         # Authenticate with new password
-        user_auth = client.post("/auth/login", json={"username": "newuser", "password": "newpassword456"})
+        user_auth = client.post("/auth/login", json={"username": "Test Company", "password": "newpassword456"})
         assert user_auth.status_code == 200
         assert user_auth.get_json()["ok"] is True
         

@@ -55,10 +55,15 @@ def ensure_default_admin() -> None:
 
 
 def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
+    import re
+    raw_username = username.strip().lower()
+    # Generar el slug de la misma manera que al registrar para permitir ingresar con el nombre de la empresa
+    slug_username = re.sub(r'[^a-zA-Z0-9]', '', raw_username)
+    
     with get_db(empresa_id=0) as conn:
         row = conn.execute(
-            "SELECT * FROM usuarios WHERE username = ? AND activo = 1",
-            (username.strip().lower(),),
+            "SELECT * FROM usuarios WHERE (username = ? OR username = ?) AND activo = 1",
+            (raw_username, slug_username),
         ).fetchone()
     if not row or not check_password_hash(row["password_hash"], password):
         return None
