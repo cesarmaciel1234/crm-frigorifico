@@ -154,15 +154,19 @@ def get_db(empresa_id=None):
                 if empresa_id is None:
                     empresa_id = 1
                     
-            if empresa_id > 0:
+            if empresa_id == 1:
+                cur = conn.cursor()
+                cur.execute("SET search_path TO public")
+            elif empresa_id > 1:
                 schema_name = f"empresa_{empresa_id}"
                 cur = conn.cursor()
-                cur.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name = %s", (schema_name,))
-                schema_exists = cur.fetchone() is not None
-                if not schema_exists:
-                    cur.execute(f"CREATE SCHEMA {schema_name}")
+                cur.execute("SELECT 1 FROM information_schema.tables WHERE table_schema = %s AND table_name = 'clientes'", (schema_name,))
+                tables_exist = cur.fetchone() is not None
+                
+                if not tables_exist:
+                    cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
                     conn.commit()
-                    cur.execute(f"SET search_path TO {schema_name}, public")
+                    cur.execute(f"SET search_path TO {schema_name}")
                     # Initialize tables in this new schema
                     with open(Config.SCHEMA_PATH, encoding="utf-8") as f:
                         sql = f.read()
@@ -170,7 +174,7 @@ def get_db(empresa_id=None):
                     _run_migrations(wrapper)
                     conn.commit()
                 else:
-                    cur.execute(f"SET search_path TO {schema_name}, public")
+                    cur.execute(f"SET search_path TO {schema_name}")
                     
             yield wrapper
             conn.commit()
