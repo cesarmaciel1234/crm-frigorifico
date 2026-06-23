@@ -25,6 +25,38 @@ CLIENTE_COLS = [
     "telefono", "cuit", "direccion", "email", "created_at", "fecha_ultimo_pago",
 ]
 
+OPERACION_COLS = [
+    "id", "uuid", "alias", "tipo", "recibido", "pagar", "meses",
+    "fecha_cierre", "fecha_vencimiento", "cuotas", "cuotas_pagadas",
+    "kg", "precio_kg", "plazo_dias", "created_at",
+]
+
+
+def _enemigos_a_operaciones(enemigos: list[dict]) -> list[dict]:
+    """Convierte filas del dashboard (enemigos) a operaciones_financieras crudas."""
+    out: list[dict] = []
+    for e in enemigos or []:
+        if not e.get("alias"):
+            continue
+        out.append({
+            "id": e.get("id"),
+            "uuid": e.get("uuid"),
+            "alias": e.get("alias"),
+            "tipo": e.get("tipo") or "otro",
+            "recibido": e.get("recibido"),
+            "pagar": e.get("pagar") if e.get("pagar") is not None else e.get("total_pagar"),
+            "meses": e.get("meses") or 1,
+            "fecha_cierre": e.get("fecha_cierre"),
+            "fecha_vencimiento": e.get("fecha_vencimiento"),
+            "cuotas": e.get("cuotas") or e.get("cuotas_total") or 1,
+            "cuotas_pagadas": e.get("cuotas_pagadas") or 0,
+            "kg": e.get("kg"),
+            "precio_kg": e.get("precio_kg"),
+            "plazo_dias": e.get("plazo_dias"),
+            "created_at": e.get("created_at"),
+        })
+    return out
+
 
 def _row_values(row: dict, columns: list[str]) -> tuple:
     return tuple(row.get(col) for col in columns)
@@ -42,15 +74,30 @@ def _insert_rows(conn, table: str, rows: list[dict], columns: list[str] | None =
         conn.execute(sql, _row_values(row, cols))
 
 
+def _operaciones_desde_payload(json_data: dict) -> list[dict]:
+    if json_data.get("operaciones_financieras"):
+        return json_data["operaciones_financieras"]
+    if json_data.get("operaciones"):
+        return json_data["operaciones"]
+    enemigos = json_data.get("enemigos") or []
+    if enemigos:
+        return _enemigos_a_operaciones(enemigos)
+    return []
+
+
 def _normalize_payload(json_data: dict) -> dict[str, list[dict]]:
     """Convierte export v1 (legado) y v2 (tablas crudas) a un formato unificado."""
-    version = int(json_data.get("version") or 1)
+    version_raw = json_data.get("version")
+    try:
+        version = int(version_raw) if version_raw is not None else 1
+    except (TypeError, ValueError):
+        version = 1
     if version >= 2:
         return {
             "entidades_bancarias": json_data.get("entidades_bancarias") or json_data.get("bancos") or [],
             "clientes": json_data.get("clientes") or [],
             "compras_bulk": json_data.get("compras_bulk") or json_data.get("bulk") or [],
-            "operaciones_financieras": json_data.get("operaciones_financieras") or json_data.get("operaciones") or [],
+            "operaciones_financieras": _operaciones_desde_payload(json_data),
             "remitos_carga": json_data.get("remitos_carga") or json_data.get("remitos") or [],
             "pagos_cuotas": json_data.get("pagos_cuotas") or [],
             "pagos_clientes": json_data.get("pagos_clientes") or [],
@@ -58,7 +105,7 @@ def _normalize_payload(json_data: dict) -> dict[str, list[dict]]:
             "remitos_fracciones": json_data.get("remitos_fracciones") or [],
             "perdidas_acumuladas": json_data.get("perdidas_acumuladas") or json_data.get("perdidas") or [],
             "ventas_mostrador": json_data.get("ventas_mostrador") or [],
-            "auditoria_operaciones": json_data.get("auditoria_operaciones") or json_data.get("auditoria_reciente") or [],
+            "auditoria_operaciones": json_data.get("auditoria_operaciones") or json_data.get("auditoria_reciente") or json_data.get("auditoria") or [],
         }
 
     return {
@@ -71,7 +118,7 @@ def _normalize_payload(json_data: dict) -> dict[str, list[dict]]:
             for c in (json_data.get("clientes") or [])
         ],
         "compras_bulk": json_data.get("bulk") or [],
-        "operaciones_financieras": json_data.get("operaciones") or [],
+        "operaciones_financieras": _operaciones_desde_payload(json_data),
         "remitos_carga": [
             {
                 "id": r.get("id"),
@@ -159,7 +206,7 @@ def import_all_data(json_data: dict) -> None:
         _insert_rows(conn, "entidades_bancarias", tables["entidades_bancarias"])
         _insert_rows(conn, "clientes", clientes, CLIENTE_COLS)
         _insert_rows(conn, "compras_bulk", tables["compras_bulk"])
-        _insert_rows(conn, "operaciones_financieras", tables["operaciones_financieras"])
+        _insert_rows(conn, "operaciones_financieras", tables["operaciones_financieras"], OPERACION_COLS)
         _insert_rows(conn, "remitos_carga", tables["remitos_carga"])
         _insert_rows(conn, "pagos_cuotas", tables["pagos_cuotas"])
         _insert_rows(conn, "pagos_clientes", tables["pagos_clientes"])

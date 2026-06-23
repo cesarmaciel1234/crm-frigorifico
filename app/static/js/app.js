@@ -2065,6 +2065,26 @@ const $ = id => document.getElementById(id);
             a.remove();
             URL.revokeObjectURL(url);
         }
+        function enemigoAOperacion(e) {
+            if (!e || !e.alias) return null;
+            return {
+                id: e.id,
+                uuid: e.uuid || null,
+                alias: e.alias,
+                tipo: e.tipo || 'otro',
+                recibido: e.recibido,
+                pagar: e.pagar ?? e.total_pagar,
+                meses: e.meses ?? 1,
+                fecha_cierre: e.fecha_cierre || null,
+                fecha_vencimiento: e.fecha_vencimiento || null,
+                cuotas: e.cuotas ?? e.cuotas_total ?? 1,
+                cuotas_pagadas: e.cuotas_pagadas ?? 0,
+                kg: e.kg ?? null,
+                precio_kg: e.precio_kg ?? null,
+                plazo_dias: e.plazo_dias ?? null,
+                created_at: e.created_at || null,
+            };
+        }
         function convertirAppDataABackup(appData) {
             if (!appData) return null;
             const clientes = (appData.clientes || []).map(c => ({
@@ -2118,6 +2138,8 @@ const $ = id => document.getElementById(id);
             }));
             let empresa = {};
             try { empresa = JSON.parse(localStorage.getItem('empresa_datos') || '{}'); } catch (_) {}
+            const fuenteOps = appData.enemigos?.length ? appData.enemigos : (appData.historial || []);
+            const operaciones_financieras = fuenteOps.map(enemigoAOperacion).filter(Boolean);
             return {
                 version: 2,
                 exported_at: new Date().toISOString(),
@@ -2127,7 +2149,7 @@ const $ = id => document.getElementById(id);
                 compras_bulk,
                 entidades_bancarias,
                 remitos_carga,
-                operaciones_financieras: [],
+                operaciones_financieras,
                 pagos_cuotas: [],
                 pagos_clientes: [],
                 aplicacion_pagos: [],
@@ -2152,8 +2174,12 @@ const $ = id => document.getElementById(id);
             if (!payload) return false;
             const clientes = payload.clientes?.length || 0;
             const remitos = payload.remitos_carga?.length || payload.remitos?.length || 0;
-            const operaciones = payload.operaciones_financieras?.length || payload.operaciones?.length || 0;
+            const operaciones = payload.operaciones_financieras?.length || payload.operaciones?.length || payload.enemigos?.length || 0;
             const bulk = payload.compras_bulk?.length || payload.bulk?.length || 0;
+            if (payload.version === 'cache_snapshot_v1' && payload.appData) {
+                const ad = payload.appData;
+                return backupTieneDatos(ad) || (ad.enemigos?.length || 0) > 0;
+            }
             return clientes + remitos + operaciones + bulk > 0;
         }
         async function obtenerPayloadBackup() {
@@ -2292,11 +2318,16 @@ const $ = id => document.getElementById(id);
                 return subirBackupAlServidor(cached.data);
             }
             const appCache = await db.cache.get('appData');
-            const fromApp = convertirAppDataABackup(appCache?.data || data);
-            if (!backupTieneDatos(fromApp)) {
-                return toast('No hay copia completa en este dispositivo. Usá "Guardar caché del celular" primero.', true);
+            const snapshot = {
+                version: 'cache_snapshot_v1',
+                exported_at: new Date().toISOString(),
+                fullBackup: null,
+                appData: appCache?.data || data || null,
+            };
+            if (!backupTieneDatos(snapshot)) {
+                return toast('No hay copia en este dispositivo. Usá "Guardar caché del celular" primero.', true);
             }
-            await subirBackupAlServidor(fromApp);
+            await subirBackupAlServidor(snapshot);
         });
         $('btnRestaurarBackup')?.addEventListener('click', () => {
             const fileInput = $('inputBackupFile');
