@@ -12,6 +12,32 @@ except ImportError:
 def is_postgres():
     return Config.DATABASE_URL and psycopg2
 
+
+def _split_sql_script(sql: str) -> list[str]:
+    """Divide un script SQL en sentencias (psycopg2 solo admite una por execute)."""
+    parts: list[str] = []
+    current: list[str] = []
+    in_single = False
+    for ch in sql:
+        if ch == "'" and not in_single:
+            in_single = True
+            current.append(ch)
+        elif ch == "'" and in_single:
+            in_single = False
+            current.append(ch)
+        elif ch == ";" and not in_single:
+            stmt = "".join(current).strip()
+            if stmt:
+                parts.append(stmt)
+            current = []
+        else:
+            current.append(ch)
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
 def table_exists(conn, name: str) -> bool:
     if type(conn).__name__ == "PostgresConnWrapper":
         row = conn.execute(
@@ -88,8 +114,9 @@ class PostgresConnWrapper:
         sql = sql.replace("datetime('now', 'localtime')", "CURRENT_TIMESTAMP::varchar")
         sql = sql.replace("date('now', 'localtime')", "CURRENT_DATE::varchar")
         sql = sql.replace("REAL", "DOUBLE PRECISION")
-        cur = self.conn.cursor()
-        cur.execute(sql)
+        for stmt in _split_sql_script(sql):
+            cur = self.conn.cursor()
+            cur.execute(stmt)
     def commit(self): self.conn.commit()
     def rollback(self): self.conn.rollback()
     def close(self): self.conn.close()
@@ -158,7 +185,10 @@ def get_db(empresa_id=None):
                 cur = conn.cursor()
                 cur.execute("SET search_path TO public")
                 if table_exists(wrapper, "clientes"):
-                    ensure_tenant_migrations(wrapper)
+                    try:
+                        ensure_tenant_migrations(wrapper)
+                    except Exception as e:
+                        print(f"Error en migraciones del tenant {empresa_id}: {e}")
             elif empresa_id > 1:
                 schema_name = f"empresa_{empresa_id}"
                 cur = conn.cursor()
@@ -177,7 +207,10 @@ def get_db(empresa_id=None):
                     conn.commit()
                 else:
                     cur.execute(f"SET search_path TO {schema_name}")
-                    ensure_tenant_migrations(wrapper)
+                    try:
+                        ensure_tenant_migrations(wrapper)
+                    except Exception as e:
+                        print(f"Error en migraciones del tenant {empresa_id}: {e}")
 
             yield wrapper
             conn.commit()
@@ -324,6 +357,13 @@ def init_db():
             
     from app.services.users import ensure_default_admin
     ensure_default_admin()
+
+    if is_postgres() and not Config.TESTING:
+        try:
+            with get_db(empresa_id=1) as conn:
+                ensure_tenant_migrations(conn)
+        except Exception as e:
+            print(f"Error al migrar esquema tenant 1 en arranque: {e}")
 
 def _table_exists(conn, name: str) -> bool:
     return table_exists(conn, name)
@@ -639,6 +679,17 @@ def _run_migrations(conn):
                 pg_type = "INTEGER" if col_type == "INTEGER" else "TEXT"
                 final_type = pg_type if is_pg else col_type
                 conn.execute(f"ALTER TABLE auditoria_operaciones ADD COLUMN {name} {final_type}")
+
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS sync_nodos (
+            device_id TEXT PRIMARY KEY,
+            etiqueta TEXT DEFAULT '',
+            snapshot_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+        """
+    )
 
 def _migrate_pagar_constraint(conn):
     """Permite pagar = recibido (cheques sin interés)."""
