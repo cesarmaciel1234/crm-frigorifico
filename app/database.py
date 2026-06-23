@@ -303,6 +303,13 @@ def init_db():
                 "INSERT INTO empresas (id, nombre, slug, cuit) VALUES (1, 'Rumaul', 'rumaul', '')"
             )
             
+        # Sincronizar la secuencia en Postgres por inserciones manuales de ID (como el id=1)
+        if is_postgres():
+            try:
+                conn.execute("SELECT setval('empresas_id_seq', (SELECT MAX(id) FROM empresas))")
+            except Exception:
+                pass
+            
     from app.services.users import ensure_default_admin
     ensure_default_admin()
 
