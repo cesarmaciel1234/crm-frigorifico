@@ -1951,6 +1951,12 @@ const $ = id => document.getElementById(id);
 
         async function logout() {
             try {
+                // Limpiar la caché local de IndexedDB para evitar que el siguiente usuario vea los datos del anterior
+                await Promise.all([
+                    db.transacciones.clear(),
+                    db.cache.clear(),
+                    db.solicitudes_pendientes.clear()
+                ]);
                 await api('/auth/logout', { method: 'POST' });
             } catch (_) {}
             window.location.href = '/login';
