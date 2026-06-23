@@ -2168,7 +2168,12 @@ const $ = id => document.getElementById(id);
                 remitos_carga,
                 operaciones_financieras,
                 pagos_cuotas: [],
-                pagos_clientes: [],
+                pagos_clientes: (appData.historialPagos || []).map(p => ({
+                    id: p.id,
+                    cliente_id: p.cliente_id,
+                    monto: p.monto ?? p.monto_pagado ?? 0,
+                    fecha: p.fecha || null,
+                })).filter(p => p.cliente_id && p.monto > 0),
                 aplicacion_pagos: [],
                 remitos_fracciones: [],
                 perdidas_acumuladas: appData.perdidas || [],
@@ -2178,15 +2183,92 @@ const $ = id => document.getElementById(id);
             if (empresa) payload.empresa = empresa;
             return payload;
         }
-        function normalizarBackupParaImport(raw) {
-            if (!raw) return null;
-            if (raw.version === 'cache_snapshot_v1') {
-                if (raw.fullBackup && backupTieneDatos(raw.fullBackup)) return raw.fullBackup;
-                if (raw.appData) return convertirAppDataABackup(raw.appData);
-                return null;
+        function mergeAppDataEnBackup(base, app) {
+            if (!base || !app) return base;
+            const merged = { ...base };
+            const tieneOps = (merged.operaciones_financieras?.length || merged.operaciones?.length || merged.enemigos?.length || 0) > 0;
+            if (!tieneOps && app.enemigos?.length) merged.enemigos = app.enemigos;
+            const pairs = [
+                ['clientes', 'clientes'],
+                ['remitos_carga', 'remitos'],
+                ['remitos', 'remitos'],
+                ['compras_bulk', 'bulk'],
+                ['bulk', 'bulk'],
+                ['entidades_bancarias', 'bancos'],
+                ['bancos', 'bancos'],
+                ['auditoria_operaciones', 'auditoria'],
+                ['auditoria', 'auditoria'],
+                ['perdidas_acumuladas', 'perdidas'],
+                ['perdidas', 'perdidas'],
+                ['pagos_clientes', 'historialPagos'],
+                ['historialPagos', 'historialPagos'],
+            ];
+            for (const [target, source] of pairs) {
+                if (!merged[target]?.length && app[source]?.length) merged[target] = app[source];
             }
-            if (raw.source === 'appData_cache') return raw;
-            return raw;
+            return merged;
+        }
+        function prepararBackupParaSubida(raw) {
+            if (!raw || typeof raw !== 'object') return null;
+            let payload = raw;
+
+            if (raw.version === 'cache_snapshot_v1') {
+                if (raw.fullBackup && typeof raw.fullBackup === 'object') {
+                    payload = mergeAppDataEnBackup(raw.fullBackup, raw.appData);
+                } else if (raw.appData) {
+                    payload = raw.appData;
+                } else {
+                    return null;
+                }
+            }
+
+            const versionNum = parseInt(payload.version, 10);
+            const esExportCompleto = versionNum >= 2
+                && (payload.operaciones_financieras?.length || payload.clientes?.length);
+            if (esExportCompleto) {
+                if (!payload.operaciones_financieras?.length && payload.enemigos?.length) {
+                    payload = { ...payload, operaciones_financieras: payload.enemigos.map(enemigoAOperacion).filter(Boolean) };
+                }
+                if (!payload.empresa) {
+                    const emp = empresaDatosParaBackup();
+                    if (emp) payload = { ...payload, empresa: emp };
+                }
+                return payload;
+            }
+
+            const appShape = {
+                enemigos: payload.enemigos || payload.historial || payload.operaciones_financieras,
+                clientes: payload.clientes,
+                bulk: payload.bulk || payload.compras_bulk,
+                remitos: payload.remitos || payload.remitos_carga,
+                bancos: payload.bancos || payload.entidades_bancarias,
+                auditoria: payload.auditoria || payload.auditoria_operaciones,
+                perdidas: payload.perdidas || payload.perdidas_acumuladas,
+                historialPagos: payload.historialPagos || payload.pagos_clientes,
+            };
+            return convertirAppDataABackup(appShape);
+        }
+        function resumirBackup(payload) {
+            if (!payload) return '';
+            const c = payload.clientes?.length || 0;
+            const o = payload.operaciones_financieras?.length || payload.operaciones?.length || payload.enemigos?.length || 0;
+            const r = payload.remitos_carga?.length || payload.remitos?.length || 0;
+            const b = payload.compras_bulk?.length || payload.bulk?.length || 0;
+            return `${o} tarjetas/deudas, ${c} clientes, ${r} remitos, ${b} lotes`;
+        }
+        async function apiImportBackup(password, backupData) {
+            const r = await fetch('/api/import', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ password, backup_data: backupData }),
+            });
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(body.error || 'Error al subir el backup');
+            return body;
+        }
+        function normalizarBackupParaImport(raw) {
+            return prepararBackupParaSubida(raw);
         }
         // Backup / Modal Logic
         function backupTieneDatos(payload) {
@@ -2260,43 +2342,52 @@ const $ = id => document.getElementById(id);
         async function subirBackupAlServidor(backupData) {
             if (!navigator.onLine) {
                 toast('Necesitás conexión a internet para subir al servidor', true);
-                return;
+                return false;
             }
-            const normalizado = normalizarBackupParaImport(backupData) || backupData;
-            if (!backupTieneDatos(normalizado)) {
+            let parsed = backupData;
+            if (typeof backupData === 'string') {
+                try {
+                    parsed = JSON.parse(backupData);
+                } catch (_) {
+                    toast('El archivo no es un JSON válido', true);
+                    return false;
+                }
+            }
+            const normalizado = prepararBackupParaSubida(parsed);
+            if (!normalizado || !backupTieneDatos(normalizado)) {
                 toast('El backup no contiene datos para subir', true);
-                return;
+                return false;
             }
-            toast('Ingresá la contraseña maestra para continuar');
+            const resumen = resumirBackup(normalizado);
+            toast('Listo para subir: ' + resumen);
             const backupWasOpen = $('modalBackup')?.classList.contains('open');
             if (backupWasOpen) $('modalBackup')?.classList.remove('open');
             const password = await window.promptMasterPasswordAsync(
-                'Subir estos datos al servidor reemplazará la nube actual. Ingresá la contraseña maestra.'
+                'Subir al servidor (' + resumen + '). Reemplazará la nube actual. Contraseña maestra:'
             );
             if (!password) {
                 if (backupWasOpen) $('modalBackup')?.classList.add('open');
-                return;
+                return false;
             }
             setLoading(true);
             toast('Subiendo datos al servidor...');
             try {
-                const res = await api('/api/import', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password, backup_data: normalizado })
-                });
-                if (res?.offline) {
-                    toast('Sin conexión estable. Conectate a internet e intentá de nuevo.', true);
-                    if (backupWasOpen) $('modalBackup')?.classList.add('open');
-                    return;
-                }
-                toast('Datos subidos al servidor correctamente');
+                const res = await apiImportBackup(password, normalizado);
+                const ops = res.summary?.tablas?.operaciones_financieras?.insertados;
+                const cli = res.summary?.tablas?.clientes?.insertados;
+                const msg = ops != null
+                    ? `Subido: ${ops} deudas, ${cli ?? 0} clientes`
+                    : 'Datos subidos al servidor correctamente';
+                toast(msg);
                 cerrarModalBackup();
+                await db.cache.put({ key: 'fullBackup', data: normalizado, updated_at: Date.now() });
                 await syncEmpresaFromServer();
                 await loadAll();
+                return true;
             } catch (e) {
                 toast('Error al subir: ' + (e.message || ''), true);
                 if (backupWasOpen) $('modalBackup')?.classList.add('open');
+                return false;
             } finally {
                 setLoading(false);
             }
@@ -2376,23 +2467,19 @@ const $ = id => document.getElementById(id);
             }
             await subirBackupAlServidor(snapshot);
         });
-        $('btnRestaurarBackup')?.addEventListener('click', () => {
+        $('btnRestaurarBackup')?.addEventListener('click', async () => {
             const fileInput = $('inputBackupFile');
             if (!fileInput?.files?.length) {
                 return toast('Seleccioná un archivo JSON de backup primero', true);
             }
-            const file = fileInput.files[0];
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const jsonContent = JSON.parse(e.target.result);
-                    await subirBackupAlServidor(jsonContent);
-                    fileInput.value = '';
-                } catch (err) {
-                    toast('Error al restaurar: ' + (err.message || 'Archivo inválido'), true);
-                }
-            };
-            reader.readAsText(file);
+            try {
+                toast('Leyendo archivo...');
+                const jsonContent = await leerArchivoJson(fileInput.files[0]);
+                await subirBackupAlServidor(jsonContent);
+                fileInput.value = '';
+            } catch (err) {
+                toast('Error al restaurar: ' + (err.message || 'Archivo inválido'), true);
+            }
         });
 
         async function loadAll() {

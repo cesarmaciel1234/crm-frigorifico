@@ -44,7 +44,8 @@ def test_import_restores_enemigos_and_empresa(tenant_db):
             "plazo_cobro_dias": 7, "pagado": 0, "monto_pagado": 0,
         }],
     }
-    import_all_data(payload)
+    summary = import_all_data(payload)
+    assert summary["tablas"]["operaciones_financieras"]["insertados"] == 1
 
     with get_db() as conn:
         ops = conn.execute("SELECT alias FROM operaciones_financieras").fetchall()
@@ -64,7 +65,36 @@ def test_import_cache_snapshot_v1(tenant_db):
             "clientes": [{"id": 3, "nombre": "Cliente X", "scoring": "A", "techo_deuda": 1, "saldo_actual": 0}],
         },
     }
-    import_all_data(snapshot)
-    with get_db() as conn:
-        count = conn.execute("SELECT COUNT(*) AS c FROM operaciones_financieras").fetchone()["c"]
-    assert count == 1
+    summary = import_all_data(snapshot)
+    assert summary["tablas"]["operaciones_financieras"]["insertados"] == 1
+
+
+def test_import_merges_fullbackup_with_appdata_enemigos(tenant_db):
+    snapshot = {
+        "version": "cache_snapshot_v1",
+        "fullBackup": {
+            "version": 2,
+            "clientes": [{"id": 1, "nombre": "Maciel", "scoring": "A", "techo_deuda": 1000, "saldo_actual": 0}],
+            "operaciones_financieras": [],
+        },
+        "appData": {
+            "enemigos": [{"id": 5, "alias": "MP", "tipo": "tarjeta", "recibido": 100, "pagar": 110, "meses": 1, "cuotas": 1}],
+        },
+    }
+    summary = import_all_data(snapshot)
+    assert summary["tablas"]["operaciones_financieras"]["insertados"] == 1
+    assert summary["tablas"]["clientes"]["insertados"] == 1
+
+
+def test_import_skips_invalid_operacion_rows(tenant_db):
+    payload = {
+        "version": 2,
+        "enemigos": [
+            {"id": 1, "alias": "OK", "tipo": "tarjeta", "recibido": 100, "pagar": 110, "meses": 1, "cuotas": 1},
+            {"id": 2, "alias": "Bad", "tipo": "tarjeta", "recibido": 0, "pagar": 0, "meses": 1, "cuotas": 1},
+        ],
+        "clientes": [{"id": 1, "nombre": "A", "scoring": "A", "techo_deuda": 1, "saldo_actual": 0}],
+    }
+    summary = import_all_data(payload)
+    assert summary["tablas"]["operaciones_financieras"]["insertados"] == 1
+    assert summary["tablas"]["operaciones_financieras"]["omitidos"] == 0

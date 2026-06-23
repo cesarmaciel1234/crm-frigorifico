@@ -29,11 +29,15 @@ def api_import():
     backup_data = data.get("backup_data", {})
     if not backup_data:
         return jsonify({"error": "No backup data provided"}), 400
+    if not isinstance(backup_data, dict):
+        return jsonify({"error": "El backup debe ser un objeto JSON"}), 400
 
     try:
-        import_all_data(backup_data)
+        summary = import_all_data(backup_data)
         log_audit("RESTORE", entidad="sistema", detalle="restauracion_backup_completa")
-        return jsonify({"ok": True, "status": "ok"})
+        return jsonify({"ok": True, "status": "ok", "summary": summary})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Error al restaurar: {str(e)}"}), 500
 
