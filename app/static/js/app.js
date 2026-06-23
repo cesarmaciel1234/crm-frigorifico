@@ -2055,6 +2055,53 @@ const $ = id => document.getElementById(id);
         });
 
         // Backup / Modal Logic
+        function backupTieneDatos(payload) {
+            if (!payload) return false;
+            const clientes = payload.clientes?.length || 0;
+            const remitos = payload.remitos_carga?.length || payload.remitos?.length || 0;
+            const operaciones = payload.operaciones_financieras?.length || payload.operaciones?.length || 0;
+            const bulk = payload.compras_bulk?.length || payload.bulk?.length || 0;
+            return clientes + remitos + operaciones + bulk > 0;
+        }
+        async function obtenerPayloadBackup() {
+            try {
+                const server = await api('/api/export');
+                if (backupTieneDatos(server)) return server;
+            } catch (_) {}
+            const cached = await db.cache.get('fullBackup');
+            if (cached?.data && backupTieneDatos(cached.data)) return cached.data;
+            return null;
+        }
+        async function subirBackupAlServidor(backupData) {
+            if (!navigator.onLine) {
+                toast('Necesitás conexión a internet para subir al servidor', true);
+                return;
+            }
+            if (!backupTieneDatos(backupData)) {
+                toast('El backup no contiene datos para subir', true);
+                return;
+            }
+            const password = await window.promptMasterPasswordAsync(
+                'Subir estos datos al servidor reemplazará la nube actual. Ingresá la contraseña maestra.'
+            );
+            if (!password) return;
+            setLoading(true);
+            toast('Subiendo datos al servidor...');
+            try {
+                await api('/api/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password, backup_data: backupData })
+                });
+                toast('Datos subidos al servidor correctamente');
+                cerrarModalBackup();
+                await loadAll();
+            } catch (e) {
+                toast('Error al subir: ' + (e.message || ''), true);
+            } finally {
+                setLoading(false);
+            }
+        }
         function cerrarModalBackup() {
             $('modalBackup')?.classList.remove('open');
         }
@@ -2076,7 +2123,10 @@ const $ = id => document.getElementById(id);
         $('btnCrearBackup')?.addEventListener('click', async () => {
             try {
                 toast('Generando backup...');
-                const payload = await api('/api/export');
+                const payload = await obtenerPayloadBackup();
+                if (!payload) {
+                    return toast('No hay datos en el servidor ni copia local guardada', true);
+                }
                 const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -2092,6 +2142,30 @@ const $ = id => document.getElementById(id);
                 toast('Error al crear backup: ' + (e.message || ''), true);
             }
         });
+        $('btnSubirServidor')?.addEventListener('click', async () => {
+            const fileInput = $('inputBackupFile');
+            if (fileInput?.files?.length) {
+                try {
+                    const text = await fileInput.files[0].text();
+                    await subirBackupAlServidor(JSON.parse(text));
+                } catch (e) {
+                    toast('Archivo JSON inválido', true);
+                }
+                return;
+            }
+            const payload = await obtenerPayloadBackup();
+            if (!payload) {
+                return toast('Seleccioná un archivo .json o asegurate de tener una copia local guardada', true);
+            }
+            await subirBackupAlServidor(payload);
+        });
+        $('btnSubirCacheLocal')?.addEventListener('click', async () => {
+            const cached = await db.cache.get('fullBackup');
+            if (!cached?.data) {
+                return toast('No hay copia completa guardada en este dispositivo', true);
+            }
+            await subirBackupAlServidor(cached.data);
+        });
         $('btnRestaurarBackup')?.addEventListener('click', () => {
             const fileInput = $('inputBackupFile');
             if (!fileInput?.files?.length) {
@@ -2102,30 +2176,10 @@ const $ = id => document.getElementById(id);
             reader.onload = async (e) => {
                 try {
                     const jsonContent = JSON.parse(e.target.result);
-                    const password = await window.promptMasterPasswordAsync(
-                        '⚠️ Esto reemplazará TODA la base de datos actual por el backup. Ingresá la contraseña maestra para continuar.'
-                    );
-                    if (!password) return;
-
-                    setLoading(true);
-                    toast('Restaurando backup, no cierres la página...');
-                    await api('/api/import', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            password: password,
-                            backup_data: jsonContent
-                        })
-                    });
-
-                    toast('Backup restaurado con éxito. Recargando datos...');
-                    cerrarModalBackup();
+                    await subirBackupAlServidor(jsonContent);
                     fileInput.value = '';
-                    await loadAll();
                 } catch (err) {
                     toast('Error al restaurar: ' + (err.message || 'Archivo inválido'), true);
-                } finally {
-                    setLoading(false);
                 }
             };
             reader.readAsText(file);
@@ -2154,6 +2208,12 @@ const $ = id => document.getElementById(id);
                 
                 data = freshData;
                 await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
+                try {
+                    const fullBackup = await api('/api/export');
+                    if (backupTieneDatos(fullBackup)) {
+                        await db.cache.put({ key: 'fullBackup', data: fullBackup, updated_at: Date.now() });
+                    }
+                } catch (_) {}
                 renderAll(); // Re-renderizar con los datos frescos
             } catch (e) {
                 console.warn("Error al cargar del servidor. Mostrando datos locales (offline).", e);
