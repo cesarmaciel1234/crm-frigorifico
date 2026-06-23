@@ -130,12 +130,8 @@ def auth_register():
             slug = re.sub(r'[^a-zA-Z0-9]', '', empresa_nombre_upper.lower())
             if not slug:
                 slug = "empresa"
-            base_slug = slug
-            counter = 1
-            while conn.execute("SELECT 1 FROM empresas WHERE slug = ?", (slug,)).fetchone():
-                slug = f"{base_slug}{counter}"
-                counter += 1
-                
+            if conn.execute("SELECT 1 FROM empresas WHERE slug = ?", (slug,)).fetchone():
+                return jsonify({"error": "La empresa o usuario ya está registrado. Por favor, inicie sesión o elija otro nombre."}), 409
             # Insertar la empresa
             cur_emp = conn.execute(
                 "INSERT INTO empresas (nombre, slug) VALUES (?, ?)",
