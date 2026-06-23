@@ -226,6 +226,10 @@ const $ = id => document.getElementById(id);
             const count = await db.solicitudes_pendientes.count();
             const badge = document.getElementById('offlineBadge');
             const cntSpan = document.getElementById('offlinePendingCount');
+            const greeting = document.querySelector('.topbar-greeting-block');
+            const weather = document.getElementById('weatherWidget');
+            const isMobile = window.innerWidth <= 768;
+            
             if (badge && cntSpan) {
                 if (count > 0 || !navigator.onLine) {
                     badge.style.display = 'inline-flex';
@@ -239,8 +243,14 @@ const $ = id => document.getElementById(id);
                         badge.style.color = '#92400e';
                         badge.title = `${count} acciones pendientes de subir al servidor. Haz clic para sincronizar ahora.`;
                     }
+                    if (isMobile) {
+                        if (greeting) greeting.style.display = 'none';
+                        if (weather) weather.style.display = 'none';
+                    }
                 } else {
                     badge.style.display = 'none';
+                    if (greeting) greeting.style.display = '';
+                    if (weather) weather.style.display = 'inline-flex';
                 }
             }
         }

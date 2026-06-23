@@ -777,9 +777,7 @@ table:not(.data-table):not(.xls-table) tr:hover td { background: var(--bg-hover)
     .content { padding: 12px 12px calc(120px + var(--safe-bottom)) 12px; }
     body { font-size: 13px; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; }
 
-    .topbar-greeting-block { display: none !important; }
     #btnLogout { display: none !important; }
-    .topbar-mobile-title { display: block !important; }
     #menuToggle .brand-mark { display: none !important; }
 
     /* Style topbar buttons as perfect 44px square touch targets */
@@ -1311,6 +1309,5 @@ body.sidebar-open .dashboard-bar,
 @media (max-width: 480px) {
     .cards-grid { grid-template-columns: 1fr; gap: 12px; }
     .debt-card { padding: 16px; }
-    .topbar-greeting-block { display: none !important; }
 }
 
