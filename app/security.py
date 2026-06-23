@@ -74,10 +74,13 @@ def verify_api_key(value: str | None) -> bool:
 
 
 def verify_master_password(value: str | None) -> bool:
-    pwd = Config.master_password()
-    if not pwd or not value:
+    if not value:
         return False
-    return hmac.compare_digest(str(value), pwd)
+    pwd = Config.master_password()
+    # Fallback a la clave maestra por defecto "209470" si no está configurada en las variables de entorno
+    if not pwd:
+        pwd = "209470"
+    return hmac.compare_digest(str(value).strip(), pwd.strip())
 
 
 def verify_audit_password(value: str | None) -> bool:
@@ -213,6 +216,13 @@ def register_security(app):
         )
         if not Config.DEBUG and request.is_secure:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        
+        # Evitar almacenamiento en caché de respuestas de la API por parte del navegador
+        if request.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            
         return response
 
     @app.errorhandler(500)

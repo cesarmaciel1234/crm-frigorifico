@@ -447,23 +447,26 @@ def actualizar_saldo_inicial(cliente_id: int, saldo_inicial: float) -> float:
 def eliminar_cliente(cliente_id: int):
     from app.services.remitos import eliminar_remito_logic
     with get_db() as conn:
-        # 1. Eliminar pagos y sus aplicaciones (por CASCADE)
+        # 1. Desvincular ventas de mostrador (POS) asociadas a este cliente para evitar violaciones de clave foránea
+        conn.execute("UPDATE ventas_mostrador SET cliente_id = NULL WHERE cliente_id = ?", (cliente_id,))
+
+        # 2. Eliminar pagos y sus aplicaciones (por CASCADE)
         conn.execute("DELETE FROM pagos_clientes WHERE cliente_id = ?", (cliente_id,))
         
-        # 2. Resetear monto_pagado a 0 para todos los remitos del cliente para evitar errores de validación de pagos en eliminar_remito_logic
+        # 3. Resetear monto_pagado a 0 para todos los remitos del cliente para evitar errores de validación de pagos en eliminar_remito_logic
         conn.execute("UPDATE remitos_carga SET monto_pagado = 0 WHERE cliente_id = ?", (cliente_id,))
 
-        # 3. Obtener todos los remitos del cliente
+        # 4. Obtener todos los remitos del cliente
         remitos = conn.execute("SELECT id FROM remitos_carga WHERE cliente_id = ?", (cliente_id,)).fetchall()
         
-        # 4. Eliminar cada remito devolviendo su stock a compras_bulk
+        # 5. Eliminar cada remito devolviendo su stock a compras_bulk
         for rem in remitos:
             eliminar_remito_logic(conn, rem["id"])
             
-        # 5. Eliminar pérdidas acumuladas del cliente (si las hay)
+        # 6. Eliminar pérdidas acumuladas del cliente (si las hay)
         conn.execute("DELETE FROM perdidas_acumuladas WHERE cliente_id = ?", (cliente_id,))
         
-        # 6. Eliminar el cliente
+        # 7. Eliminar el cliente
         conn.execute("DELETE FROM clientes WHERE id = ?", (cliente_id,))
 
 def actualizar_cliente(

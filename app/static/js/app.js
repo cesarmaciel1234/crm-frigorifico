@@ -2291,17 +2291,24 @@ const $ = id => document.getElementById(id);
 
         $('btnConfirmDeleteAuditoria')?.addEventListener('click', async () => {
             if (!selectedAuditId) return;
-            const pw = await window.promptMasterPasswordAsync('Ingrese la contraseña maestra para borrar el registro del historial:');
-            if (!pw) return;
+            const pw = $('inpPasswordAuditoria').value;
+            if (!pw) {
+                toast('Debe ingresar la contraseña maestra', true);
+                return;
+            }
             if (!confirm('¿Borrar definitivamente este registro de auditoría?')) return;
-            await api('/api/auditoria/' + selectedAuditId, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: pw })
-            });
-            toast('Registro eliminado');
-            $('modalConfirmDeleteAuditoria').classList.remove('show');
-            await loadAll();
+            try {
+                await api('/api/auditoria/' + selectedAuditId, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pw })
+                });
+                toast('Registro de auditoría eliminado');
+                $('modalPasswordAuditoria').classList.remove('open');
+                await loadAll();
+            } catch (e) {
+                toast(e.message, true);
+            }
         });
 
         $('btnCancelarPago').addEventListener('click', cerrarModalPago);
@@ -2813,6 +2820,8 @@ const $ = id => document.getElementById(id);
                 const inpEl = document.getElementById('inputMasterPassword');
                 const modalEl = document.getElementById('modalMasterPassword');
                 const btnConfirm = document.getElementById('btnConfirmMasterPassword');
+                const btnClose = modalEl.querySelector('.modal-close');
+                const btnCancel = modalEl.querySelector('.btn-ghost');
                 
                 textEl.textContent = text;
                 inpEl.value = '';
@@ -2820,25 +2829,30 @@ const $ = id => document.getElementById(id);
                 inpEl.focus();
                 
                 const cleanup = () => {
-                    const newBtn = btnConfirm.cloneNode(true);
-                    btnConfirm.replaceWith(newBtn);
+                    btnConfirm.onclick = null;
+                    if (btnClose) btnClose.onclick = null;
+                    if (btnCancel) btnCancel.onclick = null;
                     modalEl.classList.remove('open');
                 };
                 
-                document.getElementById('btnConfirmMasterPassword').addEventListener('click', () => {
-                    resolve(document.getElementById('inputMasterPassword').value);
+                btnConfirm.onclick = () => {
+                    resolve(inpEl.value);
                     cleanup();
-                });
+                };
                 
-                modalEl.querySelector('.modal-close').addEventListener('click', () => {
-                    resolve(null);
-                    cleanup();
-                });
+                if (btnClose) {
+                    btnClose.onclick = () => {
+                        resolve(null);
+                        cleanup();
+                    };
+                }
                 
-                modalEl.querySelector('.btn-ghost').addEventListener('click', () => {
-                    resolve(null);
-                    cleanup();
-                });
+                if (btnCancel) {
+                    btnCancel.onclick = () => {
+                        resolve(null);
+                        cleanup();
+                    };
+                }
             });
         };
 
@@ -2852,6 +2866,16 @@ const $ = id => document.getElementById(id);
                     body: JSON.stringify({ password: pass })
                 });
                 toast(res.message || "Cliente eliminado permanentemente");
+                
+                // Eliminar optimísticamente del estado local antes de recargar
+                if (data && data.clientes) {
+                    const idx = data.clientes.findIndex(c => String(c.id) === String(clientId));
+                    if (idx !== -1) {
+                        data.clientes.splice(idx, 1);
+                        await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
+                    }
+                }
+                
                 await loadAll();
                 switchView('clientes');
             } catch(e) {
@@ -2869,6 +2893,35 @@ const $ = id => document.getElementById(id);
                     body: JSON.stringify({ password: pass })
                 });
                 toast(res.message || "Pago eliminado y deuda restablecida");
+                
+                // Eliminar optimísticamente del estado local antes de recargar
+                if (data) {
+                    if (data.historialPagos) {
+                        const idx = data.historialPagos.findIndex(p => String(p.id) === String(pagoId));
+                        if (idx !== -1) data.historialPagos.splice(idx, 1);
+                    }
+                    if (currentClientData && currentClientData.pagos) {
+                        const idx = currentClientData.pagos.findIndex(p => String(p.id) === String(pagoId));
+                        if (idx !== -1) {
+                            const p = currentClientData.pagos[idx];
+                            currentClientData.saldo_actual = (currentClientData.saldo_actual || 0) + p.monto;
+                            currentClientData.pagos.splice(idx, 1);
+                        }
+                    }
+                    if (data.clientes) {
+                        const c = data.clientes.find(cli => String(cli.id) === String(selectedClienteId));
+                        if (c && c.pagos) {
+                            const idx = c.pagos.findIndex(p => String(p.id) === String(pagoId));
+                            if (idx !== -1) {
+                                const p = c.pagos[idx];
+                                c.saldo_actual = (c.saldo_actual || 0) + p.monto;
+                                c.pagos.splice(idx, 1);
+                            }
+                        }
+                    }
+                    await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
+                }
+                
                 await loadAll();
                 if (selectedClienteId) await openClientDrawer(selectedClienteId);
             } catch(e) {
@@ -2907,6 +2960,31 @@ const $ = id => document.getElementById(id);
                 });
                 toast(res.message || "Factura eliminada. Stock repuesto.");
                 cerrarModalFacturaOriginal();
+                
+                // Eliminar optimísticamente del estado local antes de recargar
+                if (data) {
+                    if (currentClientData && currentClientData.remitos) {
+                        const idx = currentClientData.remitos.findIndex(r => String(r.id) === String(remitoId));
+                        if (idx !== -1) {
+                            const r = currentClientData.remitos[idx];
+                            currentClientData.saldo_actual = (currentClientData.saldo_actual || 0) - (r.precio_venta_total - (r.monto_pagado || 0));
+                            currentClientData.remitos.splice(idx, 1);
+                        }
+                    }
+                    if (data.clientes) {
+                        const c = data.clientes.find(cli => String(cli.id) === String(selectedClienteId));
+                        if (c && c.remitos) {
+                            const idx = c.remitos.findIndex(r => String(r.id) === String(remitoId));
+                            if (idx !== -1) {
+                                const r = c.remitos[idx];
+                                c.saldo_actual = (c.saldo_actual || 0) - (r.precio_venta_total - (r.monto_pagado || 0));
+                                c.remitos.splice(idx, 1);
+                            }
+                        }
+                    }
+                    await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
+                }
+                
                 await loadAll();
                 if (selectedClienteId) {
                     await openClientDrawer(selectedClienteId);
