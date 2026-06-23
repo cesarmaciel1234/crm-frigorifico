@@ -2054,6 +2054,61 @@ const $ = id => document.getElementById(id);
             }
         });
 
+        // Backup / Modal Logic
+        $('btnBackup')?.addEventListener('click', () => {
+            $('modalBackup')?.classList.add('open');
+        });
+        $('btnCrearBackup')?.addEventListener('click', async () => {
+            try {
+                const payload = await api('/api/export');
+                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'Backup_MasterTotal_' + new Date().toISOString().slice(0, 10) + '.json';
+                a.click();
+                URL.revokeObjectURL(url);
+                toast('Backup creado correctamente');
+                $('modalBackup')?.classList.remove('open');
+            } catch (e) {
+                toast('Error al crear backup: ' + (e.message || ''), true);
+            }
+        });
+        $('btnRestaurarBackup')?.addEventListener('click', () => {
+            const fileInput = $('inputBackupFile');
+            if (!fileInput.files || fileInput.files.length === 0) {
+                return toast('Por favor, selecciona un archivo JSON de backup primero', true);
+            }
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const jsonContent = JSON.parse(e.target.result);
+                    // Pide contraseña maestra antes de hacer el import destructivo
+                    const password = prompt('ATENCIÓN: Esto limpiará toda la base de datos y la reemplazará por el backup. Para continuar, ingresa la Contraseña Maestra:');
+                    if (!password) return;
+                    
+                    setLoading(true);
+                    toast('Restaurando backup, no cierres la página...');
+                    await api('/api/import', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            password: password,
+                            backup_data: jsonContent
+                        })
+                    });
+                    
+                    toast('✅ Backup restaurado con éxito. Recargando datos...');
+                    $('modalBackup')?.classList.remove('open');
+                    await loadAll();
+                } catch (err) {
+                    setLoading(false);
+                    toast('Error al restaurar: ' + (err.message || 'Archivo inválido'), true);
+                }
+            };
+            reader.readAsText(file);
+        });
+
         async function loadAll() {
             setLoading(true);
             try {
