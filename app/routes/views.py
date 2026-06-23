@@ -233,3 +233,24 @@ def serve_sw():
     response = send_from_directory(os.path.join(current_app.root_path, 'static'), 'sw.js', mimetype='application/javascript')
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return response
+@views_bp.route('/limpiar-sistema-ahora')
+def limpiar_sistema_ahora():
+    from app.database import get_db, is_postgres
+    try:
+        with get_db(empresa_id=0) as conn:
+            conn.execute("DELETE FROM usuarios WHERE username = 'maciel' OR username = 'MACIEL'")
+            conn.execute("DELETE FROM usuarios WHERE (empresa_id > 1 OR empresa_id IS NULL) AND username != 'admin'")
+            conn.execute("DELETE FROM empresas WHERE id > 1 OR slug != 'rumaul'")
+            
+            if is_postgres():
+                cur = conn.cursor()
+                cur.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'empresa_%'")
+                for row in cur.fetchall():
+                    s = row[0]
+                    if s != 'empresa_1':
+                        cur.execute(f"DROP SCHEMA IF EXISTS {s} CASCADE")
+                conn.execute("SELECT setval('empresas_id_seq', (SELECT coalesce(MAX(id), 1) FROM empresas))")
+                
+        return "<h1>¡LIMPIEZA COMPLETADA CON ÉXITO!</h1><p>Maciel y todas las empresas de prueba han sido eliminadas por completo. Rumaul (id=1) está 100% seguro.</p><p>Ya puedes volver a la página de inicio y registrar a la empresa 'maciel' de cero.</p>"
+    except Exception as e:
+        return f"<h1>Error al limpiar:</h1><p>{str(e)}</p>"
