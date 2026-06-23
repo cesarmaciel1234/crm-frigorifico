@@ -146,3 +146,30 @@ class TestSecurity:
         r_reset_wrong = client.post("/auth/reset-password", json=reset_payload_wrong)
         assert r_reset_wrong.status_code == 403
 
+    def test_new_empresa_empty_tenant_and_client_create(self, secured_app):
+        client = secured_app.test_client()
+        r_reg = client.post("/auth/register", json={
+            "empresa_nombre": "Acme Foods",
+            "password": "securepassword123",
+            "password_confirm": "securepassword123",
+        })
+        assert r_reg.status_code == 200
+        body = r_reg.get_json()
+        assert body["ok"] is True
+        assert body["user"]["empresa_id"] > 1
+
+        r_cli = client.get("/api/clientes")
+        assert r_cli.status_code == 200
+        assert r_cli.get_json() == []
+
+        r_post = client.post("/api/clientes", json={
+            "nombre": "Cliente Demo",
+            "techo_deuda": 50000,
+            "scoring": "A",
+        })
+        assert r_post.status_code == 201
+
+        r_cli2 = client.get("/api/clientes")
+        assert len(r_cli2.get_json()) == 1
+        assert r_cli2.get_json()[0]["nombre"] == "Cliente Demo"
+

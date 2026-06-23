@@ -1577,7 +1577,7 @@ const $ = id => document.getElementById(id);
         function renderCobranzas() {
             const grid = $('cobranzasGrid');
             if (!grid) return;
-            let conDeuda = data.clientes.filter(c => c.saldo_actual > 0);
+            let conDeuda = (data.clientes || []).filter(c => c.saldo_actual > 0);
             conDeuda.sort((a,b) => b.saldo_actual - a.saldo_actual);
             
             let totalDeuda = conDeuda.reduce((acc, c) => acc + c.saldo_actual, 0);
@@ -2809,10 +2809,10 @@ const $ = id => document.getElementById(id);
                 });
                 const freshData = {
                     ...dash,
-                    historialPagos: pick(1, []),
-                    bulk: pick(2, []),
-                    clientes: pick(3, []),
-                    auditoria: pick(4, []),
+                    historialPagos: pick(1, data?.historialPagos || []),
+                    bulk: pick(2, data?.bulk || []),
+                    clientes: pick(3, data?.clientes || []),
+                    auditoria: pick(4, data?.auditoria || []),
                 };
 
                 data = freshData;
@@ -2886,10 +2886,51 @@ const $ = id => document.getElementById(id);
             setTimeout(() => $(id).classList.remove('fade-in'), 300);
         }
 
+        function normalizarClienteDesdeApi(res, payload, fallbackId) {
+            const saldoIni = parseFloat(payload.saldo_inicial || 0) || 0;
+            const techo = parseFloat(res.techo_deuda ?? payload.techo_deuda ?? 0) || 0;
+            return {
+                id: res.id ?? fallbackId,
+                nombre: res.nombre || payload.nombre,
+                techo_deuda: techo,
+                scoring: res.scoring || payload.scoring || 'A',
+                telefono: res.telefono || payload.telefono || '',
+                cuit: res.cuit || payload.cuit || '',
+                direccion: res.direccion || payload.direccion || '',
+                email: res.email || payload.email || '',
+                saldo_inicial: saldoIni,
+                saldo_actual: saldoIni,
+                limite_superado: saldoIni > techo,
+                en_mora: false,
+                inrecuperable: false,
+                fecha_ultimo_pago: null,
+                oldest_unpaid: null,
+            };
+        }
+
+        function upsertClienteEnCache(cliente) {
+            if (!cliente?.id) return;
+            data.clientes = data.clientes || [];
+            const idx = data.clientes.findIndex(c => String(c.id) === String(cliente.id));
+            if (idx >= 0) {
+                data.clientes[idx] = { ...data.clientes[idx], ...cliente };
+            } else {
+                data.clientes.push(cliente);
+            }
+        }
+
+        async function persistirAppDataLocal() {
+            if (data) await tenantCachePut('appData', data);
+        }
+
         window.abrirSubVistaClientes = (id) => {
+            const resolved = id === 'cliNuevo' ? 'cliAdd' : id;
             if ($('clientesMenu')) $('clientesMenu').classList.add('field-hidden');
             document.querySelectorAll('.clientes-subview').forEach(v => v.classList.add('field-hidden'));
-            if ($(id)) $(id).classList.remove('field-hidden');
+            if ($(resolved)) $(resolved).classList.remove('field-hidden');
+            if (resolved === 'cliVer' || resolved === 'cliInrecuperables') {
+                renderClientes();
+            }
             window.scrollTo({top:0, behavior:'smooth'});
         };
 
@@ -3379,24 +3420,33 @@ const $ = id => document.getElementById(id);
             };
             
             try {
+                let res;
                 if (isUpdating) {
-                    await api('/api/clientes/' + clientIdToUpdate, {
+                    res = await api('/api/clientes/' + clientIdToUpdate, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
+                    upsertClienteEnCache(normalizarClienteDesdeApi(
+                        { id: clientIdToUpdate, ...payload },
+                        payload,
+                        clientIdToUpdate
+                    ));
                     toast('Cliente actualizado con éxito');
                 } else {
-                    await api('/api/clientes', {
+                    res = await api('/api/clientes', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
+                    upsertClienteEnCache(normalizarClienteDesdeApi(res, payload));
                     toast('Cliente registrado con éxito');
                 }
                 ev.target.reset();
-                await loadAll();
+                await persistirAppDataLocal();
+                renderClientes();
                 abrirSubVistaClientes('cliVer');
+                void loadAll({ enSegundoPlano: true, bloquearUI: false });
             } catch (e) { toast(e.message, true); }
         });
         
@@ -4469,17 +4519,27 @@ const $ = id => document.getElementById(id);
         async function boot() {
             await loadSession();
             const prevUser = localStorage.getItem('sync_user') || '';
+            const prevEmpresa = localStorage.getItem('sync_empresa') || '';
             const curUser = sessionUser.username || '';
+            const curEmpresa = String(sessionUser.empresa_id || '1');
             const usuarioCambio = prevUser && prevUser !== curUser;
-            if (usuarioCambio) {
-                await db.cache.clear();
+            const empresaCambio = prevEmpresa && prevEmpresa !== curEmpresa;
+            if (usuarioCambio || empresaCambio) {
+                await Promise.all([
+                    db.cache.clear(),
+                    db.transacciones.clear(),
+                    db.solicitudes_pendientes.clear(),
+                ]);
+                try { await db.pending_sync.clear(); } catch (_) {}
             }
             if (curUser) localStorage.setItem('sync_user', curUser);
+            if (curEmpresa) localStorage.setItem('sync_empresa', curEmpresa);
 
             const cached = await tenantCacheGet('appData');
             const sinCacheLocal = !cached;
+            const cuentaNueva = sinCacheLocal || usuarioCambio || empresaCambio;
 
-            if (cached && !usuarioCambio) {
+            if (cached && !cuentaNueva) {
                 data = cached;
                 renderAll();
                 actualizarUIOffline();
@@ -4492,10 +4552,10 @@ const $ = id => document.getElementById(id);
             }
 
             void loadAll({
-                forzarServidor: sinCacheLocal || usuarioCambio,
-                bloquearUI: sinCacheLocal || usuarioCambio,
-                avisarSiVacio: sinCacheLocal || usuarioCambio,
-                enSegundoPlano: !sinCacheLocal && !usuarioCambio,
+                forzarServidor: cuentaNueva,
+                bloquearUI: cuentaNueva,
+                avisarSiVacio: cuentaNueva,
+                enSegundoPlano: !cuentaNueva,
             });
 
             if (navigator.onLine) {
