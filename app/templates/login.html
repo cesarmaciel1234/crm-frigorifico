@@ -279,11 +279,11 @@
                 </div>
                 <div class="field">
                     <label for="reg-password">Contraseña</label>
-                    <input type="password" id="reg-password" placeholder="Mínimo 8 caracteres" required minlength="8">
+                    <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" required minlength="6">
                 </div>
                 <div class="field">
                     <label for="reg-password-confirm">Confirmar contraseña</label>
-                    <input type="password" id="reg-password-confirm" placeholder="Repita la contraseña" required minlength="8">
+                    <input type="password" id="reg-password-confirm" placeholder="Repita la contraseña" required minlength="6">
                 </div>
                 <div id="reg-error" class="error-box hidden"></div>
                 <button type="submit" class="btn-glorious">Registrarse y Entrar</button>
@@ -302,7 +302,7 @@
                 </div>
                 <div class="field">
                     <label for="reset-password">Nueva contraseña</label>
-                    <input type="password" id="reset-password" placeholder="Mínimo 8 caracteres" required minlength="8">
+                    <input type="password" id="reset-password" placeholder="Mínimo 6 caracteres" required minlength="6">
                 </div>
                 <div class="field">
                     <label for="reset-masterkey">Clave maestra</label>
@@ -367,7 +367,7 @@
             
             const empresa_nombre = document.getElementById('reg-empresa').value.trim();
             const password = document.getElementById('reg-password').value;
-            const password_confirm = document.getElementById('reg-reg-password-confirm' || 'reg-password-confirm') ? document.getElementById('reg-password-confirm').value : '';
+            const password_confirm = document.getElementById('reg-password-confirm') ? document.getElementById('reg-password-confirm').value : '';
 
             if (password !== password_confirm) {
                 errorBox.textContent = 'Las contraseñas no coinciden';

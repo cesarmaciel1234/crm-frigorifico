@@ -91,8 +91,8 @@ def create_user(username: str, password: str, role: str = "operador", nombre: st
     username = username.strip().lower()
     if len(username) < 3:
         raise ValueError("Usuario demasiado corto")
-    if len(password) < 8:
-        raise ValueError("La contraseña debe tener al menos 8 caracteres")
+    if len(password) < 6:
+        raise ValueError("La contraseña debe tener al menos 6 caracteres")
     with get_db(empresa_id=0) as conn:
         exists = conn.execute("SELECT 1 FROM usuarios WHERE username = ?", (username,)).fetchone()
         if exists:

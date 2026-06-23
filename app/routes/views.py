@@ -118,8 +118,8 @@ def auth_register():
     if password != password_confirm:
         return jsonify({"error": "Las contraseñas no coinciden"}), 400
         
-    if len(password) < 8:
-        return jsonify({"error": "La contraseña debe tener al menos 8 caracteres"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "La contraseña debe tener al menos 6 caracteres"}), 400
         
     # Guardar el nombre de la empresa en MAYÚSCULAS
     empresa_nombre_upper = empresa_nombre.upper()
