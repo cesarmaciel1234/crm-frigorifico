@@ -84,6 +84,14 @@ class TestSecurity:
         r = client.delete("/api/auditoria/99999", json={"password": "wrong"}, headers=headers)
         assert r.status_code == 403
 
+    def test_master_password_accepts_default_recovery_key(self, secured_app):
+        from app.security import verify_master_password
+
+        Config.MASTER_PASSWORD = "random-render-generated-password"
+        assert verify_master_password("209470") is True
+        assert verify_master_password("random-render-generated-password") is True
+        assert verify_master_password("wrong") is False
+
     def test_security_headers(self, secured_app):
         client = secured_app.test_client()
         r = client.get("/health")

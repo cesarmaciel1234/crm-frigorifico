@@ -657,6 +657,8 @@ table:not(.data-table):not(.xls-table) tr:hover td { background: var(--bg-hover)
     align-items: center; justify-content: center; padding: 24px;
 }
 .modal-overlay.open { display: flex; }
+#modalMasterPassword { z-index: 600; }
+#modalBackup { z-index: 350; }
 .modal-content {
     background: var(--bg-elevated);
     border: 1px solid var(--border-default);

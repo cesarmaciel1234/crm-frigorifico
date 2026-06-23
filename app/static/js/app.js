@@ -2224,6 +2224,20 @@ const $ = id => document.getElementById(id);
             descargarArchivoJson(snapshot, 'CacheDispositivo_MasterTotal_' + fecha + '.json');
             toast('Caché del celular guardado. No borres ese archivo.');
         }
+        async function leerArchivoJson(file) {
+            if (typeof file.text === 'function') {
+                return JSON.parse(await file.text());
+            }
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    try { resolve(JSON.parse(e.target.result)); }
+                    catch (err) { reject(err); }
+                };
+                reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+                reader.readAsText(file);
+            });
+        }
         async function subirBackupAlServidor(backupData) {
             if (!navigator.onLine) {
                 toast('Necesitás conexión a internet para subir al servidor', true);
@@ -2234,23 +2248,35 @@ const $ = id => document.getElementById(id);
                 toast('El backup no contiene datos para subir', true);
                 return;
             }
+            toast('Ingresá la contraseña maestra para continuar');
+            const backupWasOpen = $('modalBackup')?.classList.contains('open');
+            if (backupWasOpen) $('modalBackup')?.classList.remove('open');
             const password = await window.promptMasterPasswordAsync(
                 'Subir estos datos al servidor reemplazará la nube actual. Ingresá la contraseña maestra.'
             );
-            if (!password) return;
+            if (!password) {
+                if (backupWasOpen) $('modalBackup')?.classList.add('open');
+                return;
+            }
             setLoading(true);
             toast('Subiendo datos al servidor...');
             try {
-                await api('/api/import', {
+                const res = await api('/api/import', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password, backup_data: normalizado })
                 });
+                if (res?.offline) {
+                    toast('Sin conexión estable. Conectate a internet e intentá de nuevo.', true);
+                    if (backupWasOpen) $('modalBackup')?.classList.add('open');
+                    return;
+                }
                 toast('Datos subidos al servidor correctamente');
                 cerrarModalBackup();
                 await loadAll();
             } catch (e) {
                 toast('Error al subir: ' + (e.message || ''), true);
+                if (backupWasOpen) $('modalBackup')?.classList.add('open');
             } finally {
                 setLoading(false);
             }
@@ -2299,8 +2325,9 @@ const $ = id => document.getElementById(id);
             const fileInput = $('inputBackupFile');
             if (fileInput?.files?.length) {
                 try {
-                    const text = await fileInput.files[0].text();
-                    await subirBackupAlServidor(JSON.parse(text));
+                    toast('Leyendo archivo...');
+                    const json = await leerArchivoJson(fileInput.files[0]);
+                    await subirBackupAlServidor(json);
                 } catch (e) {
                     toast('Archivo JSON inválido', true);
                 }
@@ -3204,6 +3231,7 @@ const $ = id => document.getElementById(id);
                     resolve(inpEl.value);
                     cleanup();
                 };
+                btnConfirm.textContent = 'Confirmar';
                 
                 if (btnClose) {
                     btnClose.onclick = () => {
