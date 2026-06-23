@@ -151,6 +151,25 @@ const $ = id => document.getElementById(id);
         let selectedDeuda = null;
         let selectedAuditId = null;
         let sessionUser = { role: 'admin', username: 'jefe', empresa_id: 1, empresa_nombre: '' };
+
+        function tenantCacheKey(name) {
+            const eid = sessionUser?.empresa_id || 1;
+            return name + ':' + eid;
+        }
+        async function tenantCacheGet(name) {
+            const row = await db.cache.get(tenantCacheKey(name));
+            return row?.data ?? null;
+        }
+        async function tenantCacheGetEntry(name) {
+            return db.cache.get(tenantCacheKey(name));
+        }
+        async function tenantCachePut(name, payload) {
+            await db.cache.put({ key: tenantCacheKey(name), data: payload, updated_at: Date.now() });
+            if (name === 'appData' && window.CrmSync && navigator.onLine) {
+                CrmSync.pushNode(payload).catch(() => {});
+            }
+        }
+
         let histPagosFiltro = '';
         let activeRowIndex = -1;
 
@@ -446,7 +465,7 @@ const $ = id => document.getElementById(id);
                     }
                 }
 
-                db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
+                await tenantCachePut('appData', data);
                 renderAll();
             } catch (err) {
                 console.error("Error al aplicar cambio optimista:", err);
@@ -2007,6 +2026,10 @@ const $ = id => document.getElementById(id);
             } catch (_) {
                 sessionUser = { role: 'admin', username: 'jefe', empresa_id: 1, empresa_nombre: '' };
             }
+            if (window.CrmSync) {
+                CrmSync.init(db, sessionUser);
+                CrmSync.setApi(api);
+            }
             await syncEmpresaFromServer();
             applyRoleUi();
         }
@@ -2305,17 +2328,17 @@ const $ = id => document.getElementById(id);
                 const server = await api('/api/export');
                 if (backupTieneDatos(server)) return server;
             } catch (_) {}
-            const cached = await db.cache.get('fullBackup');
-            if (cached?.data && backupTieneDatos(cached.data)) return cached.data;
-            const appCache = await db.cache.get('appData');
-            const fromApp = convertirAppDataABackup(appCache?.data || data);
+            const cached = await tenantCacheGet('fullBackup');
+            if (cached && backupTieneDatos(cached)) return cached;
+            const appCache = await tenantCacheGet('appData');
+            const fromApp = convertirAppDataABackup(appCache || data);
             if (backupTieneDatos(fromApp)) return fromApp;
             return null;
         }
         async function guardarCacheDispositivo() {
             const [fullEntry, appEntry, pendientes] = await Promise.all([
-                db.cache.get('fullBackup'),
-                db.cache.get('appData'),
+                tenantCacheGetEntry('fullBackup'),
+                tenantCacheGetEntry('appData'),
                 db.solicitudes_pendientes.toArray()
             ]);
             const fullBackup = fullEntry?.data || null;
@@ -2397,7 +2420,7 @@ const $ = id => document.getElementById(id);
                     : 'Datos subidos al servidor correctamente';
                 toast(msg);
                 cerrarModalBackup();
-                await db.cache.put({ key: 'fullBackup', data: normalizado, updated_at: Date.now() });
+                await tenantCachePut('fullBackup', normalizado);
                 await syncEmpresaFromServer();
                 await loadAll();
                 return true;
@@ -2411,6 +2434,48 @@ const $ = id => document.getElementById(id);
         }
         function cerrarModalBackup() {
             $('modalBackup')?.classList.remove('open');
+        }
+        async function actualizarNodosBackup() {
+            const el = $('backupNodosLista');
+            if (!el || !window.CrmSync) return;
+            el.textContent = 'Cargando nodos...';
+            try {
+                const nodos = await CrmSync.listNodes();
+                if (!nodos.length) {
+                    el.innerHTML = '<span style="color:#64748b;">Este dispositivo publicará su caché como nodo al sincronizar (máx. '
+                        + CrmSync.MAX_NODOS + ' por empresa).</span>';
+                    return;
+                }
+                const mine = CrmSync.deviceId;
+                el.innerHTML = nodos.map(n => {
+                    const esEste = n.device_id === mine;
+                    const btn = esEste
+                        ? '<span style="color:#16a34a;font-size:0.8rem;">Este dispositivo</span>'
+                        : '<button type="button" class="btn btn-ghost btn-sm btn-restaurar-nodo" data-device="'
+                            + esc(n.device_id) + '" style="font-size:0.8rem;">Restaurar caché</button>';
+                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #e2e8f0;">'
+                        + '<div><strong>' + esc(n.etiqueta || 'Dispositivo') + '</strong>'
+                        + '<div style="font-size:0.75rem;color:#64748b;">' + esc(n.updated_at || '') + '</div></div>'
+                        + btn + '</div>';
+                }).join('');
+                el.querySelectorAll('.btn-restaurar-nodo').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        try {
+                            const nodo = await CrmSync.restoreFromNode(btn.dataset.device);
+                            if (nodo?.snapshot) {
+                                data = nodo.snapshot;
+                                await tenantCachePut('appData', data);
+                                renderAll();
+                                toast('Caché restaurada desde otro dispositivo');
+                            }
+                        } catch (e) {
+                            toast('No se pudo restaurar: ' + (e.message || ''), true);
+                        }
+                    });
+                });
+            } catch (e) {
+                el.textContent = 'No se pudieron listar nodos: ' + (e.message || '');
+            }
         }
         async function actualizarEstadoNubeBackup() {
             const el = $('backupNubeEstado');
@@ -2453,6 +2518,7 @@ const $ = id => document.getElementById(id);
             }
             modal.classList.add('open');
             actualizarEstadoNubeBackup();
+            actualizarNodosBackup();
         }
         $('btnBackup')?.addEventListener('click', abrirModalBackup);
         $('btnCerrarBackup')?.addEventListener('click', cerrarModalBackup);
@@ -2509,16 +2575,16 @@ const $ = id => document.getElementById(id);
             await subirBackupAlServidor(payload);
         });
         $('btnSubirCacheLocal')?.addEventListener('click', async () => {
-            const cached = await db.cache.get('fullBackup');
-            if (cached?.data && backupTieneDatos(cached.data)) {
-                return subirBackupAlServidor(cached.data);
+            const cached = await tenantCacheGet('fullBackup');
+            if (cached && backupTieneDatos(cached)) {
+                return subirBackupAlServidor(cached);
             }
-            const appCache = await db.cache.get('appData');
+            const appCache = await tenantCacheGet('appData');
             const snapshot = {
                 version: 'cache_snapshot_v1',
                 exported_at: new Date().toISOString(),
                 fullBackup: null,
-                appData: appCache?.data || data || null,
+                appData: appCache || data || null,
             };
             if (!backupTieneDatos(snapshot)) {
                 return toast('No hay copia en este dispositivo. Usá "Guardar caché del celular" primero.', true);
@@ -2547,36 +2613,69 @@ const $ = id => document.getElementById(id);
             setLoading(true);
             try {
                 if (!forzarServidor) {
-                    const cached = await db.cache.get('appData');
-                    if (cached && cached.data) {
-                        data = cached.data;
+                    const cached = await tenantCacheGet('appData');
+                    if (cached) {
+                        data = cached;
                         renderAll();
                         setLoading(false);
                     }
                 }
 
-                const [dash, pagos, bulk, clientes, auditoriaData] = await Promise.all([
-                    api('/api/dashboard?' + bust),
-                    api('/api/historial-pagos?' + bust),
-                    api('/api/bulk?' + bust),
-                    api('/api/clientes?' + bust),
-                    api('/api/auditoria?' + bust).catch(() => []),
-                ]);
-                const freshData = { ...dash, historialPagos: pagos, bulk: bulk, clientes: clientes, auditoria: auditoriaData };
-
-                data = freshData;
-                await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
-                try {
-                    const fullBackup = await api('/api/export?' + bust);
-                    if (backupTieneDatos(fullBackup)) {
-                        await db.cache.put({ key: 'fullBackup', data: fullBackup, updated_at: Date.now() });
-                    }
-                } catch (_) {
-                    const fromApp = convertirAppDataABackup(freshData);
-                    if (backupTieneDatos(fromApp)) {
-                        await db.cache.put({ key: 'fullBackup', data: fromApp, updated_at: Date.now() });
+                let freshData = null;
+                if (navigator.onLine && window.CrmSync) {
+                    try {
+                        const bundle = await CrmSync.pullFromServer();
+                        if (bundle?.appData) {
+                            freshData = bundle.appData;
+                            if (bundle.fullBackup && backupTieneDatos(bundle.fullBackup)) {
+                                await tenantCachePut('fullBackup', bundle.fullBackup);
+                            }
+                        }
+                    } catch (syncErr) {
+                        console.warn('sync/pull no disponible, usando APIs individuales', syncErr);
                     }
                 }
+
+                if (!freshData) {
+                    const settled = await Promise.allSettled([
+                        api('/api/dashboard?' + bust),
+                        api('/api/historial-pagos?' + bust),
+                        api('/api/bulk?' + bust),
+                        api('/api/clientes?' + bust),
+                        api('/api/auditoria?' + bust),
+                    ]);
+                    const labels = ['dashboard', 'historial-pagos', 'bulk', 'clientes', 'auditoria'];
+                    const pick = (i, fallback) => settled[i].status === 'fulfilled' ? settled[i].value : fallback;
+                    const dash = pick(0, null);
+                    if (!dash) {
+                        const err = settled[0].status === 'rejected' ? settled[0].reason : null;
+                        throw new Error((err && err.message) || 'Error al cargar el panel principal');
+                    }
+                    settled.forEach((res, i) => {
+                        if (res.status === 'rejected') console.warn('API ' + labels[i] + ' falló:', res.reason);
+                    });
+                    freshData = {
+                        ...dash,
+                        historialPagos: pick(1, []),
+                        bulk: pick(2, []),
+                        clientes: pick(3, []),
+                        auditoria: pick(4, []),
+                    };
+                    try {
+                        const fullBackup = await api('/api/export?' + bust);
+                        if (backupTieneDatos(fullBackup)) {
+                            await tenantCachePut('fullBackup', fullBackup);
+                        }
+                    } catch (_) {
+                        const fromApp = convertirAppDataABackup(freshData);
+                        if (backupTieneDatos(fromApp)) {
+                            await tenantCachePut('fullBackup', fromApp);
+                        }
+                    }
+                }
+
+                data = freshData;
+                await tenantCachePut('appData', data);
                 renderAll();
                 if (avisarSiVacio && !servidorTieneDatos(freshData)) {
                     try {
@@ -3453,7 +3552,7 @@ const $ = id => document.getElementById(id);
                     const idx = data.clientes.findIndex(c => String(c.id) === String(clientId));
                     if (idx !== -1) {
                         data.clientes.splice(idx, 1);
-                        await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
+                        await tenantCachePut('appData', data);
                     }
                 }
                 
@@ -3499,7 +3598,7 @@ const $ = id => document.getElementById(id);
                             }
                         }
                     }
-                    await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
+                    await tenantCachePut('appData', data);
                 }
                 
                 await loadAll();
@@ -3561,7 +3660,7 @@ const $ = id => document.getElementById(id);
                             }
                         }
                     }
-                    await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
+                    await tenantCachePut('appData', data);
                 }
                 
                 await loadAll();
@@ -4213,8 +4312,7 @@ const $ = id => document.getElementById(id);
                 await db.cache.clear();
             }
             if (curUser) localStorage.setItem('sync_user', curUser);
-            const cached = await db.cache.get('appData');
-            const sinCacheLocal = !cached?.data;
+            const sinCacheLocal = !(await tenantCacheGet('appData'));
             await loadAll({
                 forzarServidor: sinCacheLocal || usuarioCambio,
                 avisarSiVacio: true,

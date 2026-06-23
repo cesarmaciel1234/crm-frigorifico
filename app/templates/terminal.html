@@ -1602,6 +1602,12 @@
                     <button type="button" class="btn btn-danger" id="btnRestaurarBackup" style="width:100%;">Restaurar desde archivo</button>
                 </div>
 
+                <div style="background:#f5f3ff; border:1px solid #c4b5fd; border-radius:12px; padding:16px; margin-bottom:16px;">
+                    <h4 style="margin:0 0 8px 0; color:#5b21b6;">4. Nodos de backup (dispositivos)</h4>
+                    <p style="font-size:0.85rem; color:#6d28d9; margin-bottom:12px;">Hasta 10 celulares/PC guardan copia de la caché de tu empresa. Cada empresa tiene nodos separados; no se mezclan datos.</p>
+                    <div id="backupNodosLista" style="font-size:0.85rem;"></div>
+                </div>
+
                 <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:16px;">
                     <h4 style="margin:0 0 8px 0; color:#1e40af;">3. Subir al servidor (recuperar la nube)</h4>
                     <p style="font-size:0.85rem; color:#1d4ed8; margin-bottom:12px;"><strong>⚠️ Reemplazo total:</strong> borra todos los datos de la nube (clientes, deudas, remitos, lotes, etc.) y los reemplaza por el backup. Si la nube está vacía, los crea desde cero. No mezcla ni suma registros.</p>
@@ -1643,6 +1649,7 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/app.js?v=2.59"></script>
+    <script src="/static/js/sync-engine.js"></script>
+    <script src="/static/js/app.js?v=2.61"></script>
 </body>
 </html>

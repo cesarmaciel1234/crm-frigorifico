@@ -49,4 +49,4 @@ def _guard_master_admin():
 # ------------------------------------------------------------------------------
 # IMPORTACIÓN DE SUBMÓDULOS (Rutas modulares)
 # ------------------------------------------------------------------------------
-from app.routes import api_sistema, api_finanzas, api_remitos, api_clientes
+from app.routes import api_sistema, api_finanzas, api_remitos, api_clientes, api_sync
