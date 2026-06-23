@@ -450,7 +450,8 @@ def eliminar_cliente(cliente_id: int):
         # 1. Desvincular ventas de mostrador (POS) asociadas a este cliente para evitar violaciones de clave foránea
         conn.execute("UPDATE ventas_mostrador SET cliente_id = NULL WHERE cliente_id = ?", (cliente_id,))
 
-        # 2. Eliminar pagos y sus aplicaciones (por CASCADE)
+        # 2. Eliminar aplicaciones explícitamente y luego los pagos (para soportar SQLite sin foreign_keys=ON)
+        conn.execute("DELETE FROM aplicacion_pagos WHERE pago_id IN (SELECT id FROM pagos_clientes WHERE cliente_id = ?)", (cliente_id,))
         conn.execute("DELETE FROM pagos_clientes WHERE cliente_id = ?", (cliente_id,))
         
         # 3. Resetear monto_pagado a 0 para todos los remitos del cliente para evitar errores de validación de pagos en eliminar_remito_logic

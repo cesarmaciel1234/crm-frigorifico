@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS remitos_carga (
     plazo_cobro_dias INTEGER NOT NULL DEFAULT 0 CHECK(plazo_cobro_dias >= 0),
     costo_carne REAL NOT NULL DEFAULT 0,
     pagado INTEGER NOT NULL DEFAULT 0 CHECK(pagado IN (0, 1, 2)),
+    monto_pagado REAL NOT NULL DEFAULT 0 CHECK(monto_pagado >= 0),
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (cliente_id) REFERENCES clientes(id)
 );
