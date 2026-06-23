@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.database import get_db, is_postgres
+from app.database import ensure_tenant_migrations, get_db, is_postgres
 from app.services.users import normalize_empresa_config
 
 CLEAR_ORDER = [
@@ -31,6 +31,11 @@ OPERACION_COLS = [
     "id", "uuid", "alias", "tipo", "recibido", "pagar", "meses",
     "fecha_cierre", "fecha_vencimiento", "cuotas", "cuotas_pagadas",
     "kg", "precio_kg", "plazo_dias", "created_at",
+]
+
+AUDITORIA_COLS = [
+    "id", "operacion_id", "alias", "accion", "monto", "fecha",
+    "entidad", "entidad_id", "usuario", "detalle", "ip_address", "user_agent",
 ]
 
 SKIP_ROW_KEYS = frozenset({
@@ -209,6 +214,30 @@ def _normalize_payload(json_data: dict) -> dict[str, list[dict]]:
     }
 
 
+def _normalize_auditoria_rows(rows: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for row in rows or []:
+        alias = (row.get("alias") or row.get("entidad") or "sistema").strip() or "sistema"
+        accion = row.get("accion") or "CREADO"
+        if accion not in {"CREADO", "PAGADO", "ELIMINADO"}:
+            accion = "CREADO"
+        out.append({
+            "id": row.get("id"),
+            "operacion_id": row.get("operacion_id"),
+            "alias": alias,
+            "accion": accion,
+            "monto": row.get("monto", 0) or 0,
+            "fecha": row.get("fecha"),
+            "entidad": row.get("entidad"),
+            "entidad_id": row.get("entidad_id"),
+            "usuario": row.get("usuario"),
+            "detalle": row.get("detalle"),
+            "ip_address": row.get("ip_address"),
+            "user_agent": row.get("user_agent"),
+        })
+    return out
+
+
 def _row_values(row: dict, columns: list[str]) -> tuple:
     return tuple(row.get(col) for col in columns)
 
@@ -283,6 +312,8 @@ def import_all_data(json_data: dict) -> dict[str, Any]:
     summary: dict[str, Any] = {"tablas": {}, "empresa": False, "advertencias": 0}
 
     with get_db() as conn:
+        ensure_tenant_migrations(conn)
+
         if not is_postgres():
             conn.execute("PRAGMA foreign_keys = OFF")
 
@@ -326,7 +357,7 @@ def import_all_data(json_data: dict) -> dict[str, Any]:
             ("remitos_fracciones", tables["remitos_fracciones"], None),
             ("perdidas_acumuladas", tables["perdidas_acumuladas"], None),
             ("ventas_mostrador", tables["ventas_mostrador"], None),
-            ("auditoria_operaciones", tables["auditoria_operaciones"], None),
+            ("auditoria_operaciones", _normalize_auditoria_rows(tables["auditoria_operaciones"]), AUDITORIA_COLS),
         ]
         for table, rows, cols in inserts:
             ins, skip = _insert_rows(conn, table, rows, cols)

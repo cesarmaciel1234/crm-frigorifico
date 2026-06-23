@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from flask import session, request, has_request_context
 
-from app.database import get_db
+from app.database import ensure_tenant_migrations, get_db
 
 
 def _actor() -> str:
@@ -43,6 +43,7 @@ def log_audit(
         pass
 
     with get_db() as conn:
+        ensure_tenant_migrations(conn)
         conn.execute(
             """
             INSERT INTO auditoria_operaciones
@@ -68,6 +69,7 @@ def list_audit_log(limit: int = 200, offset: int = 0) -> list[dict]:
     limit = max(1, min(int(limit), 500))
     offset = max(0, int(offset))
     with get_db() as conn:
+        ensure_tenant_migrations(conn)
         rows = conn.execute(
             """
             SELECT id, operacion_id, alias, accion, monto, fecha,

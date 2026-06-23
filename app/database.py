@@ -157,6 +157,8 @@ def get_db(empresa_id=None):
             if empresa_id == 1:
                 cur = conn.cursor()
                 cur.execute("SET search_path TO public")
+                if table_exists(wrapper, "clientes"):
+                    ensure_tenant_migrations(wrapper)
             elif empresa_id > 1:
                 schema_name = f"empresa_{empresa_id}"
                 cur = conn.cursor()
@@ -175,7 +177,8 @@ def get_db(empresa_id=None):
                     conn.commit()
                 else:
                     cur.execute(f"SET search_path TO {schema_name}")
-                    
+                    ensure_tenant_migrations(wrapper)
+
             yield wrapper
             conn.commit()
         except Exception:
@@ -196,6 +199,11 @@ def get_db(empresa_id=None):
                 _init_tenant_db(conn)
             except Exception as e:
                 print(f"Error al inicializar base de datos de empresa: {e}")
+        elif is_tenant and db_exists:
+            try:
+                ensure_tenant_migrations(conn)
+            except Exception as e:
+                print(f"Error en migraciones de empresa: {e}")
                 
         try:
             yield conn
@@ -321,6 +329,22 @@ def _table_exists(conn, name: str) -> bool:
     return table_exists(conn, name)
 
 
+def ensure_tenant_migrations(conn) -> None:
+    """Aplica migraciones incrementales al esquema del tenant activo."""
+    _run_migrations(conn)
+
+
+def _pg_column_names(conn, table: str) -> set[str]:
+    return {
+        row[0]
+        for row in conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = %s AND table_schema = current_schema()",
+            (table,),
+        )
+    }
+
+
 def _run_migrations(conn):
     """Migraciones incrementales sobre la conexión activa."""
     cols = {
@@ -337,7 +361,7 @@ def _run_migrations(conn):
     
     if _table_exists(conn, "operaciones_financieras"):
         if is_pg:
-            existing = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'operaciones_financieras'")}
+            existing = _pg_column_names(conn, "operaciones_financieras")
         else:
             existing = {row[1] for row in conn.execute("PRAGMA table_info(operaciones_financieras)")}
             
@@ -598,12 +622,7 @@ def _run_migrations(conn):
 
     if _table_exists(conn, "auditoria_operaciones"):
         if is_pg:
-            audit_existing = {
-                row[0]
-                for row in conn.execute(
-                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'auditoria_operaciones'"
-                )
-            }
+            audit_existing = _pg_column_names(conn, "auditoria_operaciones")
         else:
             audit_existing = {
                 row[1] for row in conn.execute("PRAGMA table_info(auditoria_operaciones)")

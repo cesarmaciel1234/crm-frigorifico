@@ -86,6 +86,36 @@ def test_import_merges_fullbackup_with_appdata_enemigos(tenant_db):
     assert summary["tablas"]["clientes"]["insertados"] == 1
 
 
+def test_import_auditoria_with_extended_columns(tenant_db):
+    payload = {
+        "version": 2,
+        "clientes": [{"id": 1, "nombre": "A", "scoring": "A", "techo_deuda": 1, "saldo_actual": 0}],
+        "auditoria": [{
+            "id": 1,
+            "operacion_id": 10,
+            "alias": "MP Plus",
+            "accion": "CREADO",
+            "monto": 1000,
+            "fecha": "2026-06-23",
+            "entidad": "operacion",
+            "entidad_id": 10,
+            "usuario": "admin",
+            "detalle": "Alta manual",
+        }],
+    }
+    summary = import_all_data(payload)
+    assert summary["tablas"]["auditoria_operaciones"]["insertados"] == 1
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT alias, entidad, usuario, detalle FROM auditoria_operaciones WHERE id = 1"
+        ).fetchone()
+    assert row["alias"] == "MP Plus"
+    assert row["entidad"] == "operacion"
+    assert row["usuario"] == "admin"
+    assert row["detalle"] == "Alta manual"
+
+
 def test_import_replaces_existing_rows(tenant_db):
     seed = {
         "version": 2,

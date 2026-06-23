@@ -33,7 +33,7 @@ def _tenant_counts(empresa_id: int) -> dict[str, int]:
 
 @api_bp.route("/nube/resumen")
 def api_nube_resumen():
-    """Cuántos datos hay en la nube para la cuenta actual (y otras empresas si está vacía)."""
+    """Cuántos datos hay en la nube para la empresa del usuario actual."""
     empresa_id = int(session.get("empresa_id") or 1)
     empresa_nombre = ""
     empresa_slug = ""
@@ -45,24 +45,6 @@ def api_nube_resumen():
 
     conteos = _tenant_counts(empresa_id)
     total = sum(conteos.values())
-    otras_con_datos: list[dict] = []
-
-    if total == 0:
-        with get_db(empresa_id=0) as conn:
-            empresas = conn.execute("SELECT id, nombre, slug FROM empresas ORDER BY id").fetchall()
-        for emp in empresas:
-            eid = int(emp["id"])
-            if eid == empresa_id:
-                continue
-            c = _tenant_counts(eid)
-            if sum(c.values()) > 0:
-                otras_con_datos.append({
-                    "empresa_id": eid,
-                    "nombre": emp["nombre"],
-                    "slug": emp["slug"],
-                    "conteos": c,
-                    "total": sum(c.values()),
-                })
 
     return jsonify({
         "empresa_id": empresa_id,
@@ -72,7 +54,6 @@ def api_nube_resumen():
         "conteos": conteos,
         "total": total,
         "tiene_datos": total > 0,
-        "otras_con_datos": otras_con_datos,
     })
 
 @api_bp.route("/import", methods=["POST"])

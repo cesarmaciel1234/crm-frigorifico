@@ -2430,20 +2430,12 @@ const $ = id => document.getElementById(id);
                     el.innerHTML = '<strong>Nube con datos</strong> (' + cuenta + '): '
                         + ops + ' deudas, ' + cli + ' clientes, ' + rem + ' remitos. '
                         + 'Usuario: <strong>' + esc(r.username) + '</strong>';
-                } else if (r.otras_con_datos?.length) {
-                    const o = r.otras_con_datos[0];
-                    el.style.background = '#fef2f2';
-                    el.style.borderColor = '#fecaca';
-                    el.style.color = '#991b1b';
-                    el.innerHTML = '<strong>Esta cuenta está vacía.</strong> Los datos están en <strong>'
-                        + esc(o.nombre) + '</strong>. Cerrá sesión e ingresá con usuario: <strong>'
-                        + esc(o.slug) + '</strong>';
                 } else {
                     el.style.background = '#fef2f2';
                     el.style.borderColor = '#fecaca';
                     el.style.color = '#991b1b';
-                    el.innerHTML = '<strong>Nube vacía</strong> para ' + esc(cuenta)
-                        + ' (usuario ' + esc(r.username) + '). Subí tu archivo .json aquí abajo.';
+                    el.innerHTML = '<strong>Nube vacía</strong> para <strong>' + esc(cuenta) + '</strong>'
+                        + ' (usuario ' + esc(r.username) + '). Cada empresa tiene datos separados: subí tu archivo .json aquí abajo.';
                 }
             } catch (e) {
                 el.style.background = '#fef2f2';
@@ -2568,7 +2560,7 @@ const $ = id => document.getElementById(id);
                     api('/api/historial-pagos?' + bust),
                     api('/api/bulk?' + bust),
                     api('/api/clientes?' + bust),
-                    api('/api/auditoria?' + bust)
+                    api('/api/auditoria?' + bust).catch(() => []),
                 ]);
                 const freshData = { ...dash, historialPagos: pagos, bulk: bulk, clientes: clientes, auditoria: auditoriaData };
 
@@ -2589,21 +2581,13 @@ const $ = id => document.getElementById(id);
                 if (avisarSiVacio && !servidorTieneDatos(freshData)) {
                     try {
                         const nube = await api('/api/nube/resumen?_=' + Date.now());
-                        if (nube.otras_con_datos?.length) {
-                            const o = nube.otras_con_datos[0];
-                            toast(
-                                'Datos en otra empresa: ' + o.nombre + '. Iniciá sesión con usuario ' + o.slug + '.',
-                                true
-                            );
-                        } else {
-                            const cuenta = sessionUser.empresa_nombre || sessionUser.username || 'esta cuenta';
-                            toast(
-                                'La nube está vacía para ' + cuenta + '. Subí el .json en Backup / Nube o usá el mismo usuario donde subiste.',
-                                true
-                            );
-                        }
+                        const cuenta = nube.empresa_nombre || sessionUser.empresa_nombre || sessionUser.username || 'esta empresa';
+                        toast(
+                            'La nube está vacía para ' + cuenta + '. Subí tu backup .json en Backup / Nube.',
+                            true
+                        );
                     } catch (_) {
-                        toast('La nube parece vacía para esta cuenta. Verificá el usuario o subí el backup .json.', true);
+                        toast('La nube parece vacía para esta empresa. Subí el backup .json en Backup / Nube.', true);
                     }
                 } else if (opts.mostrarExito) {
                     toast('Datos descargados de la nube correctamente');
