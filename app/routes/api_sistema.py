@@ -1,4 +1,4 @@
-from flask import jsonify, request
+from flask import jsonify, request, session
 from app.routes.api import api_bp, _guard_master_admin
 from app.database import get_db
 from app.utils import parse_operacion_payload, fmt_plazo_dias, _i, _f, resolve_remito_kg, pesos_piezas_to_json
@@ -15,6 +15,65 @@ from app.services.audit import list_audit_log
 from app.services.export_data import export_all_data
 from app.services.import_data import import_all_data
 from app.services.users import get_empresa_config, save_empresa_config, list_users, create_user, update_user
+
+_COUNT_TABLES = ("clientes", "operaciones_financieras", "remitos_carga", "compras_bulk")
+
+
+def _tenant_counts(empresa_id: int) -> dict[str, int]:
+    try:
+        with get_db(empresa_id=empresa_id) as conn:
+            out: dict[str, int] = {}
+            for table in _COUNT_TABLES:
+                row = conn.execute(f"SELECT COUNT(*) AS c FROM {table}").fetchone()
+                out[table] = int(row["c"] if row else 0)
+            return out
+    except Exception:
+        return {t: 0 for t in _COUNT_TABLES}
+
+
+@api_bp.route("/nube/resumen")
+def api_nube_resumen():
+    """Cuántos datos hay en la nube para la cuenta actual (y otras empresas si está vacía)."""
+    empresa_id = int(session.get("empresa_id") or 1)
+    empresa_nombre = ""
+    empresa_slug = ""
+    with get_db(empresa_id=0) as conn:
+        row = conn.execute("SELECT nombre, slug FROM empresas WHERE id = ?", (empresa_id,)).fetchone()
+        if row:
+            empresa_nombre = row["nombre"] or ""
+            empresa_slug = row["slug"] or ""
+
+    conteos = _tenant_counts(empresa_id)
+    total = sum(conteos.values())
+    otras_con_datos: list[dict] = []
+
+    if total == 0:
+        with get_db(empresa_id=0) as conn:
+            empresas = conn.execute("SELECT id, nombre, slug FROM empresas ORDER BY id").fetchall()
+        for emp in empresas:
+            eid = int(emp["id"])
+            if eid == empresa_id:
+                continue
+            c = _tenant_counts(eid)
+            if sum(c.values()) > 0:
+                otras_con_datos.append({
+                    "empresa_id": eid,
+                    "nombre": emp["nombre"],
+                    "slug": emp["slug"],
+                    "conteos": c,
+                    "total": sum(c.values()),
+                })
+
+    return jsonify({
+        "empresa_id": empresa_id,
+        "empresa_nombre": empresa_nombre,
+        "empresa_slug": empresa_slug,
+        "username": session.get("username"),
+        "conteos": conteos,
+        "total": total,
+        "tiene_datos": total > 0,
+        "otras_con_datos": otras_con_datos,
+    })
 
 @api_bp.route("/import", methods=["POST"])
 def api_import():
