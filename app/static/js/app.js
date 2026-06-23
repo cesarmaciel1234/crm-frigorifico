@@ -1594,12 +1594,12 @@ const $ = id => document.getElementById(id);
                 $('btnDeleteSeleccionados').style.display = 'none';
                 
                 // Toggle Topbar WSP Mode
-                if ($('topbarNormalMode')) $('topbarNormalMode').style.display = 'none';
-                if ($('topbarWspMode')) $('topbarWspMode').style.display = 'flex';
-                if ($('menuToggle')) $('menuToggle').style.display = 'none';
-                if ($('btnVolverTop')) $('btnVolverTop').style.display = 'block';
-                if ($('btnClientPrintWsp')) $('btnClientPrintWsp').style.display = 'flex';
-                if ($('btnTogglePro')) $('btnTogglePro').style.display = 'none';
+                if ($('topbarNormalMode')) $('topbarNormalMode').style.setProperty('display', 'none', 'important');
+                if ($('topbarWspMode')) $('topbarWspMode').style.setProperty('display', 'flex', 'important');
+                if ($('menuToggle')) $('menuToggle').style.setProperty('display', 'none', 'important');
+                if ($('btnVolverTop')) $('btnVolverTop').style.setProperty('display', 'block', 'important');
+                if ($('btnClientPrintWsp')) $('btnClientPrintWsp').style.setProperty('display', 'flex', 'important');
+                if ($('btnTogglePro')) $('btnTogglePro').style.setProperty('display', 'none', 'important');
 
                 renderClientDashboard();
                 
@@ -1611,12 +1611,12 @@ const $ = id => document.getElementById(id);
 
         function volverDesdeClienteDetalle() {
             // Restore Topbar Normal Mode
-            if ($('topbarNormalMode')) $('topbarNormalMode').style.display = 'flex';
-            if ($('topbarWspMode')) $('topbarWspMode').style.display = 'none';
-            if ($('menuToggle')) $('menuToggle').style.display = 'flex';
-            if ($('btnVolverTop')) $('btnVolverTop').style.display = 'none';
-            if ($('btnClientPrintWsp')) $('btnClientPrintWsp').style.display = 'none';
-            if ($('btnTogglePro')) $('btnTogglePro').style.display = 'flex';
+            if ($('topbarNormalMode')) $('topbarNormalMode').style.setProperty('display', '', '');
+            if ($('topbarWspMode')) $('topbarWspMode').style.setProperty('display', 'none', 'important');
+            if ($('menuToggle')) $('menuToggle').style.setProperty('display', '', '');
+            if ($('btnVolverTop')) $('btnVolverTop').style.setProperty('display', 'none', 'important');
+            if ($('btnClientPrintWsp')) $('btnClientPrintWsp').style.setProperty('display', 'none', 'important');
+            if ($('btnTogglePro')) $('btnTogglePro').style.setProperty('display', '', '');
 
             switchView(clientDetailReturnView || 'clientes');
         }
