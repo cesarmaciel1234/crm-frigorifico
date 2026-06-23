@@ -19,6 +19,13 @@ const $ = id => document.getElementById(id);
             cache: 'key, updated_at',
             solicitudes_pendientes: '++id, url, method, body, created_at'
         });
+        db.version(4).stores({
+            transacciones: '++id, uuid, tipo, monto, fecha, status, updated_at',
+            cache: 'key, updated_at',
+            solicitudes_pendientes: '++id, url, method, body, created_at',
+            pending_sync: '++local_id, op_id, entity, entity_uuid, status, updated_at_utc, device_id',
+            sync_meta: 'key',
+        });
 
         async function registrarTransaccion(datos) {
             const registro = {
@@ -29,6 +36,14 @@ const $ = id => document.getElementById(id);
             };
             try {
                 await db.transacciones.add(registro);
+                if (window.CrmSync?.enqueueChange) {
+                    await CrmSync.enqueueChange({
+                        entity: 'operacion',
+                        entity_uuid: registro.uuid,
+                        action: 'CREATE',
+                        payload: { ...registro, updated_at_utc: new Date().toISOString() },
+                    });
+                }
                 console.log("Guardado localmente:", registro.uuid);
                 await intentarSincronizar();
                 return true;
@@ -86,9 +101,61 @@ const $ = id => document.getElementById(id);
         }
 
         async function countPendingOutbox() {
+            let pendingSync = 0;
+            try {
+                pendingSync = await db.pending_sync
+                    .where('status').anyOf(['pending', 'pushing', 'failed']).count();
+            } catch (_) {}
             const solicitudes = await db.solicitudes_pendientes.count();
             const transacciones = await db.transacciones.where('status').equals(0).count();
-            return solicitudes + transacciones;
+            return pendingSync + solicitudes + transacciones;
+        }
+
+        function buildSyncOpFromRequest(url, method, body) {
+            if (!body || method === 'GET') return null;
+            let parsed = {};
+            try { parsed = JSON.parse(body); } catch (_) { return null; }
+            const ts = new Date().toISOString();
+            const uuid = parsed.uuid || crypto.randomUUID();
+
+            if (url.includes('/api/operaciones') && method === 'POST') {
+                return {
+                    entity: 'operacion',
+                    entity_uuid: uuid,
+                    action: 'CREATE',
+                    payload: { ...parsed, uuid, updated_at_utc: ts },
+                };
+            }
+            if (url.includes('/api/clientes') && method === 'POST'
+                && !url.includes('/cobrar') && !url.includes('/saldo-inicial') && !url.includes('/incobrable')) {
+                return {
+                    entity: 'cliente',
+                    entity_uuid: uuid,
+                    action: 'CREATE',
+                    payload: { ...parsed, uuid, updated_at_utc: ts },
+                };
+            }
+            if (url.includes('/api/clientes/') && method === 'PUT') {
+                return {
+                    entity: 'cliente',
+                    entity_uuid: parsed.uuid || uuid,
+                    action: 'UPDATE',
+                    payload: { ...parsed, uuid: parsed.uuid || uuid, updated_at_utc: ts },
+                };
+            }
+            return null;
+        }
+
+        async function drainOutboxAll() {
+            if (window.CrmSync?.drainPendingSync) {
+                try {
+                    await CrmSync.drainPendingSync();
+                } catch (e) {
+                    console.warn('pending_sync drain:', e);
+                }
+            }
+            await intentarSincronizar({ skipReload: true });
+            return drainSolicitudesPendientes();
         }
 
         async function drainSolicitudesPendientes() {
@@ -128,11 +195,6 @@ const $ = id => document.getElementById(id);
                 }
             }
             return { exito: exitoCount, fallo: falloCount };
-        }
-
-        async function drainOutboxAll() {
-            await intentarSincronizar({ skipReload: true });
-            return drainSolicitudesPendientes();
         }
 
         async function publishNodeBackupAfterSync() {
@@ -295,12 +357,25 @@ const $ = id => document.getElementById(id);
                 
                 const isNetworkError = !navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('network error');
                 if (isNetworkError) {
-                    await db.solicitudes_pendientes.add({
-                        url,
-                        method,
-                        body: opts.body || null,
-                        created_at: new Date().toISOString()
-                    });
+                    const syncOp = buildSyncOpFromRequest(url, method, opts.body);
+                    if (syncOp && window.CrmSync?.enqueueChange) {
+                        await CrmSync.enqueueChange(syncOp);
+                        if (opts.body) {
+                            try {
+                                const parsed = JSON.parse(opts.body);
+                                if (!parsed.uuid) {
+                                    opts.body = JSON.stringify({ ...parsed, uuid: syncOp.entity_uuid });
+                                }
+                            } catch (_) {}
+                        }
+                    } else {
+                        await db.solicitudes_pendientes.add({
+                            url,
+                            method,
+                            body: opts.body || null,
+                            created_at: new Date().toISOString()
+                        });
+                    }
                     
                     toast('⚠️ Sin conexión. Registrado localmente.', false);
                     aplicarCambioOptimista(url, method, opts.body);
@@ -314,7 +389,7 @@ const $ = id => document.getElementById(id);
         }
 
         async function actualizarUIOffline() {
-            const count = await db.solicitudes_pendientes.count();
+            const count = await countPendingOutbox();
             const badge = document.getElementById('offlineBadge');
             const cntSpan = document.getElementById('offlinePendingCount');
             const greeting = document.querySelector('.topbar-greeting-block');

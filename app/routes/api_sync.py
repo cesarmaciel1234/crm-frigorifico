@@ -4,7 +4,8 @@ from flask import jsonify, request, session
 from app.routes.api import api_bp
 from app.services.sync_hub import (
     MAX_NODOS,
-    build_sync_pull_bundle,
+    apply_sync_operations,
+    build_sync_pull_delta,
     get_sync_nodo,
     list_sync_nodos,
     save_sync_nodo,
@@ -25,11 +26,29 @@ def api_sync_estado():
 
 @api_bp.route("/sync/pull")
 def api_sync_pull():
-    """Motor central → dispositivo (actualiza caché local)."""
+    """Motor central → dispositivo (delta changelog + snapshot inicial)."""
+    since = request.args.get("since", 0, type=int)
     try:
-        return jsonify(build_sync_pull_bundle())
+        return jsonify(build_sync_pull_delta(since))
     except Exception as e:
         return jsonify({"error": f"Error al sincronizar desde el motor: {str(e)}"}), 500
+
+
+@api_bp.route("/sync/push", methods=["POST"])
+def api_sync_push():
+    """Dispositivo → motor central (outbox con LWW por UUID)."""
+    data = request.get_json(silent=True) or {}
+    device_id = str(data.get("device_id") or "").strip()
+    operations = data.get("operations") or []
+    if not device_id:
+        return jsonify({"error": "device_id obligatorio"}), 400
+    if not isinstance(operations, list):
+        return jsonify({"error": "operations debe ser una lista"}), 400
+    try:
+        result = apply_sync_operations(device_id, operations)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": f"Error al aplicar operaciones: {str(e)}"}), 500
 
 
 @api_bp.route("/sync/nodos", methods=["GET"])

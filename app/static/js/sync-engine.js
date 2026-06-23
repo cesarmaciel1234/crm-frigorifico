@@ -1,10 +1,14 @@
 /**
- * Motor de sincronización: caché local (IndexedDB) ↔ motor central (API) ↔ nodos de dispositivo.
- * Fase 1: push outbox → pull servidor → publicar nodo backup (nunca al revés).
+ * Motor de sincronización v2: outbox (pending_sync) + changelog LWW + nodos backup.
  */
 (function (global) {
     const MAX_NODOS = 10;
     const SYNC_STATES = { IDLE: 'idle', PUSHING: 'pushing', PULLING: 'pulling' };
+
+    const ENTITY_CACHE_KEYS = {
+        operacion: 'enemigos',
+        cliente: 'clientes',
+    };
 
     function deviceStorageKey(empresaId) {
         return 'crm_device_id_' + empresaId;
@@ -40,6 +44,22 @@
 
         utcNow() {
             return new Date().toISOString();
+        },
+
+        _metaKey() {
+            return 'meta:' + this.empresaId;
+        },
+
+        async getSyncMeta() {
+            if (!this._db?.sync_meta) return { cursor: 0, last_sync_utc: null };
+            const row = await this._db.sync_meta.get(this._metaKey());
+            return row || { key: this._metaKey(), cursor: 0, last_sync_utc: null };
+        },
+
+        async setSyncMeta(patch) {
+            if (!this._db?.sync_meta) return;
+            const cur = await this.getSyncMeta();
+            await this._db.sync_meta.put({ ...cur, key: this._metaKey(), ...patch });
         },
 
         cacheKey(name) {
@@ -78,18 +98,146 @@
             await this.putCache('fullBackup', data);
         },
 
-        /** Cola legacy: solicitudes_pendientes + transacciones sin ack */
+        /** OUTBOX v2: encolar cambio estructurado antes de sync */
+        async enqueueChange({ entity, entity_uuid, action, payload }) {
+            if (!this._db?.pending_sync) return null;
+            const op_id = crypto.randomUUID();
+            await this._db.pending_sync.add({
+                op_id,
+                entity,
+                entity_uuid,
+                action: action || 'CREATE',
+                payload: { ...payload, uuid: entity_uuid, updated_at_utc: this.utcNow() },
+                status: 'pending',
+                updated_at_utc: this.utcNow(),
+                device_id: this.deviceId,
+                attempts: 0,
+            });
+            return op_id;
+        },
+
         async hasPendingOutbox() {
             if (!this._db) return false;
+            let pendingSync = 0;
+            try {
+                pendingSync = await this._db.pending_sync
+                    .where('status').anyOf(['pending', 'pushing', 'failed']).count();
+            } catch (_) {}
             const solicitudes = await this._db.solicitudes_pendientes.count();
             let transacciones = 0;
             try {
                 transacciones = await this._db.transacciones.where('status').equals(0).count();
             } catch (_) {}
-            return solicitudes > 0 || transacciones > 0;
+            return pendingSync > 0 || solicitudes > 0 || transacciones > 0;
         },
 
-        /** Servidor → caché local (solo si outbox vacío) */
+        /** Drenar pending_sync hacia POST /api/sync/push */
+        async drainPendingSync() {
+            if (!this._api || !navigator.onLine || !this._db?.pending_sync) {
+                return { pushed: 0 };
+            }
+            if (this._state !== SYNC_STATES.IDLE) return { skipped: true };
+
+            this._state = SYNC_STATES.PUSHING;
+            try {
+                const batch = await this._db.pending_sync
+                    .where('status').anyOf(['pending', 'failed'])
+                    .filter(r => (r.attempts || 0) < 8)
+                    .sortBy('local_id');
+
+                if (!batch.length) return { pushed: 0 };
+
+                await this._db.transaction('rw', this._db.pending_sync, async () => {
+                    for (const row of batch) {
+                        await this._db.pending_sync.update(row.local_id, {
+                            status: 'pushing',
+                            attempts: (row.attempts || 0) + 1,
+                        });
+                    }
+                });
+
+                const response = await this._api('/api/sync/push', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_id: this.deviceId,
+                        operations: batch.map(r => ({
+                            op_id: r.op_id,
+                            entity: r.entity,
+                            entity_uuid: r.entity_uuid,
+                            action: r.action,
+                            payload: r.payload,
+                            updated_at_utc: r.updated_at_utc,
+                        })),
+                    }),
+                });
+
+                const acked = new Set(response?.acked || []);
+                const rejected = response?.rejected || [];
+
+                await this._db.transaction('rw', this._db.pending_sync, async () => {
+                    for (const row of batch) {
+                        if (acked.has(row.op_id)) {
+                            await this._db.pending_sync.update(row.local_id, { status: 'acked' });
+                        } else {
+                            const rej = rejected.find(x => x.op_id === row.op_id);
+                            await this._db.pending_sync.update(row.local_id, {
+                                status: rej?.fatal ? 'failed' : 'pending',
+                                last_error: rej?.reason || 'rejected',
+                            });
+                        }
+                    }
+                });
+
+                return { pushed: acked.size, rejected: rejected.length };
+            } catch (err) {
+                const pushing = await this._db.pending_sync.where('status').equals('pushing').toArray();
+                await this._db.transaction('rw', this._db.pending_sync, async () => {
+                    for (const row of pushing) {
+                        await this._db.pending_sync.update(row.local_id, { status: 'pending' });
+                    }
+                });
+                throw err;
+            } finally {
+                this._state = SYNC_STATES.IDLE;
+            }
+        },
+
+        _applyChangeToList(list, change) {
+            list = list || [];
+            const uuid = change.entity_uuid;
+            const idx = list.findIndex(x => (x.uuid || x.entity_uuid) === uuid);
+            const payload = { ...change.payload, uuid };
+
+            if (change.action === 'DELETE') {
+                if (idx >= 0) list.splice(idx, 1);
+                return list;
+            }
+
+            if (idx >= 0) {
+                const local = list[idx];
+                const localTs = Date.parse(local.updated_at_utc || local.updated_at || 0);
+                const remoteTs = Date.parse(change.updated_at_utc || 0);
+                if (remoteTs >= localTs) list[idx] = { ...local, ...payload };
+            } else {
+                list.push(payload);
+            }
+            return list;
+        },
+
+        async applyChangesToCache(changes) {
+            if (!changes?.length) return;
+            const appData = (await this.getAppData()) || {};
+            for (const ch of changes) {
+                const cacheKey = ENTITY_CACHE_KEYS[ch.entity];
+                if (!cacheKey) continue;
+                appData[cacheKey] = this._applyChangeToList(appData[cacheKey], ch);
+            }
+            await this.putAppData(appData);
+            return appData;
+        },
+
+        /** Servidor → caché (delta + snapshot inicial) */
         async pullFromServer() {
             if (!this._api || !navigator.onLine) return null;
             if (await this.hasPendingOutbox()) {
@@ -99,12 +247,26 @@
 
             this._state = SYNC_STATES.PULLING;
             try {
-                const bundle = await this._api('/api/sync/pull?_=' + Date.now());
+                const meta = await this.getSyncMeta();
+                const since = meta.cursor || 0;
+                const bundle = await this._api(
+                    '/api/sync/pull?since=' + encodeURIComponent(since) + '&_=' + Date.now()
+                );
+
+                if (bundle?.changes?.length) {
+                    await this.applyChangesToCache(bundle.changes);
+                }
                 if (bundle?.appData) {
                     await this.putAppData(bundle.appData);
                 }
                 if (bundle?.fullBackup) {
                     await this.putFullBackup(bundle.fullBackup);
+                }
+                if (bundle?.cursor != null) {
+                    await this.setSyncMeta({
+                        cursor: bundle.cursor,
+                        last_sync_utc: bundle.updated_at || this.utcNow(),
+                    });
                 }
                 return bundle;
             } finally {
@@ -112,7 +274,6 @@
             }
         },
 
-        /** Caché local → nodo de backup (después de sync exitoso, no en cada escritura) */
         async pushNode(snapshot) {
             if (!this._api || !navigator.onLine || !snapshot) return null;
             return this._api('/api/sync/nodo', {
@@ -127,15 +288,16 @@
             });
         },
 
-        /**
-         * Flujo seguro offline-first:
-         * 1) drenar outbox (callback)
-         * 2) pull solo si outbox vacío
-         * 3) publicar nodo backup
-         */
         async syncSafe(options) {
             options = options || {};
             if (!navigator.onLine) return { offline: true };
+
+            let pushResult = { pushed: 0 };
+            try {
+                pushResult = await this.drainPendingSync();
+            } catch (err) {
+                console.warn('drainPendingSync falló:', err);
+            }
 
             if (typeof options.drainOutbox === 'function') {
                 await options.drainOutbox();
@@ -143,7 +305,7 @@
 
             const pending = await this.hasPendingOutbox();
             if (pending) {
-                return { blocked: true, reason: 'outbox_not_empty' };
+                return { blocked: true, reason: 'outbox_not_empty', push: pushResult };
             }
 
             let pulled = null;
@@ -160,10 +322,14 @@
                 await this.pushNode(snap).catch(() => {});
             }
 
-            return { pulled: !!pulled && !pulled?.blocked, published: !!snap, blocked: !!pulled?.blocked };
+            return {
+                push: pushResult,
+                pulled: !!pulled && !pulled?.blocked,
+                published: !!snap,
+                blocked: !!pulled?.blocked,
+            };
         },
 
-        /** @deprecated Usar syncSafe */
         async syncBidirectional(getSnapshot) {
             return this.syncSafe({ getSnapshot });
         },

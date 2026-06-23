@@ -688,8 +688,50 @@ def _run_migrations(conn):
             snapshot_json TEXT NOT NULL,
             updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
         );
+        CREATE TABLE IF NOT EXISTS sync_changelog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            op_id TEXT NOT NULL UNIQUE,
+            device_id TEXT NOT NULL,
+            entity TEXT NOT NULL,
+            entity_uuid TEXT NOT NULL,
+            action TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_sync_changelog_cursor ON sync_changelog(id);
+        CREATE INDEX IF NOT EXISTS idx_sync_entity_uuid ON sync_changelog(entity, entity_uuid);
         """
     )
+
+    for table in ("clientes", "remitos_carga", "operaciones_financieras"):
+        _migrate_sync_entity_uuid(conn, table, is_pg)
+
+def _migrate_sync_entity_uuid(conn, table: str, is_pg: bool) -> None:
+    import uuid as uuid_mod
+
+    if not _table_exists(conn, table):
+        return
+    if is_pg:
+        existing = _pg_column_names(conn, table)
+    else:
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if "uuid" not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN uuid TEXT")
+    if "updated_at_utc" not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN updated_at_utc TEXT")
+    conn.execute(
+        f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_uuid "
+        f"ON {table}(uuid) WHERE uuid IS NOT NULL"
+    )
+    rows = conn.execute(
+        f"SELECT id FROM {table} WHERE uuid IS NULL OR uuid = ''"
+    ).fetchall()
+    for row in rows:
+        conn.execute(
+            f"UPDATE {table} SET uuid = ? WHERE id = ?",
+            (str(uuid_mod.uuid4()), row["id"]),
+        )
 
 def _migrate_pagar_constraint(conn):
     """Permite pagar = recibido (cheques sin interés)."""

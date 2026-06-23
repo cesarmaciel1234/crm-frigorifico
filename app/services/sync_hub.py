@@ -86,12 +86,252 @@ def build_client_app_data() -> dict[str, Any]:
 
 def build_sync_pull_bundle() -> dict[str, Any]:
     """Descarga bidireccional: motor central → caché del dispositivo."""
-    return {
-        "version": "sync_bundle_v1",
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "appData": build_client_app_data(),
-        "fullBackup": export_all_data(),
+    return build_sync_pull_delta(since=0)
+
+
+def _should_apply_lww(remote_ts: str, local_ts: str | None) -> bool:
+    if not local_ts:
+        return True
+    return remote_ts >= local_ts
+
+
+def _record_changelog(
+    conn,
+    *,
+    op_id: str,
+    device_id: str,
+    entity: str,
+    entity_uuid: str,
+    action: str,
+    payload: dict,
+    updated_at_utc: str,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO sync_changelog
+            (op_id, device_id, entity, entity_uuid, action, payload_json, updated_at_utc)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (op_id, device_id, entity, entity_uuid, action, json.dumps(payload, ensure_ascii=False), updated_at_utc),
+    )
+
+
+def _apply_operacion_lww(conn, entity_uuid: str, action: str, payload: dict, ts: str) -> bool:
+    if action == "DELETE":
+        conn.execute("DELETE FROM operaciones_financieras WHERE uuid = ?", (entity_uuid,))
+        return True
+
+    row = conn.execute(
+        "SELECT id, updated_at_utc FROM operaciones_financieras WHERE uuid = ?",
+        (entity_uuid,),
+    ).fetchone()
+    if row and not _should_apply_lww(ts, row["updated_at_utc"]):
+        return False
+
+    fields = {
+        "alias": payload.get("alias") or "Sin alias",
+        "tipo": payload.get("tipo") or "otro",
+        "recibido": float(payload.get("recibido") or 0),
+        "pagar": float(payload.get("pagar") or payload.get("recibido") or 0),
+        "meses": max(int(payload.get("meses") or 1), 1),
+        "fecha_cierre": payload.get("fecha_cierre"),
+        "fecha_vencimiento": payload.get("fecha_vencimiento"),
+        "cuotas": payload.get("cuotas"),
+        "kg": payload.get("kg"),
+        "precio_kg": payload.get("precio_kg"),
+        "plazo_dias": payload.get("plazo_dias"),
     }
+    if fields["pagar"] < fields["recibido"]:
+        fields["pagar"] = fields["recibido"]
+
+    if row:
+        conn.execute(
+            """
+            UPDATE operaciones_financieras
+            SET alias=?, tipo=?, recibido=?, pagar=?, meses=?, fecha_cierre=?,
+                fecha_vencimiento=?, cuotas=?, kg=?, precio_kg=?, plazo_dias=?, updated_at_utc=?
+            WHERE uuid=?
+            """,
+            (
+                fields["alias"], fields["tipo"], fields["recibido"], fields["pagar"],
+                fields["meses"], fields["fecha_cierre"], fields["fecha_vencimiento"],
+                fields["cuotas"], fields["kg"], fields["precio_kg"], fields["plazo_dias"],
+                ts, entity_uuid,
+            ),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO operaciones_financieras
+                (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento,
+                 cuotas, kg, precio_kg, plazo_dias, updated_at_utc)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entity_uuid, fields["alias"], fields["tipo"], fields["recibido"],
+                fields["pagar"], fields["meses"], fields["fecha_cierre"],
+                fields["fecha_vencimiento"], fields["cuotas"], fields["kg"],
+                fields["precio_kg"], fields["plazo_dias"], ts,
+            ),
+        )
+    return True
+
+
+def _apply_cliente_lww(conn, entity_uuid: str, action: str, payload: dict, ts: str) -> bool:
+    if action == "DELETE":
+        return False
+
+    nombre = str(payload.get("nombre") or "").strip()
+    if not nombre:
+        raise ValueError("cliente sin nombre")
+
+    row = conn.execute(
+        "SELECT id, updated_at_utc FROM clientes WHERE uuid = ?",
+        (entity_uuid,),
+    ).fetchone()
+    if row and not _should_apply_lww(ts, row["updated_at_utc"]):
+        return False
+
+    scoring = str(payload.get("scoring") or "A").upper()
+    if scoring not in {"A", "B", "C", "D"}:
+        scoring = "A"
+
+    values = (
+        nombre,
+        scoring,
+        float(payload.get("techo_deuda") or 500000),
+        float(payload.get("saldo_actual") or payload.get("saldo_inicial") or 0),
+        float(payload.get("saldo_inicial") or 0),
+        payload.get("telefono"),
+        payload.get("cuit"),
+        payload.get("direccion"),
+        payload.get("email"),
+        ts,
+        entity_uuid,
+    )
+
+    if row:
+        conn.execute(
+            """
+            UPDATE clientes
+            SET nombre=?, scoring=?, techo_deuda=?, saldo_actual=?, saldo_inicial=?,
+                telefono=?, cuit=?, direccion=?, email=?, updated_at_utc=?
+            WHERE uuid=?
+            """,
+            values,
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO clientes
+                (uuid, nombre, scoring, techo_deuda, saldo_actual, saldo_inicial,
+                 telefono, cuit, direccion, email, updated_at_utc)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (entity_uuid, *values[:-1]),
+        )
+    return True
+
+
+def _apply_entity_lww(conn, op: dict) -> bool:
+    entity = op.get("entity")
+    entity_uuid = op.get("entity_uuid")
+    action = op.get("action") or "CREATE"
+    payload = op.get("payload") or {}
+    ts = op.get("updated_at_utc") or _utc_now()
+
+    if not entity_uuid:
+        raise ValueError("entity_uuid requerido")
+
+    if entity == "operacion":
+        return _apply_operacion_lww(conn, entity_uuid, action, payload, ts)
+    if entity == "cliente":
+        return _apply_cliente_lww(conn, entity_uuid, action, payload, ts)
+    raise ValueError(f"entidad no soportada en sync v2: {entity}")
+
+
+def apply_sync_operations(device_id: str, operations: list[dict]) -> dict[str, Any]:
+    acked: list[str] = []
+    rejected: list[dict] = []
+
+    with get_db() as conn:
+        ensure_tenant_migrations(conn)
+        for op in operations or []:
+            op_id = str(op.get("op_id") or "").strip()
+            if not op_id:
+                rejected.append({"op_id": None, "reason": "op_id requerido", "fatal": True})
+                continue
+
+            seen = conn.execute(
+                "SELECT 1 FROM sync_changelog WHERE op_id = ?", (op_id,)
+            ).fetchone()
+            if seen:
+                acked.append(op_id)
+                continue
+
+            try:
+                _apply_entity_lww(conn, op)
+                _record_changelog(
+                    conn,
+                    op_id=op_id,
+                    device_id=device_id,
+                    entity=str(op.get("entity") or ""),
+                    entity_uuid=str(op.get("entity_uuid") or ""),
+                    action=str(op.get("action") or "CREATE"),
+                    payload=op.get("payload") or {},
+                    updated_at_utc=op.get("updated_at_utc") or _utc_now(),
+                )
+                acked.append(op_id)
+            except ValueError as e:
+                rejected.append({"op_id": op_id, "reason": str(e), "fatal": True})
+            except Exception as e:
+                rejected.append({"op_id": op_id, "reason": str(e), "fatal": False})
+
+    return {"acked": acked, "rejected": rejected}
+
+
+def build_sync_pull_delta(since: int = 0) -> dict[str, Any]:
+    since = max(0, int(since or 0))
+    with get_db() as conn:
+        ensure_tenant_migrations(conn)
+        rows = conn.execute(
+            """
+            SELECT id, entity, entity_uuid, action, payload_json, updated_at_utc
+            FROM sync_changelog
+            WHERE id > ?
+            ORDER BY id ASC
+            LIMIT 500
+            """,
+            (since,),
+        ).fetchall()
+
+    changes: list[dict[str, Any]] = []
+    cursor = since
+    for row in rows:
+        cursor = max(cursor, int(row["id"]))
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        changes.append({
+            "id": int(row["id"]),
+            "entity": row["entity"],
+            "entity_uuid": row["entity_uuid"],
+            "action": row["action"],
+            "payload": payload,
+            "updated_at_utc": row["updated_at_utc"],
+        })
+
+    bundle: dict[str, Any] = {
+        "version": "sync_bundle_v2",
+        "updated_at": _utc_now(),
+        "cursor": cursor,
+        "changes": changes,
+    }
+    if since == 0:
+        bundle["appData"] = build_client_app_data()
+        bundle["fullBackup"] = export_all_data()
+    return bundle
 
 
 def list_sync_nodos() -> list[dict[str, Any]]:
