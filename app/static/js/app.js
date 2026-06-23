@@ -1682,14 +1682,17 @@ const $ = id => document.getElementById(id);
             let html = '';
             let lastDate = '';
             
+            let html = '<div style="font-weight:800; font-size:1.1rem; color:#0f172a; margin-bottom:16px; padding:0 4px;">Historial de Cuenta</div>';
+            let lastDate = '';
+            
             if (items.length === 0) {
-                html = `<div style="color:#6b7280;text-align:center;padding:20px;background:rgba(255,255,255,0.8);border-radius:12px; align-self:center; margin-top:20px;">No hay mensajes en este chat.</div>`;
+                html += `<div style="color:#64748b;text-align:center;padding:32px 20px;background:#ffffff;border:1px dashed #cbd5e1; border-radius:12px; margin-top:12px;">No hay movimientos registrados en esta cuenta.</div>`;
             }
             
             items.forEach(item => {
                 const day = item.date.slice(0, 10);
                 if (day !== lastDate) {
-                    html += `<div class="wsp-date-divider">${day}</div>`;
+                    html += `<div style="text-align:center; margin:24px 0 16px 0;"><span style="background:#e2e8f0; color:#475569; font-size:0.75rem; font-weight:700; padding:4px 12px; border-radius:12px; text-transform:uppercase; letter-spacing:0.5px;">${day}</span></div>`;
                     lastDate = day;
                 }
                 
@@ -1702,42 +1705,48 @@ const $ = id => document.getElementById(id);
                     const saldoAmnt = remitoSaldoPendiente(r);
                     const isPaid = (r.pagado ?? r.estado_cobro) === 'cobrado' || (r.pagado ?? r.estado_cobro) === 1 || (r.pagado ?? r.estado_cobro) === 2;
                     
-                    const bubbleClass = isPaid ? 'wsp-bubble sent' : 'wsp-bubble received';
-                    const checkClass = isPaid ? 'wsp-bubble-check read' : 'wsp-bubble-check';
-                    const ticks = isPaid ? '✓✓' : '✓';
-                    const totalColor = isPaid ? 'inherit' : '#ef4444';
                     const checkedState = (window.wspSelectedInvoices || []).includes(r.id) ? 'checked' : '';
+                    const badgeBg = isPaid ? '#dcfce7' : '#f1f5f9';
+                    const badgeColor = isPaid ? '#166534' : '#475569';
+                    const leftBorder = (!isPaid && saldoAmnt > 0) ? '#ef4444' : '#10b981';
                     
                     html += `
-                    <div class="wsp-bubble-select-wrap">
-                        <div class="wsp-checkbox ${checkedState}" data-rid="${r.id}" onclick="toggleSelectFactura(this, ${r.id}, ${saldoAmnt})">✓</div>
-                        <div class="${bubbleClass}" onclick="abrirModalFacturaOriginal(${r.id})" style="flex:1;">
-                            <div class="wsp-bubble-header">
-                                <span class="wsp-bubble-title">Factura #${r.id}</span>
-                                <span style="font-size:0.7rem; background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:10px; color:#555;">${est.label}</span>
+                    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.05); display:flex; gap:12px; align-items:flex-start; position:relative; overflow:hidden;">
+                        <div class="wsp-checkbox ${checkedState}" data-rid="${r.id}" onclick="toggleSelectFactura(this, ${r.id}, ${saldoAmnt})" style="margin-top:2px;">✓</div>
+                        <div style="flex:1; cursor:pointer;" onclick="abrirModalFacturaOriginal(${r.id})">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                                <div>
+                                    <div style="font-weight:800; color:#0f172a; font-size:1.05rem;">Factura #${r.id}</div>
+                                    <div style="font-size:0.8rem; color:#64748b; margin-top:2px; font-weight:500;">${r.tipo_corte || 'Variedad'} · ${remitoCantidad(r)} u · ${fmt(r.kg)} kg</div>
+                                </div>
+                                <span style="font-size:0.7rem; font-weight:700; background:${badgeBg}; color:${badgeColor}; padding:4px 8px; border-radius:6px; text-transform:uppercase;">${est.label}</span>
                             </div>
-                            <div class="wsp-bubble-body">
-                                ${r.tipo_corte || 'Variedad'} · ${remitoCantidad(r)} u · ${fmt(r.kg)} kg
-                            </div>
-                            <div class="wsp-bubble-amount" style="color: ${totalColor};">
-                                Total: $${fmt(r.precio_venta_total)}
-                            </div>
-                            ${saldoAmnt > 0 && pagadoAmnt > 0 ? `<div style="font-size:0.8rem; color:#f59e0b; margin-top:2px;">Saldo: $${fmt(saldoAmnt)}</div>` : ''}
-                            <div class="wsp-bubble-footer">
-                                <span>${time}</span>
-                                <span class="${checkClass}">${ticks}</span>
+                            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                                <div>
+                                    <div style="font-size:1.15rem; font-weight:800; color:#0f172a;">$${fmt(r.precio_venta_total)}</div>
+                                    ${saldoAmnt > 0 && pagadoAmnt > 0 ? `<div style="font-size:0.8rem; color:#ea580c; font-weight:700; margin-top:2px;">Resta: $${fmt(saldoAmnt)}</div>` : ''}
+                                </div>
+                                <div style="font-size:0.75rem; color:#94a3b8; font-weight:600;">
+                                    ${time}
+                                </div>
                             </div>
                         </div>
+                        <div style="position:absolute; left:0; top:0; bottom:0; width:4px; background:${leftBorder};"></div>
                     </div>`;
                 } else if (item.type === 'pago') {
                     const p = item.data;
                     html += `
-                    <div class="wsp-bubble sent" style="align-self: center; background:#e0f2fe; text-align:center; box-shadow:0 1px 2px rgba(0,0,0,0.15); max-width:60%;">
-                        <div style="font-size:0.75rem; color:#0284c7; font-weight:bold; text-transform:uppercase;">Pago Registrado #${p.id}</div>
-                        <div style="font-size:1.1rem; font-weight:900; color:#0369a1; margin:4px 0;">$${fmt(p.monto)}</div>
-                        <div style="font-size:0.7rem; color:#6b7280; display:flex; justify-content:space-between; align-items:center;">
-                            <span>${time}</span>
-                            <button onclick="eliminarPagoCliente(${p.id})" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:0.8rem; padding:0;">❌</button>
+                    <div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px; padding:16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <div style="width:36px; height:36px; border-radius:50%; background:#dcfce7; color:#166534; display:flex; align-items:center; justify-content:center; font-size:1.1rem; font-weight:bold;">↓</div>
+                            <div>
+                                <div style="font-weight:700; color:#0f172a; font-size:0.95rem;">Pago Registrado #${p.id}</div>
+                                <div style="font-size:0.75rem; color:#64748b; font-weight:500;">${time}</div>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <div style="font-size:1.15rem; font-weight:800; color:#166534;">+$${fmt(p.monto)}</div>
+                            <button onclick="eliminarPagoCliente(${p.id})" style="background:#fee2e2; border:none; color:#ef4444; cursor:pointer; font-size:0.9rem; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; transition:background 0.2s;" onmouseover="this.style.background='#fca5a5'" onmouseout="this.style.background='#fee2e2'">❌</button>
                         </div>
                     </div>`;
                 }
