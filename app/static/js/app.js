@@ -1703,13 +1703,14 @@ const $ = id => document.getElementById(id);
             }
             
             items.forEach(item => {
-                const day = item.date.slice(0, 10);
+                const dateStr = item.date || new Date().toISOString();
+                const day = dateStr.slice(0, 10);
                 if (day !== lastDate) {
                     html += `<div style="text-align:center; margin:24px 0 16px 0;"><span style="background:#e2e8f0; color:#475569; font-size:0.75rem; font-weight:700; padding:4px 12px; border-radius:12px; text-transform:uppercase; letter-spacing:0.5px;">${day}</span></div>`;
                     lastDate = day;
                 }
                 
-                const time = item.date.slice(11, 16) || '12:00';
+                const time = dateStr.slice(11, 16) || '12:00';
                 
                 if (item.type === 'remito') {
                     const r = item.data;
@@ -1765,21 +1766,14 @@ const $ = id => document.getElementById(id);
                 }
             });
             
-            $('viewClientBody').innerHTML = html;
-            
-            setTimeout(() => {
-                const b = $('viewClientBody');
-                b.scrollTop = b.scrollHeight;
-            }, 50);
-            
             let profileHtml = `
                 <div style="background:linear-gradient(135deg, #1e293b, #0f172a); border-radius:16px; padding:24px 20px; color:#fff; display:flex; flex-direction:column; align-items:center; gap:16px; margin-bottom:24px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); position:relative; overflow:hidden;">
                     <div style="position:absolute; top:-20px; right:-20px; width:100px; height:100px; background:rgba(255,255,255,0.05); border-radius:50%;"></div>
                     <div style="width:80px; height:80px; border-radius:50%; background:linear-gradient(to bottom right, #3b82f6, #1d4ed8); display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:800; color:#fff; border:3px solid rgba(255,255,255,0.2); box-shadow:0 4px 10px rgba(0,0,0,0.2); z-index:1;">
-                        ${c.nombre.substring(0, 2).toUpperCase()}
+                        ${c.nombre ? c.nombre.substring(0, 2).toUpperCase() : 'C'}
                     </div>
                     <div style="text-align:center; z-index:1;">
-                        <div style="font-size:1.6rem; font-weight:800; margin-bottom:4px; letter-spacing:-0.5px;">${c.nombre}</div>
+                        <div style="font-size:1.6rem; font-weight:800; margin-bottom:4px; letter-spacing:-0.5px;">${c.nombre || 'Cliente'}</div>
                         <div style="display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,0.1); padding:4px 10px; border-radius:20px; font-size:0.85rem; font-weight:600; backdrop-filter:blur(4px);">
                             <div style="width:8px; height:8px; border-radius:50%; background:${c.limite_superado ? '#ef4444' : '#10b981'};"></div>
                             ${c.limite_superado ? 'Límite Superado' : 'Activo y Operativo'}
@@ -1790,22 +1784,22 @@ const $ = id => document.getElementById(id);
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px;">
                     <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:4px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
                         <span style="font-size:0.75rem; color:#64748b; font-weight:700; text-transform:uppercase;">Deuda Actual</span>
-                        <span style="font-size:1.3rem; font-weight:800; color:${c.saldo_actual > 0 ? '#ef4444' : '#10b981'};">$${fmt(c.saldo_actual)}</span>
+                        <span style="font-size:1.3rem; font-weight:800; color:${c.saldo_actual > 0 ? '#ef4444' : '#10b981'};">$${fmt(c.saldo_actual || 0)}</span>
                     </div>
                     <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:4px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
                         <span style="font-size:0.75rem; color:#64748b; font-weight:700; text-transform:uppercase;">Límite Crédito</span>
-                        <span style="font-size:1.3rem; font-weight:800; color:#0f172a;">$${fmt(c.techo_deuda)}</span>
+                        <span style="font-size:1.3rem; font-weight:800; color:#0f172a;">$${fmt(c.techo_deuda || 0)}</span>
                     </div>
                 </div>
 
-                <div style="background:#fff; padding:20px; border-radius:16px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.05); font-size:0.95rem;">
+                <div style="background:#fff; padding:20px; border-radius:16px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.05); font-size:0.95rem; margin-bottom:24px;">
                     <h3 style="font-size:1rem; font-weight:800; color:#0f172a; margin-top:0; margin-bottom:16px; display:flex; align-items:center; gap:8px;">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Datos del Cliente
                     </h3>
                     <div style="display:flex; flex-direction:column; gap:12px;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span style="color:#64748b; font-weight:600;">Scoring</span>
-                            <span style="background:#f1f5f9; padding:4px 10px; border-radius:8px; font-weight:700; color:#334155;">${c.scoring}</span>
+                            <span style="background:#f1f5f9; padding:4px 10px; border-radius:8px; font-weight:700; color:#334155;">${c.scoring || 'A'}</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span style="color:#64748b; font-weight:600;">Fecha de Alta</span>
@@ -1818,6 +1812,9 @@ const $ = id => document.getElementById(id);
                     </div>
                 </div>
             `;
+            
+            // Add Profile to the top of the chat body instead of a hidden modal
+            $('viewClientBody').innerHTML = profileHtml + html;
             $('wspProfileContent').innerHTML = profileHtml;
             
             if (sessionUser.role === 'admin') {
