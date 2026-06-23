@@ -2816,13 +2816,13 @@ const $ = id => document.getElementById(id);
                 
                 textEl.textContent = text;
                 inpEl.value = '';
-                modalEl.classList.add('active');
+                modalEl.classList.add('open');
                 inpEl.focus();
                 
                 const cleanup = () => {
                     const newBtn = btnConfirm.cloneNode(true);
                     btnConfirm.replaceWith(newBtn);
-                    modalEl.classList.remove('active');
+                    modalEl.classList.remove('open');
                 };
                 
                 document.getElementById('btnConfirmMasterPassword').addEventListener('click', () => {

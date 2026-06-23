@@ -1385,7 +1385,7 @@
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
                 <h2>⚠️ Acción Peligrosa</h2>
-                <button class="modal-close" onclick="document.getElementById('modalMasterPassword').classList.remove('active')">&times;</button>
+                <button class="modal-close" onclick="document.getElementById('modalMasterPassword').classList.remove('open')">&times;</button>
             </div>
             <div class="modal-body" style="padding: 20px;">
                 <p id="masterPasswordText" style="margin-bottom:15px; color:var(--text-secondary);"></p>
@@ -1395,7 +1395,7 @@
                 </div>
             </div>
             <div class="modal-footer" style="padding: 16px 20px;">
-                <button class="btn btn-ghost" onclick="document.getElementById('modalMasterPassword').classList.remove('active')">Cancelar</button>
+                <button class="btn btn-ghost" onclick="document.getElementById('modalMasterPassword').classList.remove('open')">Cancelar</button>
                 <button class="btn btn-primary" id="btnConfirmMasterPassword" style="background-color: var(--danger);">Confirmar Eliminación</button>
             </div>
         </div>
@@ -1428,6 +1428,6 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/app.js?v=2.43"></script>
+    <script src="/static/js/app.js?v=2.44"></script>
 </body>
 </html>
