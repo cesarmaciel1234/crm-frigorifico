@@ -1564,7 +1564,15 @@ const $ = id => document.getElementById(id);
                 btn.addEventListener('click', ev => {
                     ev.stopPropagation();
                     abrirAccionPagoCentral(parseInt(btn.dataset.deudaId, 10));
-                     async function openClientDrawer(clientId) {
+                });
+            });
+        }
+
+        let currentClientData = null;
+        let currentClientFilter = 'all';
+        let clientDetailReturnView = 'clientes';
+
+        async function openClientDrawer(clientId) {
             if (!$('view-cliente-detalle')) {
                 toast('Actualizando aplicación...', false);
                 setTimeout(() => window.location.reload(), 500);
