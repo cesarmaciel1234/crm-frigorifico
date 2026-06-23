@@ -17,8 +17,11 @@ from app.services.import_data import import_all_data
 from app.services.users import get_empresa_config, save_empresa_config, list_users, create_user, update_user
 
 @api_bp.route("/import", methods=["POST"])
-@_guard_master_admin
 def api_import():
+    # Solo admin puede importar
+    if not role_at_least("admin"):
+        return jsonify({"error": "Permiso denegado"}), 403
+
     data = request.get_json(silent=True) or {}
     password = data.get("password", "")
     
