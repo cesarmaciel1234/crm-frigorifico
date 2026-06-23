@@ -1331,6 +1331,22 @@ const $ = id => document.getElementById(id);
             }).join('') : '<tr><td colspan="5" style="color:var(--text-muted);padding:16px;text-align:center">Sin lotes de compra bulk registrados</td></tr>';
         }
 
+        window.filtrarClientes = (term) => {
+            const termLower = term.toLowerCase();
+            document.querySelectorAll('#tblClientes .clickable').forEach(el => {
+                const text = el.textContent.toLowerCase();
+                el.style.display = text.includes(termLower) ? 'block' : 'none';
+            });
+        };
+
+        window.filtrarInrecuperables = (term) => {
+            const termLower = term.toLowerCase();
+            document.querySelectorAll('#tblInrecuperables .clickable').forEach(el => {
+                const text = el.textContent.toLowerCase();
+                el.style.display = text.includes(termLower) ? 'block' : 'none';
+            });
+        };
+
         let selectedClienteId = null;
 
         function renderClientes() {
@@ -1757,24 +1773,49 @@ const $ = id => document.getElementById(id);
             }, 50);
             
             let profileHtml = `
-                <div style="display:flex; flex-direction:column; align-items:center; gap:10px; margin-bottom:20px;">
-                    <div style="width:80px; height:80px; border-radius:50%; background:#ccc; display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:bold; color:#555;">
+                <div style="background:linear-gradient(135deg, #1e293b, #0f172a); border-radius:16px; padding:24px 20px; color:#fff; display:flex; flex-direction:column; align-items:center; gap:16px; margin-bottom:24px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); position:relative; overflow:hidden;">
+                    <div style="position:absolute; top:-20px; right:-20px; width:100px; height:100px; background:rgba(255,255,255,0.05); border-radius:50%;"></div>
+                    <div style="width:80px; height:80px; border-radius:50%; background:linear-gradient(to bottom right, #3b82f6, #1d4ed8); display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:800; color:#fff; border:3px solid rgba(255,255,255,0.2); box-shadow:0 4px 10px rgba(0,0,0,0.2); z-index:1;">
                         ${c.nombre.substring(0, 2).toUpperCase()}
                     </div>
-                    <div style="font-size:1.5rem; font-weight:bold; text-align:center;">${c.nombre}</div>
-                    <div style="font-size:1.1rem; color:${c.saldo_actual > 0 ? '#ef4444' : '#10b981'}; font-weight:bold;">
-                        Deuda: $${fmt(c.saldo_actual)}
+                    <div style="text-align:center; z-index:1;">
+                        <div style="font-size:1.6rem; font-weight:800; margin-bottom:4px; letter-spacing:-0.5px;">${c.nombre}</div>
+                        <div style="display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,0.1); padding:4px 10px; border-radius:20px; font-size:0.85rem; font-weight:600; backdrop-filter:blur(4px);">
+                            <div style="width:8px; height:8px; border-radius:50%; background:${c.limite_superado ? '#ef4444' : '#10b981'};"></div>
+                            ${c.limite_superado ? 'Límite Superado' : 'Activo y Operativo'}
+                        </div>
                     </div>
                 </div>
-                <div style="background:#f9fafb; padding:15px; border-radius:10px; border:1px solid #e5e7eb; font-size:0.95rem;">
-                    <div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Estado:</strong> <span>${limitStatus}</span></div>
-                    <div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Scoring:</strong> <span>${c.scoring}</span></div>
-                    <div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Límite:</strong> <span>$${fmt(c.techo_deuda)}</span></div>
-                    <div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Alta:</strong> <span>${(c.created_at || '').slice(0, 10)}</span></div>
-                    ${c.cuit ? `<div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>CUIT:</strong> <span>${esc(c.cuit)}</span></div>` : ''}
-                    ${c.direccion ? `<div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Dirección:</strong> <span>${esc(c.direccion)}</span></div>` : ''}
-                    ${c.telefono ? `<div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Teléfono:</strong> <span>${esc(c.telefono)}</span></div>` : ''}
-                    ${c.email ? `<div style="margin-bottom:8px; display:flex; justify-content:space-between;"><strong>Email:</strong> <span>${esc(c.email)}</span></div>` : ''}
+                
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px;">
+                    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:4px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                        <span style="font-size:0.75rem; color:#64748b; font-weight:700; text-transform:uppercase;">Deuda Actual</span>
+                        <span style="font-size:1.3rem; font-weight:800; color:${c.saldo_actual > 0 ? '#ef4444' : '#10b981'};">$${fmt(c.saldo_actual)}</span>
+                    </div>
+                    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:4px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                        <span style="font-size:0.75rem; color:#64748b; font-weight:700; text-transform:uppercase;">Límite Crédito</span>
+                        <span style="font-size:1.3rem; font-weight:800; color:#0f172a;">$${fmt(c.techo_deuda)}</span>
+                    </div>
+                </div>
+
+                <div style="background:#fff; padding:20px; border-radius:16px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.05); font-size:0.95rem;">
+                    <h3 style="font-size:1rem; font-weight:800; color:#0f172a; margin-top:0; margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Datos del Cliente
+                    </h3>
+                    <div style="display:flex; flex-direction:column; gap:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="color:#64748b; font-weight:600;">Scoring</span>
+                            <span style="background:#f1f5f9; padding:4px 10px; border-radius:8px; font-weight:700; color:#334155;">${c.scoring}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="color:#64748b; font-weight:600;">Fecha de Alta</span>
+                            <span style="color:#0f172a; font-weight:600;">${(c.created_at || '').slice(0, 10)}</span>
+                        </div>
+                        ${c.cuit ? `<div style="display:flex; justify-content:space-between; align-items:center;"><span style="color:#64748b; font-weight:600;">CUIT</span> <span style="color:#0f172a; font-weight:600;">${esc(c.cuit)}</span></div>` : ''}
+                        ${c.direccion ? `<div style="display:flex; justify-content:space-between; align-items:center;"><span style="color:#64748b; font-weight:600;">Dirección</span> <span style="color:#0f172a; font-weight:600; text-align:right;">${esc(c.direccion)}</span></div>` : ''}
+                        ${c.telefono ? `<div style="display:flex; justify-content:space-between; align-items:center;"><span style="color:#64748b; font-weight:600;">Teléfono</span> <span style="color:#0f172a; font-weight:600;">${esc(c.telefono)}</span></div>` : ''}
+                        ${c.email ? `<div style="display:flex; justify-content:space-between; align-items:center;"><span style="color:#64748b; font-weight:600;">Email</span> <span style="color:#0f172a; font-weight:600;">${esc(c.email)}</span></div>` : ''}
+                    </div>
                 </div>
             `;
             $('wspProfileContent').innerHTML = profileHtml;
