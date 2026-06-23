@@ -108,6 +108,14 @@ def import_all_data(json_data: dict) -> None:
     if not json_data:
         raise ValueError("El backup está vacío")
 
+    if json_data.get("version") == "cache_snapshot_v1":
+        if json_data.get("fullBackup"):
+            json_data = json_data["fullBackup"]
+        elif json_data.get("appData"):
+            json_data = json_data["appData"]
+        else:
+            raise ValueError("El snapshot de caché no contiene datos")
+
     tables = _normalize_payload(json_data)
     has_rows = any(tables.get(t) for t in CLEAR_ORDER)
     if not has_rows and not json_data.get("empresa"):

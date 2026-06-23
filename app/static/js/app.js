@@ -2054,6 +2054,99 @@ const $ = id => document.getElementById(id);
             }
         });
 
+        function descargarArchivoJson(payload, filename) {
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
+        function convertirAppDataABackup(appData) {
+            if (!appData) return null;
+            const clientes = (appData.clientes || []).map(c => ({
+                id: c.id,
+                nombre: c.nombre,
+                scoring: c.scoring || 'A',
+                techo_deuda: c.techo_deuda ?? 500000,
+                saldo_actual: c.saldo_actual ?? 0,
+                saldo_inicial: c.saldo_inicial ?? 0,
+                telefono: c.telefono || null,
+                cuit: c.cuit || null,
+                direccion: c.direccion || null,
+                email: c.email || null,
+                created_at: c.created_at || null,
+                fecha_ultimo_pago: c.fecha_ultimo_pago || null,
+            }));
+            const compras_bulk = (appData.bulk || []).map(b => ({
+                id: b.id,
+                fecha: b.fecha,
+                kg_totales: b.kg_totales,
+                kg_remanentes: b.kg_remanentes,
+                costo_total_bulk: b.costo_total_bulk,
+                costo_reparto: b.costo_reparto ?? 0,
+                numero_lote: b.numero_lote || '',
+                fecha_vencimiento: b.fecha_vencimiento || '',
+                proveedor: b.proveedor || '',
+                created_at: b.created_at || null,
+            }));
+            const entidades_bancarias = (appData.bancos || []).map(b => ({
+                id: b.id,
+                nombre: b.nombre,
+                limite: b.limite ?? 0,
+            }));
+            const remitos_carga = (appData.remitos || []).map(r => ({
+                id: r.id,
+                fecha: r.fecha,
+                cliente: r.cliente || '',
+                cliente_id: r.cliente_id,
+                tipo_corte: r.tipo_corte || '',
+                cantidad: r.cantidad ?? 0,
+                pesos_piezas: typeof r.pesos_piezas === 'string' ? r.pesos_piezas : JSON.stringify(r.pesos_piezas || []),
+                kg: r.kg ?? 0,
+                precio_por_kg: r.precio_por_kg ?? 0,
+                costo_total_logistica: r.costo_total_logistica ?? 0,
+                precio_venta_total: r.precio_venta_total ?? 0,
+                plazo_cobro_dias: r.plazo_cobro_dias ?? 0,
+                costo_carne: r.costo_carne ?? 0,
+                pagado: r.pagado ?? 0,
+                monto_pagado: r.monto_pagado ?? 0,
+                created_at: r.created_at || null,
+            }));
+            let empresa = {};
+            try { empresa = JSON.parse(localStorage.getItem('empresa_datos') || '{}'); } catch (_) {}
+            return {
+                version: 2,
+                exported_at: new Date().toISOString(),
+                source: 'appData_cache',
+                empresa,
+                clientes,
+                compras_bulk,
+                entidades_bancarias,
+                remitos_carga,
+                operaciones_financieras: [],
+                pagos_cuotas: [],
+                pagos_clientes: [],
+                aplicacion_pagos: [],
+                remitos_fracciones: [],
+                perdidas_acumuladas: appData.perdidas || [],
+                ventas_mostrador: [],
+                auditoria_operaciones: appData.auditoria || [],
+            };
+        }
+        function normalizarBackupParaImport(raw) {
+            if (!raw) return null;
+            if (raw.version === 'cache_snapshot_v1') {
+                if (raw.fullBackup && backupTieneDatos(raw.fullBackup)) return raw.fullBackup;
+                if (raw.appData) return convertirAppDataABackup(raw.appData);
+                return null;
+            }
+            if (raw.source === 'appData_cache') return raw;
+            return raw;
+        }
         // Backup / Modal Logic
         function backupTieneDatos(payload) {
             if (!payload) return false;
@@ -2070,14 +2163,48 @@ const $ = id => document.getElementById(id);
             } catch (_) {}
             const cached = await db.cache.get('fullBackup');
             if (cached?.data && backupTieneDatos(cached.data)) return cached.data;
+            const appCache = await db.cache.get('appData');
+            const fromApp = convertirAppDataABackup(appCache?.data || data);
+            if (backupTieneDatos(fromApp)) return fromApp;
             return null;
+        }
+        async function guardarCacheDispositivo() {
+            const [fullEntry, appEntry, pendientes] = await Promise.all([
+                db.cache.get('fullBackup'),
+                db.cache.get('appData'),
+                db.solicitudes_pendientes.toArray()
+            ]);
+            const fullBackup = fullEntry?.data || null;
+            const appData = appEntry?.data || data || null;
+            const fecha = new Date().toISOString().slice(0, 10);
+
+            if (fullBackup && backupTieneDatos(fullBackup)) {
+                descargarArchivoJson(fullBackup, 'Backup_MasterTotal_' + fecha + '.json');
+                toast('Backup completo descargado. Guardalo en Drive, WhatsApp o email.');
+                return;
+            }
+
+            if (!appData) {
+                return toast('No hay datos en caché para guardar', true);
+            }
+
+            const snapshot = {
+                version: 'cache_snapshot_v1',
+                exported_at: new Date().toISOString(),
+                fullBackup,
+                appData,
+                solicitudes_pendientes: pendientes,
+            };
+            descargarArchivoJson(snapshot, 'CacheDispositivo_MasterTotal_' + fecha + '.json');
+            toast('Caché del celular guardado. No borres ese archivo.');
         }
         async function subirBackupAlServidor(backupData) {
             if (!navigator.onLine) {
                 toast('Necesitás conexión a internet para subir al servidor', true);
                 return;
             }
-            if (!backupTieneDatos(backupData)) {
+            const normalizado = normalizarBackupParaImport(backupData) || backupData;
+            if (!backupTieneDatos(normalizado)) {
                 toast('El backup no contiene datos para subir', true);
                 return;
             }
@@ -2091,7 +2218,7 @@ const $ = id => document.getElementById(id);
                 await api('/api/import', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password, backup_data: backupData })
+                    body: JSON.stringify({ password, backup_data: normalizado })
                 });
                 toast('Datos subidos al servidor correctamente');
                 cerrarModalBackup();
@@ -2125,21 +2252,21 @@ const $ = id => document.getElementById(id);
                 toast('Generando backup...');
                 const payload = await obtenerPayloadBackup();
                 if (!payload) {
-                    return toast('No hay datos en el servidor ni copia local guardada', true);
+                    return toast('No hay datos en el servidor ni en caché. Usá "Guardar caché del celular".', true);
                 }
-                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'Backup_MasterTotal_' + new Date().toISOString().slice(0, 10) + '.json';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
+                descargarArchivoJson(payload, 'Backup_MasterTotal_' + new Date().toISOString().slice(0, 10) + '.json');
                 toast('Backup descargado correctamente');
                 cerrarModalBackup();
             } catch (e) {
                 toast('Error al crear backup: ' + (e.message || ''), true);
+            }
+        });
+        $('btnGuardarCache')?.addEventListener('click', async () => {
+            try {
+                await guardarCacheDispositivo();
+                cerrarModalBackup();
+            } catch (e) {
+                toast('Error al guardar caché: ' + (e.message || ''), true);
             }
         });
         $('btnSubirServidor')?.addEventListener('click', async () => {
@@ -2155,16 +2282,21 @@ const $ = id => document.getElementById(id);
             }
             const payload = await obtenerPayloadBackup();
             if (!payload) {
-                return toast('Seleccioná un archivo .json o asegurate de tener una copia local guardada', true);
+                return toast('Seleccioná un archivo .json o guardá primero la caché del celular', true);
             }
             await subirBackupAlServidor(payload);
         });
         $('btnSubirCacheLocal')?.addEventListener('click', async () => {
             const cached = await db.cache.get('fullBackup');
-            if (!cached?.data) {
-                return toast('No hay copia completa guardada en este dispositivo', true);
+            if (cached?.data && backupTieneDatos(cached.data)) {
+                return subirBackupAlServidor(cached.data);
             }
-            await subirBackupAlServidor(cached.data);
+            const appCache = await db.cache.get('appData');
+            const fromApp = convertirAppDataABackup(appCache?.data || data);
+            if (!backupTieneDatos(fromApp)) {
+                return toast('No hay copia completa en este dispositivo. Usá "Guardar caché del celular" primero.', true);
+            }
+            await subirBackupAlServidor(fromApp);
         });
         $('btnRestaurarBackup')?.addEventListener('click', () => {
             const fileInput = $('inputBackupFile');
@@ -2213,7 +2345,12 @@ const $ = id => document.getElementById(id);
                     if (backupTieneDatos(fullBackup)) {
                         await db.cache.put({ key: 'fullBackup', data: fullBackup, updated_at: Date.now() });
                     }
-                } catch (_) {}
+                } catch (_) {
+                    const fromApp = convertirAppDataABackup(freshData);
+                    if (backupTieneDatos(fromApp)) {
+                        await db.cache.put({ key: 'fullBackup', data: fromApp, updated_at: Date.now() });
+                    }
+                }
                 renderAll(); // Re-renderizar con los datos frescos
             } catch (e) {
                 console.warn("Error al cargar del servidor. Mostrando datos locales (offline).", e);
