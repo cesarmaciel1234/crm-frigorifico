@@ -1346,44 +1346,7 @@ const $ = id => document.getElementById(id);
             const inrecCountEl = $('inrecCount');
             if (inrecCountEl) inrecCountEl.textContent = inrecuperables.length + ' clientes';
             
-            const renderRow = c => {
-                const statusBadge = c.limite_superado 
-                    ? '<span class="badge badge-danger">Límite superado</span>' 
-                    : '<span class="badge badge-success">Límite OK</span>';
-                const textColor = c.limite_superado ? 'color: var(--danger)' : 'color: #111827';
-                const saldoText = fmtDualCompact(c.saldo_actual);
-                const iniciales = c.nombre.substring(0, 2).toUpperCase();
-                const altaStr = (c.created_at || '').slice(0, 10);
-                
-                const saldoDisplay = c.saldo_actual === 0 
-                    ? '<span style="color:#10b981; font-weight:500;">Al día</span>' 
-                    : `Deuda: <span style="font-weight:600; color:#ef4444;">$${saldoText}</span>`;
-
-                return `<div class="clickable" data-id="${c.id}" style="display:flex; align-items:center; padding:12px 15px; border-bottom:1px solid #f3f4f6; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='transparent'">
-                    <div style="width:48px; height:48px; border-radius:50%; background:#e2e8f0; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#475569; font-size:1.1rem; flex-shrink:0; margin-right:12px;">
-                        ${iniciales}
-                    </div>
-                    <div style="flex:1; overflow:hidden;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                            <div style="font-weight:600; font-size:1.05rem; ${textColor}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                ${esc(c.nombre)}
-                            </div>
-                            <div style="font-size:0.75rem; color:#6b7280; white-space:nowrap; margin-left:8px;">
-                                ${altaStr}
-                            </div>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div style="font-size:0.9rem; color:#6b7280; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                ${saldoDisplay}
-                            </div>
-                            <div style="font-size:0.75rem; display:flex; align-items:center; gap:6px;">
-                                <span class="badge badge-neutral" style="padding:2px 6px;">Scoring ${c.scoring}</span>
-                                ${statusBadge}
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-            };
+            const renderRow = c => '<div class="clickable" data-id="' + c.id + '" style="cursor:pointer; margin-bottom:15px; width:100%;">' + cobranzaCardHtml(c, true) + '</div>';
 
             table.innerHTML = activos.length ? activos.map(renderRow).join('') : '<div style="color:var(--text-muted);padding:20px;text-align:center">Sin clientes activos</div>';
             
@@ -1411,7 +1374,7 @@ const $ = id => document.getElementById(id);
             return '<span class="badge-home verde" style="line-height:1.2;text-align:center;display:inline-block">Al<br>día</span>';
         }
 
-        function cobranzaCardHtml(c) {
+        function cobranzaCardHtml(c, hideButton = false) {
             const scoreIcons = { A: '🅰️', B: '📊', C: '⚠️', D: '⛔' };
             const icon = scoreIcons[c.scoring] || '🏪';
             const pctUso = c.techo_deuda > 0 ? Math.round((c.saldo_actual / c.techo_deuda) * 100) + '%' : '—';
@@ -1456,7 +1419,7 @@ const $ = id => document.getElementById(id);
                         Último pago: <strong>${ultimoPago}</strong><br>${moraText}
                     </div>
                 </div>
-                <button type="button" class="btn btn-primary btn-cobranza-accion cobranza-card-btn" data-cid="${c.id}">Cobrar / Ver</button>
+                ${hideButton ? '' : `<button type="button" class="btn btn-primary btn-cobranza-accion cobranza-card-btn" data-cid="${c.id}">Cobrar / Ver</button>`}
             </div>`;
         }
 
