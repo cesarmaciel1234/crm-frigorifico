@@ -391,10 +391,10 @@ def init_db():
             
         # Sincronizar la secuencia en Postgres por inserciones manuales de ID (como el id=1)
         if is_postgres():
-            try:
+            max_row = conn.execute("SELECT MAX(id) AS max_id FROM empresas").fetchone()
+            max_id = max_row["max_id"] if max_row else None
+            if max_id:
                 conn.execute("SELECT setval('empresas_id_seq', (SELECT MAX(id) FROM empresas))")
-            except Exception:
-                pass
             
     from app.services.users import ensure_default_admin
     ensure_default_admin()
@@ -503,7 +503,7 @@ def _run_migrations(conn):
     }
     if _table_exists(conn, "remitos_carga"):
         if is_pg:
-            remito_existing = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'remitos_carga'")}
+            remito_existing = _pg_column_names(conn, "remitos_carga")
         else:
             remito_existing = {row[1] for row in conn.execute("PRAGMA table_info(remitos_carga)")}
             
@@ -519,7 +519,7 @@ def _run_migrations(conn):
     }
     if _table_exists(conn, "clientes"):
         if is_pg:
-            cliente_existing = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'clientes'")}
+            cliente_existing = _pg_column_names(conn, "clientes")
         else:
             cliente_existing = {row[1] for row in conn.execute("PRAGMA table_info(clientes)")}
         for name, col_type in cliente_cols.items():
@@ -672,7 +672,7 @@ def _run_migrations(conn):
 
     if _table_exists(conn, "usuarios"):
         if is_pg:
-            usr_cols = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'usuarios'")}
+            usr_cols = _pg_column_names(conn, "usuarios")
         else:
             usr_cols = {row[1] for row in conn.execute("PRAGMA table_info(usuarios)")}
         if "empresa_id" not in usr_cols:
