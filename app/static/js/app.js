@@ -793,18 +793,22 @@ const $ = id => document.getElementById(id);
             
             const mf = data.metricas_flotantes;
             if (mf) {
-                if ($('barSangriaValue')) $('barSangriaValue').textContent = '$' + fmt(mf.sangre);
-                if ($('barSangriaSub')) $('barSangriaSub').textContent = `Int: $${fmt(mf.int_diario)}`;
+                const isMobile = window.innerWidth < 768;
+                const formatVal = (val) => isMobile ? fmtCompact(val) : fmt(val);
+                const formatSubVal = (val) => isMobile ? fmtCompact(val) : fmt(val);
+
+                if ($('barSangriaValue')) $('barSangriaValue').textContent = '$' + formatVal(mf.sangre);
+                if ($('barSangriaSub')) $('barSangriaSub').textContent = `Int: $${formatSubVal(mf.int_diario)}`;
                 
-                if ($('barDeudaValue')) $('barDeudaValue').textContent = '$' + fmt(mf.deuda);
-                if ($('barDeudaSub')) $('barDeudaSub').textContent = `Int: $${fmt(mf.int_acumulado || 0)}`;
+                if ($('barDeudaValue')) $('barDeudaValue').textContent = '$' + formatVal(mf.deuda);
+                if ($('barDeudaSub')) $('barDeudaSub').textContent = `Int: $${formatSubVal(mf.int_acumulado || 0)}`;
                 
                 const absCapital = Math.abs(mf.capital);
                 const signStr = mf.capital < 0 ? '-' : (mf.capital > 0 ? '+' : '');
                 const isNeg = mf.capital < 0;
                 const isZero = mf.capital === 0;
                 if ($('barCapitalValue')) {
-                    $('barCapitalValue').textContent = signStr + '$' + fmt(absCapital);
+                    $('barCapitalValue').textContent = signStr + '$' + formatVal(absCapital);
                     $('barCapitalValue').className = 'value ' + (isNeg ? 'capital-neg' : isZero ? 'capital-zero' : 'capital-pos');
                 }
                 if ($('barCapitalTrend')) {
@@ -1435,10 +1439,13 @@ const $ = id => document.getElementById(id);
 
             if ($('cobranzasCount')) $('cobranzasCount').textContent = `${conDeuda.length} clientes con saldo pendiente`;
 
+            const isMobile = window.innerWidth < 768;
+            const formatVal = (val) => isMobile ? fmtCompact(val) : fmt(val);
+
             if ($('cobBarClientesMora')) $('cobBarClientesMora').textContent = enMora.length;
             if ($('cobBarClientesMoraSub')) $('cobBarClientesMoraSub').textContent = enMora.length === 1 ? 'Cliente con facturas vencidas' : 'Clientes con facturas vencidas';
-            if ($('cobBarMontoMora')) $('cobBarMontoMora').textContent = '$' + fmt(montoMora);
-            if ($('cobBarCapitalTotal')) $('cobBarCapitalTotal').textContent = '$' + fmt(totalDeuda);
+            if ($('cobBarMontoMora')) $('cobBarMontoMora').textContent = '$' + formatVal(montoMora);
+            if ($('cobBarCapitalTotal')) $('cobBarCapitalTotal').textContent = '$' + formatVal(totalDeuda);
             if ($('cobBarCapitalSub')) $('cobBarCapitalSub').textContent = `${conDeuda.length} clientes con saldo`;
             
             if (!conDeuda.length) {
@@ -1522,9 +1529,13 @@ const $ = id => document.getElementById(id);
             if ($('pagoCentralCount')) {
                 $('pagoCentralCount').textContent = `${pendientes.length} obligacion${pendientes.length === 1 ? '' : 'es'} pendiente${pendientes.length === 1 ? '' : 's'}`;
             }
+
+            const isMobile = window.innerWidth < 768;
+            const formatVal = (val) => isMobile ? fmtCompact(val) : fmt(val);
+
             if ($('pcBarObligaciones')) $('pcBarObligaciones').textContent = pendientes.length;
-            if ($('pcBarMontoVencido')) $('pcBarMontoVencido').textContent = '$' + fmt(montoVencido);
-            if ($('pcBarTotalPagar')) $('pcBarTotalPagar').textContent = '$' + fmt(totalPagar);
+            if ($('pcBarMontoVencido')) $('pcBarMontoVencido').textContent = '$' + formatVal(montoVencido);
+            if ($('pcBarTotalPagar')) $('pcBarTotalPagar').textContent = '$' + formatVal(totalPagar);
             if ($('pcBarTotalSub')) $('pcBarTotalSub').textContent = `${pendientes.length} obligaciones activas`;
 
             if (!pendientes.length) {
@@ -2492,21 +2503,48 @@ const $ = id => document.getElementById(id);
         $('formCliente').addEventListener('submit', async ev => {
             ev.preventDefault();
             const fd = new FormData(ev.target);
+            const nombre = fd.get('nombre') ? fd.get('nombre').trim() : "";
+            
+            // Buscar si ya existe por nombre
+            const existe = (data.clientes || []).find(c => c.nombre.trim().toLowerCase() === nombre.toLowerCase());
+            
+            let isUpdating = false;
+            let clientIdToUpdate = null;
+            
+            if (existe) {
+                const conf = confirm(`El cliente "${existe.nombre}" ya existe. ¿Desea actualizar los datos del cliente existente?`);
+                if (!conf) return;
+                isUpdating = true;
+                clientIdToUpdate = existe.id;
+            }
+            
+            const payload = {
+                nombre: nombre,
+                techo_deuda: fd.get('techo_deuda'),
+                scoring: fd.get('scoring'),
+                telefono: fd.get('telefono') || undefined,
+                cuit: fd.get('cuit') || undefined,
+                direccion: fd.get('direccion') || undefined,
+                email: fd.get('email') || undefined,
+                saldo_inicial: fd.get('saldo_inicial') ? parseFloat(fd.get('saldo_inicial')) : undefined
+            };
+            
             try {
-                await api('/api/clientes', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        nombre: fd.get('nombre'),
-                        techo_deuda: fd.get('techo_deuda'),
-                        scoring: fd.get('scoring'),
-                        telefono: fd.get('telefono') || undefined,
-                        cuit: fd.get('cuit') || undefined,
-                        direccion: fd.get('direccion') || undefined,
-                        email: fd.get('email') || undefined,
-                        saldo_inicial: fd.get('saldo_inicial') ? parseFloat(fd.get('saldo_inicial')) : undefined
-                    })
-                });
-                toast('Cliente registrado con éxito');
+                if (isUpdating) {
+                    await api('/api/clientes/' + clientIdToUpdate, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    toast('Cliente actualizado con éxito');
+                } else {
+                    await api('/api/clientes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    toast('Cliente registrado con éxito');
+                }
                 ev.target.reset();
                 await loadAll();
                 abrirSubVistaClientes('cliVer');
@@ -2754,8 +2792,8 @@ const $ = id => document.getElementById(id);
                 toast("Monto inválido", true);
                 return;
             }
-            const pass = prompt("Ingrese la contraseña maestra:");
-            if (pass === null) return;
+            const pass = await window.promptMasterPasswordAsync("Ingrese la contraseña maestra para actualizar el saldo inicial:");
+            if (!pass) return;
             try {
                 const res = await api('/api/clientes/' + clientId + '/saldo-inicial', {
                     method: 'POST',
@@ -2840,8 +2878,8 @@ const $ = id => document.getElementById(id);
 
         window.restablecerPagoFactura = async function(remitoId) {
             if (!confirm("⚠️ ¿Está seguro de restablecer el pago de esta factura?\nEl monto pagado volverá a cero y se sumará a la deuda del cliente.")) return;
-            const pass = prompt("Ingrese la contraseña maestra:");
-            if (pass === null) return;
+            const pass = await window.promptMasterPasswordAsync("⚠️ Ingrese la contraseña maestra para restablecer el pago de esta factura:");
+            if (!pass) return;
             try {
                 const res = await api('/api/remitos/' + remitoId + '/reset-pago', {
                     method: 'POST',

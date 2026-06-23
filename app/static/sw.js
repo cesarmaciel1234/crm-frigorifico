@@ -1,5 +1,5 @@
 /* Master Total PWA — network-first for shell updates, offline fallback */
-const CACHE_VERSION = 'crm-frigorifico-v8';
+const CACHE_VERSION = 'crm-frigorifico-v10';
 const SHELL_ASSETS = [
   '/',
   '/login',
@@ -36,7 +36,7 @@ const API_CACHE_PREFIXES = [
 function cacheKey(request) {
   const url = new URL(request.url);
   if (url.pathname.startsWith('/static/')) {
-    return url.origin + url.pathname + (url.search || '');
+    return url.origin + url.pathname;
   }
   return request.url;
 }

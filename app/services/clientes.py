@@ -224,6 +224,10 @@ def get_cliente_detalle(cliente_id: int) -> dict:
         "techo_deuda": r_cli["techo_deuda"],
         "saldo_actual": r_cli["saldo_actual"],
         "saldo_inicial": r_cli.get("saldo_inicial", 0.0),
+        "telefono": r_cli.get("telefono"),
+        "cuit": r_cli.get("cuit"),
+        "direccion": r_cli.get("direccion"),
+        "email": r_cli.get("email"),
         "limite_superado": limite_superado,
         "created_at": r_cli["created_at"],
         "remitos": list_rem,
@@ -443,21 +447,63 @@ def actualizar_saldo_inicial(cliente_id: int, saldo_inicial: float) -> float:
 def eliminar_cliente(cliente_id: int):
     from app.services.remitos import eliminar_remito_logic
     with get_db() as conn:
-        # 1. Obtener todos los remitos del cliente
+        # 1. Eliminar pagos y sus aplicaciones (por CASCADE)
+        conn.execute("DELETE FROM pagos_clientes WHERE cliente_id = ?", (cliente_id,))
+        
+        # 2. Resetear monto_pagado a 0 para todos los remitos del cliente para evitar errores de validación de pagos en eliminar_remito_logic
+        conn.execute("UPDATE remitos_carga SET monto_pagado = 0 WHERE cliente_id = ?", (cliente_id,))
+
+        # 3. Obtener todos los remitos del cliente
         remitos = conn.execute("SELECT id FROM remitos_carga WHERE cliente_id = ?", (cliente_id,)).fetchall()
         
-        # 2. Eliminar cada remito devolviendo su stock a compras_bulk
+        # 4. Eliminar cada remito devolviendo su stock a compras_bulk
         for rem in remitos:
             eliminar_remito_logic(conn, rem["id"])
             
-        # 3. Eliminar pagos y sus aplicaciones (por CASCADE o manualmente)
-        conn.execute("DELETE FROM pagos_clientes WHERE cliente_id = ?", (cliente_id,))
-        
-        # 4. Eliminar pérdidas acumuladas del cliente (si las hay)
+        # 5. Eliminar pérdidas acumuladas del cliente (si las hay)
         conn.execute("DELETE FROM perdidas_acumuladas WHERE cliente_id = ?", (cliente_id,))
         
-        # 5. Eliminar el cliente
+        # 6. Eliminar el cliente
         conn.execute("DELETE FROM clientes WHERE id = ?", (cliente_id,))
+
+def actualizar_cliente(
+    cliente_id: int,
+    nombre: str,
+    techo_deuda: float,
+    scoring: str = "A",
+    telefono: str = None,
+    cuit: str = None,
+    direccion: str = None,
+    email: str = None,
+    saldo_inicial: float = 0.0
+):
+    nombre = nombre.strip()
+    if not nombre:
+        raise ValueError("El nombre del cliente no puede estar vacío")
+    if techo_deuda < 0:
+        raise ValueError("El techo de deuda debe ser mayor o igual a 0")
+    if scoring not in ("A", "B", "C", "D"):
+        raise ValueError("Scoring inválido. Debe ser A, B, C o D")
+        
+    saldo_inicial = float(saldo_inicial)
+    if saldo_inicial < 0:
+        raise ValueError("El saldo inicial debe ser mayor o igual a 0")
+
+    with get_db() as conn:
+        dup = conn.execute("SELECT id FROM clientes WHERE nombre = ? AND id != ?", (nombre, cliente_id)).fetchone()
+        if dup:
+            raise ValueError("Ya existe otro cliente con este nombre")
+
+        conn.execute(
+            """
+            UPDATE clientes
+            SET nombre = ?, scoring = ?, techo_deuda = ?, saldo_inicial = ?,
+                telefono = ?, cuit = ?, direccion = ?, email = ?
+            WHERE id = ?
+            """,
+            (nombre, scoring, techo_deuda, saldo_inicial, telefono, cuit, direccion, email, cliente_id)
+        )
+        recalcular_saldo_cliente(conn, cliente_id)
 
 def eliminar_pago_cliente(pago_id: int):
     with get_db() as conn:

@@ -555,14 +555,46 @@ def _guard_master_admin():
     return None
 
 
-@api_bp.route("/clientes/<int:cid>", methods=["GET"])
+@api_bp.route("/clientes/<int:cid>", methods=["GET", "PUT"])
 def api_cliente_detalle_endpoint(cid: int):
+    if request.method == "GET":
+        try:
+            return jsonify(get_cliente_detalle(cid))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 404
+        except Exception as e:
+            return jsonify({"error": f"Error al cargar detalle: {str(e)}"}), 500
+
+    # PUT method
+    d = request.get_json(silent=True) or {}
     try:
-        return jsonify(get_cliente_detalle(cid))
+        nombre = str(d.get("nombre") or "").strip()
+        techo_deuda = _f(d.get("techo_deuda"), "techo_deuda")
+        scoring = str(d.get("scoring") or "A").strip().upper()
+        telefono = d.get("telefono")
+        if telefono is not None:
+            telefono = str(telefono).strip() or None
+        cuit = d.get("cuit")
+        if cuit is not None:
+            cuit = str(cuit).strip() or None
+        direccion = d.get("direccion")
+        if direccion is not None:
+            direccion = str(direccion).strip() or None
+        email = d.get("email")
+        if email is not None:
+            email = str(email).strip() or None
+        saldo_inicial = _f(d.get("saldo_inicial") or 0.0, "saldo_inicial")
     except ValueError as e:
-        return jsonify({"error": str(e)}), 404
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        from app.services.clientes import actualizar_cliente
+        actualizar_cliente(cid, nombre, techo_deuda, scoring, telefono, cuit, direccion, email, saldo_inicial)
+        return jsonify({"ok": True, "message": "Cliente actualizado con éxito"})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": f"Error al cargar detalle: {str(e)}"}), 500
+        return jsonify({"error": f"Error al actualizar cliente: {str(e)}"}), 500
 
 @api_bp.route("/clientes/<int:cid>/cobrar", methods=["POST"])
 def api_cliente_cobrar_endpoint(cid: int):

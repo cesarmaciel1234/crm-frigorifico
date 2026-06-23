@@ -96,6 +96,14 @@ class TestAPI:
         lista = client.get("/api/clientes").get_json()
         assert any(c["nombre"] == "API Cliente" for c in lista)
 
+        # Intentar crear un cliente con el mismo nombre debe fallar con 400
+        r_dup = client.post(
+            "/api/clientes",
+            json={"nombre": "API Cliente", "techo_deuda": 150_000, "scoring": "A"},
+        )
+        assert r_dup.status_code == 400
+        assert "error" in r_dup.get_json()
+
     def test_bancos(self, client):
         r = client.post("/api/bancos", json={"nombre": "Banco Test", "limite": 50_000})
         assert r.status_code == 201
@@ -191,5 +199,67 @@ class TestAPI:
         assert r_margenes.status_code == 200
         data_margenes = r_margenes.get_json()
         assert isinstance(data_margenes, list)
+
+    def test_clientes_delete_with_payments_and_update(self, client):
+        # 1. Crear un cliente
+        r_create = client.post(
+            "/api/clientes",
+            json={"nombre": "Cliente Deletable", "techo_deuda": 500_000, "scoring": "A", "saldo_inicial": 20000},
+        )
+        assert r_create.status_code == 201
+        cid = r_create.get_json()["id"]
+
+        # Crear lote y remito para el cliente para tener una factura pendiente
+        client.post("/api/bulk", json={"kg_totales": 100, "costo_total_bulk": 80000})
+        client.post("/api/remitos", json={
+            "cliente": "Cliente Deletable",
+            "tipo_corte": "media res",
+            "kg": 20,
+            "precio_por_kg": 1000,
+            "plazo_cobro_dias": 30
+        })
+
+        # 2. Registrar un pago global para el cliente
+        r_pago = client.post(
+            f"/api/clientes/{cid}/cobrar",
+            json={"monto_pagado": 5000}
+        )
+        assert r_pago.status_code == 200
+
+        # 3. Comprobar que el cliente tiene el pago y saldo actualizado (20000 inicial + 20000 remito - 5000 pago = 35000)
+        det = client.get(f"/api/clientes/{cid}").get_json()
+        assert det["saldo_actual"] == 35000
+
+        # 4. Probar la actualización del cliente vía PUT /api/clientes/<cid>
+        r_put = client.put(
+            f"/api/clientes/{cid}",
+            json={
+                "nombre": "Cliente Actualizado",
+                "techo_deuda": 600000,
+                "scoring": "B",
+                "telefono": "123456789",
+                "direccion": "Nueva Calle 123",
+                "saldo_inicial": 10000
+            }
+        )
+        assert r_put.status_code == 200
+        
+        # Comprobar que los datos se actualizaron en base de datos
+        det_updated = client.get(f"/api/clientes/{cid}").get_json()
+        assert det_updated["nombre"] == "Cliente Actualizado"
+        assert det_updated["techo_deuda"] == 600000
+        assert det_updated["scoring"] == "B"
+        assert det_updated["telefono"] == "123456789"
+        assert det_updated["direccion"] == "Nueva Calle 123"
+        # El saldo actual debe recalcularse (saldo_inicial = 10000 + remito = 20000 - pago = 5000 = 25000)
+        assert det_updated["saldo_actual"] == 25000
+
+        # 5. Intentar eliminar el cliente (que tiene pagos registrados)
+        r_del = client.delete(f"/api/clientes/{cid}", json={"password": "test-master-pw"})
+        assert r_del.status_code == 200
+
+        # Verificar que el cliente ya no existe
+        assert client.get(f"/api/clientes/{cid}").status_code == 404
+
 
 
