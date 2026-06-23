@@ -325,11 +325,13 @@
             <div class="nav-label">Alertas de vencimiento</div>
             <div class="hist-list" id="historialSidebar"></div>
         </div>
-        <div class="sidebar-foot">
-            <span>Distribuidora de carne</span>
-            <button type="button" class="btn btn-ghost btn-sm" id="btnBackup" style="margin-top:8px;width:100%; color:#3b82f6;">⛁ Backup / Nube</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="btnLogoutSidebar" style="margin-top:8px;width:100%;">Cerrar sesión</button>
-            <span class="version-tag">v3.2 PRO</span>
+        <div class="sidebar-foot" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <span>Distribuidora de carne</span>
+                <span class="version-tag">v3.2 PRO</span>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnBackup" style="width:100%; color:#3b82f6;">⛁ Backup / Nube</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnLogoutSidebar" style="width:100%;">Cerrar sesión</button>
         </div>
     </aside>
     <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
