@@ -180,18 +180,17 @@ def get_db(empresa_id=None):
                                 empresa_id = int(arg)
                 if empresa_id is None:
                     empresa_id = 1
-                    
-            if empresa_id == 1:
-                cur = conn.cursor()
+
+            cur = conn.cursor()
+            if empresa_id == 0 or empresa_id == 1:
                 cur.execute("SET search_path TO public")
-                if table_exists(wrapper, "clientes"):
+                if empresa_id == 1 and table_exists(wrapper, "clientes"):
                     try:
                         ensure_tenant_migrations(wrapper)
                     except Exception as e:
                         print(f"Error en migraciones del tenant {empresa_id}: {e}")
             elif empresa_id > 1:
                 schema_name = f"empresa_{empresa_id}"
-                cur = conn.cursor()
                 cur.execute("SELECT 1 FROM information_schema.tables WHERE table_schema = %s AND table_name = 'clientes'", (schema_name,))
                 tables_exist = cur.fetchone() is not None
                 
@@ -250,6 +249,50 @@ def get_db(empresa_id=None):
 def init_db():
     # If in test mode, load the full schema directly on Config.DB_PATH
     if Config.TESTING:
+        if is_postgres():
+            with get_db(empresa_id=0) as conn:
+                conn.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS empresas (
+                        id SERIAL PRIMARY KEY,
+                        nombre TEXT NOT NULL,
+                        slug TEXT NOT NULL UNIQUE,
+                        cuit TEXT DEFAULT '',
+                        activo INTEGER NOT NULL DEFAULT 1,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP::varchar
+                    );
+                    CREATE TABLE IF NOT EXISTS usuarios (
+                        id SERIAL PRIMARY KEY,
+                        username TEXT NOT NULL UNIQUE,
+                        nombre TEXT NOT NULL DEFAULT '',
+                        password_hash TEXT NOT NULL,
+                        role TEXT NOT NULL DEFAULT 'operador',
+                        activo INTEGER NOT NULL DEFAULT 1,
+                        empresa_id INTEGER,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP::varchar
+                    );
+                    """
+                )
+                try:
+                    conn.execute("ALTER TABLE usuarios ADD COLUMN empresa_id INTEGER")
+                except Exception:
+                    pass
+                c1 = conn.execute("SELECT 1 FROM empresas WHERE id = 1").fetchone()
+                if not c1:
+                    conn.execute("INSERT INTO empresas (id, nombre, slug) VALUES (1, 'Rumaul', 'rumaul')")
+                try:
+                    conn.execute("SELECT setval(pg_get_serial_sequence('empresas', 'id'), (SELECT MAX(id) FROM empresas))")
+                except Exception:
+                    pass
+            with get_db(empresa_id=1) as conn:
+                if not table_exists(conn, "clientes"):
+                    with open(Config.SCHEMA_PATH, encoding="utf-8") as f:
+                        conn.executescript(f.read())
+                _run_migrations(conn)
+            from app.services.users import ensure_default_admin
+            ensure_default_admin()
+            return
+
         with open(Config.SCHEMA_PATH, encoding="utf-8") as f:
             sql = f.read()
         with get_db(empresa_id=0) as conn:

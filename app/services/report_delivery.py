@@ -82,76 +82,104 @@ def render_daily_report_html(report: dict[str, Any]) -> str:
 <head>
 <meta charset="utf-8">
 <title>Informe diario — {_esc(nombre_emp)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 * {{ box-sizing:border-box; margin:0; padding:0; }}
-body {{ font-family:'Segoe UI',system-ui,sans-serif; color:#0f172a; font-size:10pt; padding:28px 32px; background:#fff; }}
-@media print {{ * {{ -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }} }}
-.hdr {{ display:flex; justify-content:space-between; gap:20px; border-bottom:3px solid #0d6efd; padding-bottom:18px; margin-bottom:20px; }}
-.brand {{ font-size:18pt; font-weight:800; }}
-.sub {{ color:#64748b; font-size:9pt; margin-top:4px; }}
-.badge {{ display:inline-block; background:#eff6ff; color:#1d4ed8; font-weight:700; font-size:8pt; padding:4px 10px; border-radius:6px; text-transform:uppercase; letter-spacing:.06em; }}
-.kpi-grid {{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:22px; }}
-.kpi {{ border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; background:#f8fafc; }}
-.kpi .lbl {{ font-size:7.5pt; text-transform:uppercase; letter-spacing:.06em; color:#64748b; font-weight:700; }}
-.kpi .val {{ font-size:14pt; font-weight:800; margin-top:6px; }}
+body {{ font-family:'Inter', system-ui, sans-serif; color:#1e293b; font-size:10pt; padding:40px; background:#f8fafc; line-height: 1.5; }}
+@media print {{ 
+    body {{ background:#fff; padding: 0; }}
+    * {{ -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }} 
+    .kpi-grid {{ page-break-inside: avoid; }}
+    .container {{ box-shadow: none!important; padding: 0!important; }}
+}}
+.container {{ max-width: 1000px; margin: 0 auto; background: #fff; padding: 48px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }}
+.hdr {{ display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #e2e8f0; padding-bottom:24px; margin-bottom:32px; }}
+.brand {{ font-size:22pt; font-weight:800; color: #0f172a; letter-spacing: -0.02em; }}
+.sub {{ color:#64748b; font-size:10pt; margin-top:6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }}
+.badge {{ display:inline-block; background:#2563eb; color:#fff; font-weight:600; font-size:8.5pt; padding:6px 12px; border-radius:20px; text-transform:uppercase; letter-spacing:.05em; box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2); }}
+.date-tag {{ font-weight:700; margin-top:10px; font-size: 11pt; color: #334155; text-align: right; }}
+.kpi-grid {{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:36px; }}
+.kpi {{ border:1px solid #f1f5f9; border-radius:12px; padding:20px; background:#ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }}
+.kpi::before {{ content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #cbd5e1; }}
+.kpi.kpi-green::before {{ background: #10b981; }}
+.kpi.kpi-red::before {{ background: #ef4444; }}
+.kpi.kpi-blue::before {{ background: #3b82f6; }}
+.kpi .lbl {{ font-size:8pt; text-transform:uppercase; letter-spacing:.05em; color:#64748b; font-weight:700; margin-bottom: 8px; }}
+.kpi .val {{ font-size:18pt; font-weight:800; color: #0f172a; letter-spacing: -0.01em; }}
 .kpi .val.green {{ color:#059669; }}
 .kpi .val.red {{ color:#dc2626; }}
 .kpi .val.blue {{ color:#2563eb; }}
-.section {{ margin-bottom:22px; }}
-.section h3 {{ font-size:9pt; text-transform:uppercase; letter-spacing:.07em; color:#334155; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:10px; }}
-table {{ width:100%; border-collapse:collapse; font-size:9pt; }}
-th {{ background:#0f172a; color:#fff; text-align:left; padding:8px 7px; font-size:7.5pt; text-transform:uppercase; }}
-td {{ padding:8px 7px; border-bottom:1px solid #e2e8f0; vertical-align:top; }}
-tr:nth-child(even) td {{ background:#f8fafc; }}
-.num {{ text-align:right; white-space:nowrap; }}
-.strong {{ font-weight:700; }}
-.empty {{ text-align:center; color:#94a3b8; padding:16px!important; }}
-.footer {{ margin-top:24px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:8pt; color:#94a3b8; text-align:center; }}
-.alert {{ background:#fef2f2; border:1px solid #fecaca; color:#991b1b; border-radius:8px; padding:10px 12px; margin-bottom:16px; font-size:9pt; }}
+.kpi .sub-text {{ font-size: 8.5pt; color: #94a3b8; font-weight: 500; margin-top: 8px; display: block; }}
+.section {{ margin-bottom:36px; }}
+.section h3 {{ font-size:11pt; font-weight: 700; color:#0f172a; padding-bottom:12px; margin-bottom:16px; display: flex; align-items: center; gap: 12px; }}
+.section h3::after {{ content: ''; flex: 1; height: 1px; background: #e2e8f0; }}
+.table-wrapper {{ border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }}
+table {{ width:100%; border-collapse:collapse; font-size:9.5pt; text-align: left; }}
+th {{ background:#f8fafc; color:#475569; padding:12px 16px; font-size:8pt; font-weight: 700; text-transform:uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; }}
+td {{ padding:12px 16px; border-bottom:1px solid #f1f5f9; vertical-align:middle; color: #334155; }}
+tr:last-child td {{ border-bottom: none; }}
+tr:nth-child(even) td {{ background:#fafaf9; }}
+.num {{ text-align:right; font-variant-numeric: tabular-nums; }}
+.strong {{ font-weight:600; color: #0f172a; }}
+.empty {{ text-align:center; color:#94a3b8; padding:24px!important; font-style: italic; }}
+.footer {{ margin-top:40px; padding-top:20px; border-top:1px solid #e2e8f0; font-size:8.5pt; color:#94a3b8; display: flex; justify-content: space-between; align-items: center; }}
+.alert {{ background:#fef2f2; border-left:4px solid #ef4444; color:#991b1b; padding:16px 20px; margin-bottom:32px; font-size:10pt; font-weight: 500; box-shadow: 0 2px 4px rgba(239,68,68,0.05); }}
 </style>
 </head>
 <body>
-<div class="hdr">
-  <div>
-    <div class="brand">{_esc(nombre_emp)}</div>
-    <div class="sub">Informe ejecutivo diario · CRM Frigorífico</div>
+<div class="container">
+  <div class="hdr">
+    <div>
+      <div class="brand">{_esc(nombre_emp)}</div>
+      <div class="sub">Informe ejecutivo diario · Master Total</div>
+    </div>
+    <div style="text-align:right">
+      <div class="badge">Briefing del Jefe</div>
+      <div class="date-tag">{_esc(fecha)}</div>
+    </div>
   </div>
-  <div style="text-align:right">
-    <div class="badge">Briefing del jefe</div>
-    <div style="font-weight:700;margin-top:8px">{_esc(fecha)}</div>
+
+  <div class="kpi-grid">
+    <div class="kpi kpi-green"><div class="lbl">A cobrar (clientes)</div><div class="val green">{_fmt_money(r.get('total_a_cobrar'))}</div><div class="sub-text">{r.get('clientes_con_saldo', 0)} cuentas con saldo</div></div>
+    <div class="kpi kpi-red"><div class="lbl">En mora</div><div class="val red">{_fmt_money(r.get('monto_en_mora'))}</div><div class="sub-text">{r.get('clientes_en_mora', 0)} clientes atrasados</div></div>
+    <div class="kpi kpi-red"><div class="lbl">A pagar (financiero)</div><div class="val red">{_fmt_money(r.get('total_a_pagar_financiero'))}</div><div class="sub-text">{r.get('obligaciones_activas', 0)} obligaciones activas</div></div>
+    <div class="kpi kpi-red"><div class="lbl">Vencido a pagar</div><div class="val red">{_fmt_money(r.get('total_a_pagar_vencido'))}</div><div class="sub-text">{r.get('deudas_urgentes', 0)} vencimientos urgentes</div></div>
+    
+    <div class="kpi kpi-blue"><div class="lbl">Caja real</div><div class="val blue">{_fmt_money(r.get('caja_real'))}</div><div class="sub-text">Efectivo disponible</div></div>
+    <div class="kpi kpi-blue"><div class="lbl">Patrimonio neto</div><div class="val blue">{_fmt_money(r.get('patrimonio_neto'))}</div><div class="sub-text">Salud: <span class="strong">{_esc(r.get('estado_salud'))}</span></div></div>
+    <div class="kpi"><div class="lbl">Stock físico</div><div class="val">{_fmt_money(r.get('stock_kg'))}</div><div class="sub-text">Kilos en inventario</div></div>
+    <div class="kpi"><div class="lbl">Sangría diaria</div><div class="val">{_fmt_money(r.get('sangria_diaria'))}</div><div class="sub-text">Costo financiero estimado</div></div>
+  </div>
+
+  {(f'<div class="alert"><strong>⚠️ Atención requerida:</strong> Hay {r.get("clientes_en_mora", 0)} clientes en mora por {_fmt_money(r.get("monto_en_mora"))} y {_fmt_money(r.get("total_a_pagar_vencido"))} vencidos a pagar hoy.</div>' if (r.get('clientes_en_mora') or r.get('total_a_pagar_vencido')) else '')}
+
+  <div class="section">
+    <h3>Clientes a cobrar hoy</h3>
+    <div class="table-wrapper">
+      <table>
+        <thead><tr><th>Cliente</th><th>Scoring</th><th>Límite</th><th class="num">Saldo</th><th>Mora</th></tr></thead>
+        <tbody>{_clientes_rows(report.get('clientes_a_cobrar') or [])}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Obligaciones a pagar (tarjetas, cheques, bancos)</h3>
+    <div class="table-wrapper">
+      <table>
+        <thead><tr><th>Concepto</th><th>Tipo</th><th class="num">Recibido</th><th class="num">Saldo</th><th>Vencimiento</th></tr></thead>
+        <tbody>{_obligaciones_rows(report.get('obligaciones_a_pagar') or [])}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>Generado automáticamente para la gerencia</span>
+    <span>{ _esc(report.get('generado_at', '')[:19].replace('T', ' ')) } UTC</span>
   </div>
 </div>
-
-<div class="kpi-grid">
-  <div class="kpi"><div class="lbl">A cobrar (clientes)</div><div class="val green">{_fmt_money(r.get('total_a_cobrar'))}</div><div class="sub">{r.get('clientes_con_saldo', 0)} cuentas</div></div>
-  <div class="kpi"><div class="lbl">En mora</div><div class="val red">{_fmt_money(r.get('monto_en_mora'))}</div><div class="sub">{r.get('clientes_en_mora', 0)} clientes</div></div>
-  <div class="kpi"><div class="lbl">A pagar (financiero)</div><div class="val red">{_fmt_money(r.get('total_a_pagar_financiero'))}</div><div class="sub">{r.get('obligaciones_activas', 0)} obligaciones</div></div>
-  <div class="kpi"><div class="lbl">Vencido a pagar</div><div class="val red">{_fmt_money(r.get('total_a_pagar_vencido'))}</div><div class="sub">{r.get('deudas_urgentes', 0)} urgentes</div></div>
-  <div class="kpi"><div class="lbl">Caja real</div><div class="val blue">{_fmt_money(r.get('caja_real'))}</div></div>
-  <div class="kpi"><div class="lbl">Patrimonio neto</div><div class="val blue">{_fmt_money(r.get('patrimonio_neto'))}</div></div>
-  <div class="kpi"><div class="lbl">Stock (kg)</div><div class="val">{_fmt_money(r.get('stock_kg'))}</div></div>
-  <div class="kpi"><div class="lbl">Sangria diaria</div><div class="val">{_fmt_money(r.get('sangria_diaria'))}</div><div class="sub">Salud: {_esc(r.get('estado_salud'))}</div></div>
-</div>
-
-{(f'<div class="alert">Atencion: hay {r.get("clientes_en_mora", 0)} clientes en mora por {_fmt_money(r.get("monto_en_mora"))} y {_fmt_money(r.get("total_a_pagar_vencido"))} vencidos a pagar hoy.</div>' if (r.get('clientes_en_mora') or r.get('total_a_pagar_vencido')) else '')}
-
-<div class="section">
-  <h3>Clientes a cobrar hoy</h3>
-  <table>
-    <thead><tr><th>Cliente</th><th>Scoring</th><th>Limite</th><th>Saldo</th><th>Mora</th></tr></thead>
-    <tbody>{_clientes_rows(report.get('clientes_a_cobrar') or [])}</tbody>
-  </table>
-</div>
-
-<div class="section">
-  <h3>Obligaciones a pagar (tarjetas, cheques, bancos)</h3>
-  <table>
-    <thead><tr><th>Concepto</th><th>Tipo</th><th>Recibido</th><th>Saldo</th><th>Vencimiento</th></tr></thead>
-    <tbody>{_obligaciones_rows(report.get('obligaciones_a_pagar') or [])}</tbody>
-  </table>
-</div>
-
-<div class="footer">Generado automaticamente · { _esc(report.get('generado_at', '')[:19].replace('T', ' ')) } UTC</div>
 <script>window.onload=function(){{/* listo para imprimir / guardar PDF */}};</script>
 </body>
 </html>"""
@@ -293,11 +321,16 @@ def send_daily_report_email(report: dict[str, Any], recipients: list[str] | None
     attachment.add_header("Content-Disposition", "attachment", filename=f"informe-diario-{fecha.replace('/', '-')}.pdf")
     msg.attach(attachment)
 
-    with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT, timeout=30) as server:
-        if Config.SMTP_USE_TLS:
-            server.starttls()
-        server.login(Config.SMTP_USER, Config.SMTP_PASSWORD)
-        server.sendmail(Config.SMTP_FROM, dest, msg.as_string())
+    if Config.SMTP_USE_SSL:
+        with smtplib.SMTP_SSL(Config.SMTP_HOST, Config.SMTP_PORT, timeout=30) as server:
+            server.login(Config.SMTP_USER, Config.SMTP_PASSWORD)
+            server.sendmail(Config.SMTP_FROM, dest, msg.as_string())
+    else:
+        with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT, timeout=30) as server:
+            if Config.SMTP_USE_TLS:
+                server.starttls()
+            server.login(Config.SMTP_USER, Config.SMTP_PASSWORD)
+            server.sendmail(Config.SMTP_FROM, dest, msg.as_string())
 
     return {"ok": True, "sent_to": dest, "subject": subject}
 

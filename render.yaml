@@ -34,3 +34,20 @@ services:
         value: "1"
       - key: RENDER
         value: "true"
+      # Informe diario por email — configurar en el panel de Render (no commitear secretos)
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_USE_SSL
+        sync: false
+      - key: REPORT_EMAIL_TO
+        sync: false
+      - key: REPORT_CRON_SECRET
+        sync: false

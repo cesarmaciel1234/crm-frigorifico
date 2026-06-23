@@ -1,4 +1,14 @@
 import os
+from pathlib import Path
+
+_env_file = Path(__file__).resolve().parent.parent / ".env"
+if _env_file.is_file():
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(_env_file)
+    except ImportError:
+        pass
 
 
 FORBIDDEN_SECRETS = frozenset({"2094", "changeme", "admin", "password", ""})
@@ -29,13 +39,17 @@ class Config:
     )
     PERMANENT_SESSION_LIFETIME = 86400 * 7  # 7 días
 
-    # Email informe diario (configurar en Render / .env cuando tengas la clave)
+    # Email informe diario (Gmail: smtp.gmail.com, puerto 465 SSL o 587 STARTTLS)
     SMTP_HOST = os.environ.get("SMTP_HOST", "")
     SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
     SMTP_USER = os.environ.get("SMTP_USER", "")
     SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
     SMTP_FROM = os.environ.get("SMTP_FROM", "")
     SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "1") != "0"
+    SMTP_USE_SSL = os.environ.get(
+        "SMTP_USE_SSL",
+        "1" if int(os.environ.get("SMTP_PORT", "587")) == 465 else "0",
+    ) != "0"
     REPORT_EMAIL_TO = os.environ.get("REPORT_EMAIL_TO", "")
     REPORT_CRON_SECRET = os.environ.get("REPORT_CRON_SECRET", "")
 
