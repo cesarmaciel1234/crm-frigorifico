@@ -225,20 +225,6 @@
             text-decoration: underline;
         }
 
-        .hint {
-            color: var(--text-muted);
-            font-size: 0.75rem;
-            text-align: center;
-            margin: 28px 0 0;
-            line-height: 1.5;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-            padding-top: 20px;
-        }
-
-        .hint strong {
-            color: var(--text-secondary);
-        }
-
         .auth-view {
             transition: opacity 0.3s ease, transform 0.3s ease;
         }
@@ -330,8 +316,6 @@
                 <a href="#" onclick="switchAuthView('login')">Volver al inicio de sesión</a>
             </div>
         </div>
-
-        <p class="hint">Usuario por defecto: <strong>rumaul</strong> (clave: <strong>admin</strong>) para acceder a los datos cargados.</p>
     </div>
     <script>
         if ('serviceWorker' in navigator) {
