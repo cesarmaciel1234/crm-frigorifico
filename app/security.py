@@ -143,6 +143,7 @@ def set_session_api_key() -> None:
     session["user_id"] = None
     session["username"] = "api_key"
     session["role"] = "admin"
+    session["empresa_id"] = 1
     session["auth_method"] = "api_key"
     session["last_activity"] = datetime.now(timezone.utc).timestamp()
 

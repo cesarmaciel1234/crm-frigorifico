@@ -1,5 +1,5 @@
 /* Master Total PWA — network-first for shell updates, offline fallback */
-const CACHE_VERSION = 'crm-frigorifico-v29';
+const CACHE_VERSION = 'crm-frigorifico-v30';
 const SHELL_ASSETS = [
   '/',
   '/login',
@@ -24,15 +24,6 @@ const NETWORK_FIRST_PATHS = [
   '/static/js/crm-safe.js',
 ];
 
-const API_CACHE_PREFIXES = [
-  '/api/dashboard',
-  '/api/clientes',
-  '/api/bulk',
-  '/api/historial-pagos',
-  '/api/auditoria',
-  '/api/remitos',
-];
-
 function cacheKey(request) {
   const url = new URL(request.url);
   if (url.pathname.startsWith('/static/')) {
@@ -45,8 +36,8 @@ function isNetworkFirst(url) {
   return NETWORK_FIRST_PATHS.some((p) => url.pathname === p || url.pathname.startsWith(p));
 }
 
-function isApiCacheable(pathname) {
-  return API_CACHE_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+function isApiRequest(pathname) {
+  return pathname.startsWith('/api/') || pathname.startsWith('/auth/');
 }
 
 self.addEventListener('install', (event) => {
@@ -74,7 +65,14 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  if (url.pathname.startsWith('/api/') && !isApiCacheable(url.pathname)) {
+  // API y auth: siempre red (nunca cachear — cada usuario/empresa tiene datos distintos)
+  if (isApiRequest(url.pathname)) {
+    event.respondWith(
+      fetch(event.request).catch(() => new Response(
+        JSON.stringify({ error: 'Sin conexión', offline: true }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      ))
+    );
     return;
   }
 
@@ -133,7 +131,7 @@ async function networkFirst(request) {
       const shell = await cache.match('/');
       if (shell) return shell;
     }
-    throw err;
+    throw _;
   }
 }
 

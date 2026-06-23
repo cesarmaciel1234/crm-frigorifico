@@ -37,11 +37,26 @@ def health_ready():
 def auth_session():
     if not is_authenticated():
         return jsonify({"authenticated": False}), 401
+    empresa_id = session.get("empresa_id") or 1
+    empresa_nombre = ""
+    try:
+        from app.services.users import get_db
+        with get_db(empresa_id=0) as conn:
+            row = conn.execute(
+                "SELECT nombre FROM empresas WHERE id = ?",
+                (empresa_id,),
+            ).fetchone()
+            if row:
+                empresa_nombre = row["nombre"] or ""
+    except Exception:
+        pass
     return jsonify({
         "authenticated": True,
         "username": session.get("username"),
         "role": current_role(),
         "auth_method": session.get("auth_method"),
+        "empresa_id": empresa_id,
+        "empresa_nombre": empresa_nombre,
     })
 
 

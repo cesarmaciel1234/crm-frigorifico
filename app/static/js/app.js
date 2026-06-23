@@ -150,7 +150,7 @@ const $ = id => document.getElementById(id);
         let isProMode = true;
         let selectedDeuda = null;
         let selectedAuditId = null;
-        let sessionUser = { role: 'admin', username: 'jefe' };
+        let sessionUser = { role: 'admin', username: 'jefe', empresa_id: 1, empresa_nombre: '' };
         let histPagosFiltro = '';
         let activeRowIndex = -1;
 
@@ -1981,14 +1981,31 @@ const $ = id => document.getElementById(id);
             } catch (_) {}
         }
 
+        function servidorTieneDatos(freshData) {
+            if (!freshData) return false;
+            const ops = freshData.enemigos?.length || 0;
+            const cli = freshData.clientes?.length || 0;
+            const rem = freshData.remitos?.length || 0;
+            const bulk = freshData.bulk?.length || 0;
+            return ops + cli + rem + bulk > 0;
+        }
         async function loadSession() {
             try {
-                const s = await api('/auth/session');
-                sessionUser = { role: s.role || 'admin', username: s.username || 'jefe' };
+                const s = await api('/auth/session?_=' + Date.now());
+                sessionUser = {
+                    role: s.role || 'admin',
+                    username: s.username || 'jefe',
+                    empresa_id: s.empresa_id || 1,
+                    empresa_nombre: s.empresa_nombre || '',
+                };
                 const nameEl = document.querySelector('.topbar-greeting-block div div:last-child');
-                if (nameEl) nameEl.textContent = sessionUser.username;
+                if (nameEl) {
+                    const etiqueta = sessionUser.empresa_nombre || sessionUser.username;
+                    nameEl.textContent = etiqueta;
+                    nameEl.title = 'Cuenta: ' + sessionUser.username + ' (empresa #' + sessionUser.empresa_id + ')';
+                }
             } catch (_) {
-                sessionUser = { role: 'admin', username: 'jefe' };
+                sessionUser = { role: 'admin', username: 'jefe', empresa_id: 1, empresa_nombre: '' };
             }
             await syncEmpresaFromServer();
             applyRoleUi();
@@ -2432,6 +2449,14 @@ const $ = id => document.getElementById(id);
                 toast('Error al guardar caché: ' + (e.message || ''), true);
             }
         });
+        $('btnDescargarNube')?.addEventListener('click', async () => {
+            try {
+                await descargarDatosDeLaNube();
+                cerrarModalBackup();
+            } catch (e) {
+                toast('Error al descargar: ' + (e.message || ''), true);
+            }
+        });
         $('btnSubirServidor')?.addEventListener('click', async () => {
             const fileInput = $('inputBackupFile');
             if (fileInput?.files?.length) {
@@ -2482,31 +2507,34 @@ const $ = id => document.getElementById(id);
             }
         });
 
-        async function loadAll() {
+        async function loadAll(opts = {}) {
+            const forzarServidor = !!opts.forzarServidor;
+            const avisarSiVacio = opts.avisarSiVacio !== false;
+            const bust = '_=' + Date.now();
             setLoading(true);
             try {
-                // 1. LAZY LOAD: Mostrar caché local instantáneamente
-                const cached = await db.cache.get('appData');
-                if (cached && cached.data) {
-                    data = cached.data;
-                    renderAll();
-                    setLoading(false); // Ocultar loader rápido si hay caché
+                if (!forzarServidor) {
+                    const cached = await db.cache.get('appData');
+                    if (cached && cached.data) {
+                        data = cached.data;
+                        renderAll();
+                        setLoading(false);
+                    }
                 }
 
-                // 2. SYNC: Actualizar desde el servidor en segundo plano
                 const [dash, pagos, bulk, clientes, auditoriaData] = await Promise.all([
-                    api('/api/dashboard'),
-                    api('/api/historial-pagos'),
-                    api('/api/bulk'),
-                    api('/api/clientes'),
-                    api('/api/auditoria')
+                    api('/api/dashboard?' + bust),
+                    api('/api/historial-pagos?' + bust),
+                    api('/api/bulk?' + bust),
+                    api('/api/clientes?' + bust),
+                    api('/api/auditoria?' + bust)
                 ]);
                 const freshData = { ...dash, historialPagos: pagos, bulk: bulk, clientes: clientes, auditoria: auditoriaData };
-                
+
                 data = freshData;
                 await db.cache.put({ key: 'appData', data: data, updated_at: Date.now() });
                 try {
-                    const fullBackup = await api('/api/export');
+                    const fullBackup = await api('/api/export?' + bust);
                     if (backupTieneDatos(fullBackup)) {
                         await db.cache.put({ key: 'fullBackup', data: fullBackup, updated_at: Date.now() });
                     }
@@ -2516,12 +2544,28 @@ const $ = id => document.getElementById(id);
                         await db.cache.put({ key: 'fullBackup', data: fromApp, updated_at: Date.now() });
                     }
                 }
-                renderAll(); // Re-renderizar con los datos frescos
+                renderAll();
+                if (avisarSiVacio && !servidorTieneDatos(freshData)) {
+                    const cuenta = sessionUser.empresa_nombre || sessionUser.username || 'esta cuenta';
+                    toast(
+                        'La nube está vacía para ' + cuenta + '. Usá el mismo usuario donde subiste el backup (ej. rumaul) o subí el .json en Backup / Nube.',
+                        true
+                    );
+                } else if (opts.mostrarExito) {
+                    toast('Datos descargados de la nube correctamente');
+                }
             } catch (e) {
-                console.warn("Error al cargar del servidor. Mostrando datos locales (offline).", e);
+                console.warn('Error al cargar del servidor.', e);
+                if (forzarServidor || !data) {
+                    toast('No se pudieron descargar los datos: ' + (e.message || 'revisá tu conexión'), true);
+                }
             } finally {
                 setLoading(false);
             }
+        }
+        async function descargarDatosDeLaNube() {
+            toast('Descargando datos del servidor...');
+            await loadAll({ forzarServidor: true, avisarSiVacio: true, mostrarExito: true });
         }
 
         window.abrirFormularioRegistro = abrirFormularioRegistro;
@@ -4124,7 +4168,19 @@ const $ = id => document.getElementById(id);
 
         async function boot() {
             await loadSession();
-            await loadAll();
+            const prevUser = localStorage.getItem('sync_user') || '';
+            const curUser = sessionUser.username || '';
+            const usuarioCambio = prevUser && prevUser !== curUser;
+            if (usuarioCambio) {
+                await db.cache.clear();
+            }
+            if (curUser) localStorage.setItem('sync_user', curUser);
+            const cached = await db.cache.get('appData');
+            const sinCacheLocal = !cached?.data;
+            await loadAll({
+                forzarServidor: sinCacheLocal || usuarioCambio,
+                avisarSiVacio: true,
+            });
             if (new URLSearchParams(window.location.search).get('view')) {
                 applyPwaDeepLink();
             } else {
