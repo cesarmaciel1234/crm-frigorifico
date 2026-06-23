@@ -38,6 +38,9 @@ def normalize_empresa_config(data: dict | None) -> dict[str, Any]:
         "telefono": str(data.get("telefono") or "").strip(),
         "email": str(data.get("email") or "").strip(),
         "cotizacion_usd": cotizacion,
+        "reporte_email_destinatarios": str(data.get("reporte_email_destinatarios") or "").strip(),
+        "reporte_email_activo": bool(data.get("reporte_email_activo")),
+        "reporte_email_hora": str(data.get("reporte_email_hora") or "07:00").strip() or "07:00",
     }
 
 

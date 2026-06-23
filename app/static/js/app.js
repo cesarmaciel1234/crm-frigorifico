@@ -3111,6 +3111,7 @@ const $ = id => document.getElementById(id);
             if (name === 'registro') volverMenuRegistro();
             if (name === 'finanzas-aging') renderFinanzasAging();
             if (name === 'finanzas-margenes') renderFinanzasMargenes();
+            if (name === 'dashboard') void actualizarInformeEmailEstado();
             setSidebarOpen(false);
         }
 
@@ -4255,6 +4256,156 @@ const $ = id => document.getElementById(id);
 </body>
 </html>`;
         }
+
+        async function actualizarInformeEmailEstado() {
+            const el = $('informeEmailEstado');
+            if (!el || sessionUser.role !== 'admin') return;
+            try {
+                const cfg = await api('/api/reportes/email/config?_=' + Date.now());
+                const smtp = cfg.smtp_configurado
+                    ? 'SMTP listo en el servidor'
+                    : 'SMTP pendiente: agregá SMTP_HOST, SMTP_USER, SMTP_PASSWORD y SMTP_FROM en Render';
+                const auto = cfg.activo ? 'Envío automático activado' : 'Envío automático desactivado';
+                const dest = cfg.destinatarios || '(sin destinatarios)';
+                el.innerHTML = smtp + ' · ' + auto + '<br>Destinatarios: <strong>' + esc(dest) + '</strong>';
+            } catch (_) {
+                el.textContent = '';
+            }
+        }
+
+        async function abrirInformeJefe() {
+            try {
+                setLoading(true, 'Generando informe…');
+                const html = await fetch('/api/reportes/diario/html?_=' + Date.now(), { credentials: 'same-origin' }).then(r => {
+                    if (!r.ok) throw new Error('No se pudo generar el informe');
+                    return r.text();
+                });
+                const w = window.open('', '_blank', 'width=960,height=720');
+                if (!w) {
+                    toast('Permití ventanas emergentes para ver el informe', true);
+                    return;
+                }
+                w.document.write(html);
+                w.document.close();
+            } catch (e) {
+                toast(e.message || 'Error al abrir informe', true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function descargarInformeJefePdf() {
+            try {
+                setLoading(true, 'Generando PDF…');
+                const r = await fetch('/api/reportes/diario/pdf?_=' + Date.now(), { credentials: 'same-origin' });
+                if (!r.ok) {
+                    const d = await r.json().catch(() => ({}));
+                    throw new Error(d.error || 'Error al generar PDF');
+                }
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'informe-diario-' + new Date().toISOString().slice(0, 10) + '.pdf';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+                toast('PDF descargado');
+            } catch (e) {
+                toast(e.message || 'Error al descargar PDF', true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function compartirInformeWhatsApp() {
+            try {
+                setLoading(true, 'Preparando informe…');
+                const [wa, pdfRes] = await Promise.all([
+                    api('/api/reportes/diario/whatsapp?_=' + Date.now()),
+                    fetch('/api/reportes/diario/pdf?_=' + Date.now(), { credentials: 'same-origin' }),
+                ]);
+                if (!pdfRes.ok) throw new Error('No se pudo generar el PDF');
+                const blob = await pdfRes.blob();
+                const file = new File([blob], 'informe-diario.pdf', { type: 'application/pdf' });
+                const texto = wa.texto || '';
+
+                if (navigator.share && navigator.canShare?.({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'Informe diario',
+                        text: texto,
+                    });
+                    toast('Listo para compartir');
+                    return;
+                }
+
+                await descargarInformeJefePdf();
+                window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank');
+                toast('PDF descargado — adjuntalo en WhatsApp');
+            } catch (e) {
+                if (e.name !== 'AbortError') toast(e.message || 'Error al compartir', true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function abrirModalInformeEmail() {
+            try {
+                const cfg = await api('/api/reportes/email/config?_=' + Date.now());
+                $('inpInformeDestinatarios').value = cfg.destinatarios || '';
+                $('inpInformeHora').value = cfg.hora || '07:00';
+                $('chkInformeEmailActivo').checked = !!cfg.activo;
+                const smtpEl = $('informeSmtpEstado');
+                if (smtpEl) {
+                    smtpEl.innerHTML = cfg.smtp_configurado
+                        ? '<span style="color:#166534;">✓ SMTP configurado en el servidor</span>'
+                        : '<span style="color:#b45309;">⚠ Falta configurar SMTP en Render (cuando tengas la clave de email)</span>';
+                }
+                $('modalInformeEmail').classList.add('open');
+            } catch (e) {
+                toast(e.message, true);
+            }
+        }
+
+        async function enviarInformeEmailAhora() {
+            if (!confirm('¿Enviar el informe diario por email ahora?')) return;
+            try {
+                setLoading(true, 'Enviando email…');
+                const res = await api('/api/reportes/email/enviar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                toast('Informe enviado a: ' + (res.sent_to || []).join(', '));
+                await actualizarInformeEmailEstado();
+            } catch (e) {
+                toast(e.message || 'No se pudo enviar (revisá SMTP)', true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        $('btnInformeVer')?.addEventListener('click', abrirInformeJefe);
+        $('btnInformePdf')?.addEventListener('click', descargarInformeJefePdf);
+        $('btnInformeWhatsApp')?.addEventListener('click', compartirInformeWhatsApp);
+        $('btnInformeEmailConfig')?.addEventListener('click', abrirModalInformeEmail);
+        $('btnInformeEmailEnviar')?.addEventListener('click', enviarInformeEmailAhora);
+        $('btnGuardarInformeEmail')?.addEventListener('click', async () => {
+            try {
+                await api('/api/reportes/email/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        destinatarios: $('inpInformeDestinatarios').value.trim(),
+                        hora: $('inpInformeHora').value || '07:00',
+                        activo: $('chkInformeEmailActivo').checked,
+                    }),
+                });
+                toast('Configuración de email guardada');
+                $('modalInformeEmail').classList.remove('open');
+                await actualizarInformeEmailEstado();
+            } catch (e) {
+                toast(e.message, true);
+            }
+        });
 
         $('btnClientPrint').addEventListener('click', async () => {
             if (!currentClientData) return;

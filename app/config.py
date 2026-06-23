@@ -29,6 +29,16 @@ class Config:
     )
     PERMANENT_SESSION_LIFETIME = 86400 * 7  # 7 días
 
+    # Email informe diario (configurar en Render / .env cuando tengas la clave)
+    SMTP_HOST = os.environ.get("SMTP_HOST", "")
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+    SMTP_USER = os.environ.get("SMTP_USER", "")
+    SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+    SMTP_FROM = os.environ.get("SMTP_FROM", "")
+    SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "1") != "0"
+    REPORT_EMAIL_TO = os.environ.get("REPORT_EMAIL_TO", "")
+    REPORT_CRON_SECRET = os.environ.get("REPORT_CRON_SECRET", "")
+
     @classmethod
     def master_password(cls) -> str:
         return cls.MASTER_PASSWORD or ""

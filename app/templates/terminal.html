@@ -454,6 +454,20 @@
                         <div class="balance-item"><div class="lbl">PATRIMONIO NETO</div><div class="val" id="balPatrimonio" style="color:var(--brand)">—</div></div>
                     </div>
                 </div>
+                <div class="card" style="margin-top:18px" id="cardInformeJefe">
+                    <div class="card-head">
+                        <h2>Informe diario del jefe</h2>
+                        <span>Cobrar, pagar y situación del día — PDF y email</span>
+                    </div>
+                    <div class="card-body" style="padding:20px; display:flex; flex-wrap:wrap; gap:10px;">
+                        <button type="button" class="btn btn-primary" id="btnInformeVer">Ver informe</button>
+                        <button type="button" class="btn btn-ghost" id="btnInformePdf">Descargar PDF</button>
+                        <button type="button" class="btn btn-ghost" id="btnInformeWhatsApp" style="color:#16a34a; border-color:#86efac;">WhatsApp</button>
+                        <button type="button" class="btn btn-ghost" id="btnInformeEmailConfig" data-admin-only>Email diario</button>
+                        <button type="button" class="btn btn-ghost" id="btnInformeEmailEnviar" data-admin-only>Enviar email ahora</button>
+                    </div>
+                    <div id="informeEmailEstado" style="padding:0 20px 16px; font-size:0.85rem; color:#64748b; line-height:1.5;"></div>
+                </div>
                 <div class="card" style="margin-top:18px">
                     <div class="card-head"><h2>Top 5 — Costo financiero (CFR)</h2><span>Mayor impacto primero · solo deuda real</span></div>
                     <div class="chart-list" id="chartCfr"></div>
@@ -1572,6 +1586,28 @@
         </div>
     </div>
 
+    <!-- Modal Informe Email Diario -->
+    <div class="modal-overlay" id="modalInformeEmail">
+        <div class="modal-content" style="max-width:520px;">
+            <div class="modal-header">
+                <h2>📧 Informe diario por email</h2>
+                <button type="button" class="modal-close" onclick="$('modalInformeEmail').classList.remove('open')" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:0 20px 20px;">
+                <p style="font-size:0.85rem; color:#64748b; margin-bottom:14px;">El servidor envía el PDF automáticamente cada mañana cuando configures las variables SMTP en Render (<code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASSWORD</code>, <code>SMTP_FROM</code>) y el cron con <code>REPORT_CRON_SECRET</code>.</p>
+                <div id="informeSmtpEstado" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:14px; font-size:0.85rem;"></div>
+                <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Destinatarios (emails separados por coma)</label>
+                <input type="text" id="inpInformeDestinatarios" placeholder="jefe@empresa.com, contador@..." style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:12px;">
+                <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Hora preferida (referencia)</label>
+                <input type="time" id="inpInformeHora" value="07:00" style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:12px;">
+                <label style="display:flex; align-items:center; gap:8px; font-size:0.9rem; margin-bottom:16px;">
+                    <input type="checkbox" id="chkInformeEmailActivo"> Activar envío automático diario (cron)
+                </label>
+                <button type="button" class="btn btn-primary" id="btnGuardarInformeEmail" style="width:100%;">Guardar configuración</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal Backup y Restauración -->
     <div class="modal-overlay" id="modalBackup">
         <div class="modal-content">
@@ -1650,6 +1686,6 @@
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
     <script src="/static/js/sync-engine.js?v=2.2"></script>
-    <script src="/static/js/app.js?v=2.68"></script>
+    <script src="/static/js/app.js?v=2.69"></script>
 </body>
 </html>
