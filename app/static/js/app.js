@@ -3099,6 +3099,7 @@ const $ = id => document.getElementById(id);
     <meta charset="utf-8">
     <title>Estado de cuenta — ${esc(c.nombre)}</title>
     <style>
+        @media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; } }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
