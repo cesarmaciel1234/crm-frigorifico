@@ -254,3 +254,14 @@ def limpiar_sistema_ahora():
         return "<h1>¡LIMPIEZA COMPLETADA CON ÉXITO!</h1><p>Maciel y todas las empresas de prueba han sido eliminadas por completo. Rumaul (id=1) está 100% seguro.</p><p>Ya puedes volver a la página de inicio y registrar a la empresa 'maciel' de cero.</p>"
     except Exception as e:
         return f"<h1>Error al limpiar:</h1><p>{str(e)}</p>"
+
+@views_bp.route('/debug-db')
+def debug_db():
+    from app.database import get_db
+    try:
+        with get_db(empresa_id=0) as conn:
+            empresas = [dict(r) for r in conn.execute("SELECT * FROM empresas").fetchall()]
+            usuarios = [dict(r) for r in conn.execute("SELECT id, username, empresa_id, role FROM usuarios").fetchall()]
+        return jsonify({"empresas": empresas, "usuarios": usuarios})
+    except Exception as e:
+        return str(e)
