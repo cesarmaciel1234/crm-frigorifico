@@ -146,7 +146,7 @@ def _normalize_payload(json_data: dict) -> dict[str, list[dict]]:
         "remitos_fracciones": json_data.get("remitos_fracciones") or [],
         "perdidas_acumuladas": json_data.get("perdidas") or [],
         "ventas_mostrador": json_data.get("ventas_mostrador") or [],
-        "auditoria_operaciones": json_data.get("auditoria_reciente") or [],
+        "auditoria_operaciones": json_data.get("auditoria_operaciones") or json_data.get("auditoria_reciente") or json_data.get("auditoria") or [],
     }
 
 
