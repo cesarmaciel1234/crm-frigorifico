@@ -1348,33 +1348,50 @@ const $ = id => document.getElementById(id);
             
             const renderRow = c => {
                 const statusBadge = c.limite_superado 
-                    ? '<span class="badge badge-danger">Superado</span>' 
+                    ? '<span class="badge badge-danger">Límite superado</span>' 
                     : '<span class="badge badge-success">Límite OK</span>';
-                const style = c.limite_superado ? 'color: var(--danger)' : '';
-                const techoText = fmtDualCompact(c.techo_deuda);
+                const textColor = c.limite_superado ? 'color: var(--danger)' : 'color: #111827';
                 const saldoText = fmtDualCompact(c.saldo_actual);
+                const iniciales = c.nombre.substring(0, 2).toUpperCase();
+                const altaStr = (c.created_at || '').slice(0, 10);
+                
+                const saldoDisplay = c.saldo_actual === 0 
+                    ? '<span style="color:#10b981; font-weight:500;">Al día</span>' 
+                    : `Deuda: <span style="font-weight:600; color:#ef4444;">$${saldoText}</span>`;
 
-                return `<tr class="clickable" data-id="${c.id}">
-                    <td>
-                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${style}">${esc(c.nombre)}</div>
-                        <div style="font-size:9px;color:var(--text-muted);margin-top:2px">Alta: ${(c.created_at || '').slice(0, 10)}</div>
-                    </td>
-                    <td style="line-height:1.4; font-size:10px;">
-                        <div class="home-amount" style="font-size:13px">${saldoText}</div>
-                        <div style="color:var(--text-muted);font-size:9px;margin-top:2px">Techo: <span style="color:#111827;font-weight:500;">${techoText}</span></div>
-                    </td>
-                    <td style="text-align:center"><span class="badge badge-neutral" style="text-align:center; display:inline-block; width:20px;">${c.scoring}</span></td>
-                    <td style="text-align:center">${statusBadge}</td>
-                </tr>`;
+                return `<div class="clickable" data-id="${c.id}" style="display:flex; align-items:center; padding:12px 15px; border-bottom:1px solid #f3f4f6; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='transparent'">
+                    <div style="width:48px; height:48px; border-radius:50%; background:#e2e8f0; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#475569; font-size:1.1rem; flex-shrink:0; margin-right:12px;">
+                        ${iniciales}
+                    </div>
+                    <div style="flex:1; overflow:hidden;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <div style="font-weight:600; font-size:1.05rem; ${textColor}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                ${esc(c.nombre)}
+                            </div>
+                            <div style="font-size:0.75rem; color:#6b7280; white-space:nowrap; margin-left:8px;">
+                                ${altaStr}
+                            </div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="font-size:0.9rem; color:#6b7280; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                ${saldoDisplay}
+                            </div>
+                            <div style="font-size:0.75rem; display:flex; align-items:center; gap:6px;">
+                                <span class="badge badge-neutral" style="padding:2px 6px;">Scoring ${c.scoring}</span>
+                                ${statusBadge}
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
             };
 
-            table.innerHTML = activos.length ? activos.map(renderRow).join('') : '<tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center">Sin clientes activos</td></tr>';
+            table.innerHTML = activos.length ? activos.map(renderRow).join('') : '<div style="color:var(--text-muted);padding:20px;text-align:center">Sin clientes activos</div>';
             
             if (tableInrec) {
-                tableInrec.innerHTML = inrecuperables.length ? inrecuperables.map(renderRow).join('') : '<tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center">No hay clientes inrecuperables</td></tr>';
+                tableInrec.innerHTML = inrecuperables.length ? inrecuperables.map(renderRow).join('') : '<div style="color:var(--text-muted);padding:20px;text-align:center">No hay clientes inrecuperables</div>';
             }
             
-            document.querySelectorAll('#tblClientes tr.clickable, #tblInrecuperables tr.clickable').forEach((row, idx) => {
+            document.querySelectorAll('#tblClientes .clickable, #tblInrecuperables .clickable').forEach((row, idx) => {
                 row.addEventListener('click', () => {
                     const cid = parseInt(row.dataset.id, 10);
                     openClientDrawer(cid);
@@ -1613,6 +1630,14 @@ const $ = id => document.getElementById(id);
                 window.wspSelectedInvoices = [];
                 $('btnDeleteSeleccionados').style.display = 'none';
                 
+                // Toggle Topbar WSP Mode
+                if ($('topbarNormalMode')) $('topbarNormalMode').style.display = 'none';
+                if ($('topbarWspMode')) $('topbarWspMode').style.display = 'flex';
+                if ($('menuToggle')) $('menuToggle').style.display = 'none';
+                if ($('btnVolverTop')) $('btnVolverTop').style.display = 'block';
+                if ($('btnClientPrintWsp')) $('btnClientPrintWsp').style.display = 'flex';
+                if ($('btnTogglePro')) $('btnTogglePro').style.display = 'none';
+
                 renderClientDashboard();
                 
             } catch (e) {
@@ -1622,6 +1647,14 @@ const $ = id => document.getElementById(id);
         window.openClientDrawer = openClientDrawer;
 
         function volverDesdeClienteDetalle() {
+            // Restore Topbar Normal Mode
+            if ($('topbarNormalMode')) $('topbarNormalMode').style.display = 'flex';
+            if ($('topbarWspMode')) $('topbarWspMode').style.display = 'none';
+            if ($('menuToggle')) $('menuToggle').style.display = 'flex';
+            if ($('btnVolverTop')) $('btnVolverTop').style.display = 'none';
+            if ($('btnClientPrintWsp')) $('btnClientPrintWsp').style.display = 'none';
+            if ($('btnTogglePro')) $('btnTogglePro').style.display = 'flex';
+
             switchView(clientDetailReturnView || 'clientes');
         }
         window.volverDesdeClienteDetalle = volverDesdeClienteDetalle;
