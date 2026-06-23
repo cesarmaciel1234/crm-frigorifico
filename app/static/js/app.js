@@ -36,14 +36,6 @@ const $ = id => document.getElementById(id);
             };
             try {
                 await db.transacciones.add(registro);
-                if (window.CrmSync?.enqueueChange) {
-                    await CrmSync.enqueueChange({
-                        entity: 'operacion',
-                        entity_uuid: registro.uuid,
-                        action: 'CREATE',
-                        payload: { ...registro, updated_at_utc: new Date().toISOString() },
-                    });
-                }
                 console.log("Guardado localmente:", registro.uuid);
                 await intentarSincronizar();
                 return true;
@@ -198,20 +190,12 @@ const $ = id => document.getElementById(id);
             return { exito: exitoCount, fallo: falloCount };
         }
 
-        async function publishNodeBackupAfterSync() {
+        function publishNodeBackupAfterSync() {
             if (window.CrmSync && data && navigator.onLine) {
-                await CrmSync.pushNode(data).catch(() => {});
+                void CrmSync.pushNode(data).catch(() => {});
             }
         }
 
-        window.addEventListener('online', async () => {
-            await drainOutboxAll();
-            if ((await countPendingOutbox()) === 0) {
-                await loadAll();
-            } else {
-                actualizarUIOffline();
-            }
-        });
         // -----------------------------------
         const fmt = n => Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         const fmtFecha = (iso, time=false) => {
@@ -322,8 +306,13 @@ const $ = id => document.getElementById(id);
             'finanzas-margenes': ['Márgenes de venta', 'Rentabilidad y costos de remitos', 'Márgenes']
         };
 
-        function setLoading(on) {
-            $('appLoader')?.classList.toggle('active', !!on);
+        function setLoading(on, texto) {
+            const el = $('appLoader');
+            el?.classList.toggle('active', !!on);
+            if (el && texto) {
+                const t = el.querySelector('.loader-text');
+                if (t) t.textContent = texto;
+            }
         }
 
         function toast(msg, err) {
@@ -423,15 +412,23 @@ const $ = id => document.getElementById(id);
         }
 
         async function sincronizarSolicitudesPendientes() {
-            const r = await drainSolicitudesPendientes();
-            await intentarSincronizar({ skipReload: true });
-            const pending = await countPendingOutbox();
-
-            if (r.exito > 0 || r.fallo > 0) {
-                toast(`🔄 Sincronización: ${r.exito} éxito, ${r.fallo} pendiente de revisión.`);
-                if (!pending) await loadAll();
+            if (!navigator.onLine) return;
+            const antes = await countPendingOutbox();
+            try {
+                await drainOutboxAll();
+            } catch (e) {
+                console.warn('sync manual:', e);
             }
-            actualizarUIOffline();
+            const pending = await countPendingOutbox();
+            if (pending === 0) {
+                await loadAll({ forzarServidor: true, enSegundoPlano: true, bloquearUI: false });
+                if (antes > 0) toast('Datos sincronizados con la nube');
+            } else {
+                actualizarUIOffline();
+                if (antes > pending) {
+                    toast(`Quedan ${pending} cambios por sincronizar`, true);
+                }
+            }
         }
 
         async function aplicarCambioOptimista(url, method, body) {
@@ -2149,7 +2146,7 @@ const $ = id => document.getElementById(id);
                 CrmSync.init(db, sessionUser);
                 CrmSync.setApi(api);
             }
-            await syncEmpresaFromServer();
+            void syncEmpresaFromServer();
             applyRoleUi();
         }
 
@@ -2725,91 +2722,116 @@ const $ = id => document.getElementById(id);
             }
         });
 
+        let _bgLoadAllPromise = null;
+
         async function loadAll(opts = {}) {
+            if (opts.enSegundoPlano && _bgLoadAllPromise) {
+                return _bgLoadAllPromise;
+            }
+            const run = () => loadAllCore(opts);
+            if (opts.enSegundoPlano) {
+                _bgLoadAllPromise = run().finally(() => { _bgLoadAllPromise = null; });
+                return _bgLoadAllPromise;
+            }
+            return run();
+        }
+
+        async function loadAllCore(opts = {}) {
             const forzarServidor = !!opts.forzarServidor;
+            const sincronizarOutbox = !!opts.sincronizarOutbox;
+            const enSegundoPlano = !!opts.enSegundoPlano;
             const avisarSiVacio = opts.avisarSiVacio !== false;
             const bust = '_=' + Date.now();
-            setLoading(true);
+
+            let loaderActivo = false;
+            if (opts.bloquearUI === true) {
+                setLoading(true, opts.textoCarga || 'Descargando datos…');
+                loaderActivo = true;
+            } else if (opts.bloquearUI !== false && !enSegundoPlano && (opts.mostrarExito || (forzarServidor && !data))) {
+                setLoading(true, 'Cargando datos…');
+                loaderActivo = true;
+            }
+
             try {
-                if (!forzarServidor) {
+                if (!forzarServidor || enSegundoPlano) {
                     const cached = await tenantCacheGet('appData');
                     if (cached) {
                         data = cached;
                         renderAll();
-                        setLoading(false);
+                        if (loaderActivo) {
+                            setLoading(false);
+                            loaderActivo = false;
+                        }
                     }
                 }
 
-                if (navigator.onLine) {
-                    await drainOutboxAll();
+                if (navigator.onLine && sincronizarOutbox) {
+                    try {
+                        await Promise.race([
+                            drainOutboxAll(),
+                            new Promise((_, rej) => setTimeout(() => rej(new Error('outbox timeout')), 12000)),
+                        ]);
+                    } catch (e) {
+                        console.warn('Outbox drain omitido o lento:', e?.message || e);
+                    }
                 }
 
                 const pending = await countPendingOutbox();
-                if (pending > 0 && data) {
-                    console.warn('Outbox con pendientes: no se pisa la caché local con pull del servidor.');
+                if (pending > 0 && data && !forzarServidor) {
+                    console.warn('Outbox con pendientes: no se pisa la caché local.');
                     actualizarUIOffline();
                     return;
                 }
 
-                let freshData = null;
-                if (navigator.onLine && window.CrmSync) {
-                    try {
-                        const bundle = await CrmSync.pullFromServer();
-                        if (bundle?.blocked) {
-                            console.warn('Pull bloqueado: outbox no vacío.');
-                        } else if (bundle?.appData) {
-                            freshData = bundle.appData;
-                            if (bundle.fullBackup && backupTieneDatos(bundle.fullBackup)) {
-                                await tenantCachePut('fullBackup', bundle.fullBackup);
-                            }
-                        }
-                    } catch (syncErr) {
-                        console.warn('sync/pull no disponible, usando APIs individuales', syncErr);
+                if (!navigator.onLine) {
+                    if (!data) {
+                        toast('Sin conexión y sin datos en este dispositivo', true);
                     }
+                    return;
                 }
 
-                if (!freshData) {
-                    const settled = await Promise.allSettled([
-                        api('/api/dashboard?' + bust),
-                        api('/api/historial-pagos?' + bust),
-                        api('/api/bulk?' + bust),
-                        api('/api/clientes?' + bust),
-                        api('/api/auditoria?' + bust),
-                    ]);
-                    const labels = ['dashboard', 'historial-pagos', 'bulk', 'clientes', 'auditoria'];
-                    const pick = (i, fallback) => settled[i].status === 'fulfilled' ? settled[i].value : fallback;
-                    const dash = pick(0, null);
-                    if (!dash) {
-                        const err = settled[0].status === 'rejected' ? settled[0].reason : null;
-                        throw new Error((err && err.message) || 'Error al cargar el panel principal');
-                    }
-                    settled.forEach((res, i) => {
-                        if (res.status === 'rejected') console.warn('API ' + labels[i] + ' falló:', res.reason);
-                    });
-                    freshData = {
-                        ...dash,
-                        historialPagos: pick(1, []),
-                        bulk: pick(2, []),
-                        clientes: pick(3, []),
-                        auditoria: pick(4, []),
-                    };
-                    try {
-                        const fullBackup = await api('/api/export?' + bust);
-                        if (backupTieneDatos(fullBackup)) {
-                            await tenantCachePut('fullBackup', fullBackup);
-                        }
-                    } catch (_) {
-                        const fromApp = convertirAppDataABackup(freshData);
-                        if (backupTieneDatos(fromApp)) {
-                            await tenantCachePut('fullBackup', fromApp);
-                        }
-                    }
+                const settled = await Promise.allSettled([
+                    api('/api/dashboard?' + bust),
+                    api('/api/historial-pagos?' + bust),
+                    api('/api/bulk?' + bust),
+                    api('/api/clientes?' + bust),
+                    api('/api/auditoria?' + bust),
+                ]);
+                const labels = ['dashboard', 'historial-pagos', 'bulk', 'clientes', 'auditoria'];
+                const pick = (i, fallback) => settled[i].status === 'fulfilled' ? settled[i].value : fallback;
+                const dash = pick(0, null);
+                if (!dash) {
+                    const err = settled[0].status === 'rejected' ? settled[0].reason : null;
+                    throw new Error((err && err.message) || 'Error al cargar el panel principal');
                 }
+                settled.forEach((res, i) => {
+                    if (res.status === 'rejected') console.warn('API ' + labels[i] + ' falló:', res.reason);
+                });
+                const freshData = {
+                    ...dash,
+                    historialPagos: pick(1, []),
+                    bulk: pick(2, []),
+                    clientes: pick(3, []),
+                    auditoria: pick(4, []),
+                };
 
                 data = freshData;
                 await tenantCachePut('appData', data);
                 renderAll();
-                await publishNodeBackupAfterSync();
+                publishNodeBackupAfterSync();
+
+                void (async () => {
+                    try {
+                        const delta = await window.CrmSync?.pullDeltaLight?.();
+                        if (delta?.changes?.length) {
+                            const refreshed = await tenantCacheGet('appData');
+                            if (refreshed) {
+                                data = refreshed;
+                                renderAll();
+                            }
+                        }
+                    } catch (_) {}
+                })();
 
                 if (avisarSiVacio && !servidorTieneDatos(freshData)) {
                     try {
@@ -2831,12 +2853,19 @@ const $ = id => document.getElementById(id);
                     toast('No se pudieron descargar los datos: ' + (e.message || 'revisá tu conexión'), true);
                 }
             } finally {
-                setLoading(false);
+                if (loaderActivo) setLoading(false);
             }
         }
         async function descargarDatosDeLaNube() {
             toast('Descargando datos del servidor...');
-            await loadAll({ forzarServidor: true, avisarSiVacio: true, mostrarExito: true });
+            await loadAll({
+                forzarServidor: true,
+                sincronizarOutbox: true,
+                bloquearUI: true,
+                textoCarga: 'Descargando datos de la nube…',
+                avisarSiVacio: true,
+                mostrarExito: true,
+            });
         }
 
         window.abrirFormularioRegistro = abrirFormularioRegistro;
@@ -4237,7 +4266,7 @@ const $ = id => document.getElementById(id);
         }
         window.addEventListener('online', () => {
             updateConnectionStatus();
-            sincronizarSolicitudesPendientes();
+            void sincronizarSolicitudesPendientes();
         });
         window.addEventListener('offline', updateConnectionStatus);
         
@@ -4446,15 +4475,38 @@ const $ = id => document.getElementById(id);
                 await db.cache.clear();
             }
             if (curUser) localStorage.setItem('sync_user', curUser);
-            const sinCacheLocal = !(await tenantCacheGet('appData'));
-            await loadAll({
-                forzarServidor: sinCacheLocal || usuarioCambio,
-                avisarSiVacio: true,
-            });
+
+            const cached = await tenantCacheGet('appData');
+            const sinCacheLocal = !cached;
+
+            if (cached && !usuarioCambio) {
+                data = cached;
+                renderAll();
+                actualizarUIOffline();
+            }
+
             if (new URLSearchParams(window.location.search).get('view')) {
                 applyPwaDeepLink();
             } else {
                 switchView('home');
+            }
+
+            void loadAll({
+                forzarServidor: sinCacheLocal || usuarioCambio,
+                bloquearUI: sinCacheLocal || usuarioCambio,
+                avisarSiVacio: sinCacheLocal || usuarioCambio,
+                enSegundoPlano: !sinCacheLocal && !usuarioCambio,
+            });
+
+            if (navigator.onLine) {
+                void (async () => {
+                    try {
+                        await drainOutboxAll();
+                        actualizarUIOffline();
+                    } catch (e) {
+                        console.warn('outbox al iniciar:', e);
+                    }
+                })();
             }
         }
 
@@ -4485,4 +4537,4 @@ const $ = id => document.getElementById(id);
         setInterval(updateWeather, 1800000); // 30 mins
 
         boot();
-        setInterval(loadAll, 60000);
+        setInterval(() => void loadAll({ enSegundoPlano: true, bloquearUI: false }), 60000);

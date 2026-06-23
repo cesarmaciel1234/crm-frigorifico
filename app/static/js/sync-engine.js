@@ -238,7 +238,36 @@
             return appData;
         },
 
-        /** Servidor → caché (delta + snapshot inicial) */
+        /** Delta incremental (sin snapshot inicial pesado) */
+        async pullDeltaLight() {
+            if (!this._api || !navigator.onLine) return null;
+            if (await this.hasPendingOutbox()) return null;
+            const meta = await this.getSyncMeta();
+            const since = meta.cursor || 0;
+            if (since <= 0) return null;
+            if (this._state !== SYNC_STATES.IDLE) return null;
+
+            this._state = SYNC_STATES.PULLING;
+            try {
+                const bundle = await this._api(
+                    '/api/sync/pull?since=' + encodeURIComponent(since) + '&_=' + Date.now()
+                );
+                if (bundle?.changes?.length) {
+                    await this.applyChangesToCache(bundle.changes);
+                }
+                if (bundle?.cursor != null) {
+                    await this.setSyncMeta({
+                        cursor: bundle.cursor,
+                        last_sync_utc: bundle.updated_at || this.utcNow(),
+                    });
+                }
+                return bundle;
+            } finally {
+                this._state = SYNC_STATES.IDLE;
+            }
+        },
+
+        /** Servidor → caché (delta + snapshot inicial; solo sync explícito) */
         async pullFromServer() {
             if (!this._api || !navigator.onLine) return null;
             if (await this.hasPendingOutbox()) {
@@ -251,7 +280,9 @@
                 const meta = await this.getSyncMeta();
                 const since = meta.cursor || 0;
                 const bundle = await this._api(
-                    '/api/sync/pull?since=' + encodeURIComponent(since) + '&_=' + Date.now()
+                    '/api/sync/pull?since=' + encodeURIComponent(since)
+                    + (since === 0 ? '&full=1' : '')
+                    + '&_=' + Date.now()
                 );
 
                 if (bundle?.changes?.length) {

@@ -28,8 +28,9 @@ def api_sync_estado():
 def api_sync_pull():
     """Motor central → dispositivo (delta changelog + snapshot inicial)."""
     since = request.args.get("since", 0, type=int)
+    include_full = request.args.get("full", 0, type=int) == 1
     try:
-        return jsonify(build_sync_pull_delta(since))
+        return jsonify(build_sync_pull_delta(since, include_full=include_full))
     except Exception as e:
         return jsonify({"error": f"Error al sincronizar desde el motor: {str(e)}"}), 500
 

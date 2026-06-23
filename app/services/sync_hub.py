@@ -290,7 +290,7 @@ def apply_sync_operations(device_id: str, operations: list[dict]) -> dict[str, A
     return {"acked": acked, "rejected": rejected}
 
 
-def build_sync_pull_delta(since: int = 0) -> dict[str, Any]:
+def build_sync_pull_delta(since: int = 0, *, include_full: bool = False) -> dict[str, Any]:
     since = max(0, int(since or 0))
     with get_db() as conn:
         ensure_tenant_migrations(conn)
@@ -330,7 +330,8 @@ def build_sync_pull_delta(since: int = 0) -> dict[str, Any]:
     }
     if since == 0:
         bundle["appData"] = build_client_app_data()
-        bundle["fullBackup"] = export_all_data()
+        if include_full:
+            bundle["fullBackup"] = export_all_data()
     return bundle
 
 
