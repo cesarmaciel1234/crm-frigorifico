@@ -2156,12 +2156,12 @@ const $ = id => document.getElementById(id);
                 if ($('weatherWidget')) $('weatherWidget').classList.add('field-hidden');
             }
 
-            if (name === 'home') {
-                if ($('btnTogglePro')) $('btnTogglePro').style.display = '';
-                renderHomeTable();
-            } else {
-                if ($('btnTogglePro')) $('btnTogglePro').style.display = 'none';
-            }
+        if (name === 'home') {
+            if ($('btnTogglePro')) $('btnTogglePro').style.setProperty('display', 'flex', 'important');
+            renderHomeTable();
+        } else {
+            if ($('btnTogglePro')) $('btnTogglePro').style.setProperty('display', 'none', 'important');
+        }
 
             const [t, s, bc] = titles[name] || ['', '', name];
             if ($('pageTitle')) $('pageTitle').innerHTML = t;
@@ -2281,8 +2281,7 @@ const $ = id => document.getElementById(id);
             if (!confirm('¿Eliminar ' + selectedDeuda.alias + '?')) return;
             await api('/api/operaciones/' + selectedDeuda.id, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: pw })
+                headers: { 'Content-Type': 'application/json', 'X-Master-Password': pw }
             });
             toast('Obligación eliminada');
             closeDrawer();
@@ -2300,8 +2299,7 @@ const $ = id => document.getElementById(id);
             try {
                 await api('/api/auditoria/' + selectedAuditId, {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pw })
+                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pw }
                 });
                 toast('Registro de auditoría eliminado');
                 $('modalPasswordAuditoria').classList.remove('open');
@@ -2862,8 +2860,7 @@ const $ = id => document.getElementById(id);
             try {
                 const res = await api('/api/clientes/' + clientId, {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pass })
+                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pass }
                 });
                 toast(res.message || "Cliente eliminado permanentemente");
                 
@@ -2889,8 +2886,7 @@ const $ = id => document.getElementById(id);
             try {
                 const res = await api('/api/pagos/' + pagoId, {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pass })
+                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pass }
                 });
                 toast(res.message || "Pago eliminado y deuda restablecida");
                 
@@ -2955,8 +2951,7 @@ const $ = id => document.getElementById(id);
             try {
                 const res = await api('/api/remitos/' + remitoId, {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pass })
+                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pass }
                 });
                 toast(res.message || "Factura eliminada. Stock repuesto.");
                 cerrarModalFacturaOriginal();

@@ -783,13 +783,25 @@ table:not(.data-table):not(.xls-table) tr:hover td { background: var(--bg-hover)
     #menuToggle .brand-mark { display: none !important; }
 
     /* Style topbar buttons as perfect 44px square touch targets */
-    #btnRefresh, #btnTogglePro, #menuToggle {
+    #btnRefresh, #menuToggle {
         width: 44px !important;
         height: 44px !important;
         min-height: 44px !important;
         max-height: 44px !important;
         padding: 0 !important;
         display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 10px !important;
+        flex-shrink: 0 !important;
+    }
+    #btnTogglePro {
+        width: 44px !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        max-height: 44px !important;
+        padding: 0 !important;
+        display: none !important; /* Oculto por defecto, se muestra solo en home vía JS */
         align-items: center !important;
         justify-content: center !important;
         border-radius: 10px !important;
