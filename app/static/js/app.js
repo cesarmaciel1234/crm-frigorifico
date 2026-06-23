@@ -2055,55 +2055,77 @@ const $ = id => document.getElementById(id);
         });
 
         // Backup / Modal Logic
-        $('btnBackup')?.addEventListener('click', () => {
-            $('modalBackup')?.classList.add('open');
+        function cerrarModalBackup() {
+            $('modalBackup')?.classList.remove('open');
+        }
+        function abrirModalBackup() {
+            setSidebarOpen(false);
+            const modal = $('modalBackup');
+            if (!modal) {
+                toast('Actualizando aplicación...', false);
+                return;
+            }
+            modal.classList.add('open');
+        }
+        $('btnBackup')?.addEventListener('click', abrirModalBackup);
+        $('btnCerrarBackup')?.addEventListener('click', cerrarModalBackup);
+        $('btnCerrarBackupFooter')?.addEventListener('click', cerrarModalBackup);
+        $('modalBackup')?.addEventListener('click', ev => {
+            if (ev.target === $('modalBackup')) cerrarModalBackup();
         });
         $('btnCrearBackup')?.addEventListener('click', async () => {
             try {
+                toast('Generando backup...');
                 const payload = await api('/api/export');
                 const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = 'Backup_MasterTotal_' + new Date().toISOString().slice(0, 10) + '.json';
+                document.body.appendChild(a);
                 a.click();
+                a.remove();
                 URL.revokeObjectURL(url);
-                toast('Backup creado correctamente');
-                $('modalBackup')?.classList.remove('open');
+                toast('Backup descargado correctamente');
+                cerrarModalBackup();
             } catch (e) {
                 toast('Error al crear backup: ' + (e.message || ''), true);
             }
         });
         $('btnRestaurarBackup')?.addEventListener('click', () => {
             const fileInput = $('inputBackupFile');
-            if (!fileInput.files || fileInput.files.length === 0) {
-                return toast('Por favor, selecciona un archivo JSON de backup primero', true);
+            if (!fileInput?.files?.length) {
+                return toast('Seleccioná un archivo JSON de backup primero', true);
             }
             const file = fileInput.files[0];
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
                     const jsonContent = JSON.parse(e.target.result);
-                    // Pide contraseña maestra antes de hacer el import destructivo
-                    const password = prompt('ATENCIÓN: Esto limpiará toda la base de datos y la reemplazará por el backup. Para continuar, ingresa la Contraseña Maestra:');
+                    const password = await window.promptMasterPasswordAsync(
+                        '⚠️ Esto reemplazará TODA la base de datos actual por el backup. Ingresá la contraseña maestra para continuar.'
+                    );
                     if (!password) return;
-                    
+
                     setLoading(true);
                     toast('Restaurando backup, no cierres la página...');
                     await api('/api/import', {
                         method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             password: password,
                             backup_data: jsonContent
                         })
                     });
-                    
-                    toast('✅ Backup restaurado con éxito. Recargando datos...');
-                    $('modalBackup')?.classList.remove('open');
+
+                    toast('Backup restaurado con éxito. Recargando datos...');
+                    cerrarModalBackup();
+                    fileInput.value = '';
                     await loadAll();
                 } catch (err) {
-                    setLoading(false);
                     toast('Error al restaurar: ' + (err.message || 'Archivo inválido'), true);
+                } finally {
+                    setLoading(false);
                 }
             };
             reader.readAsText(file);

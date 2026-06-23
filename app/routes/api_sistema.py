@@ -18,29 +18,22 @@ from app.services.users import get_empresa_config, save_empresa_config, list_use
 
 @api_bp.route("/import", methods=["POST"])
 def api_import():
-    # Solo admin puede importar
     if not role_at_least("admin"):
         return jsonify({"error": "Permiso denegado"}), 403
 
     data = request.get_json(silent=True) or {}
-    password = data.get("password", "")
-    
-    # 1. Require master password
-    try:
-        require_master_password_in_request(password)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 403
+    ok, msg = require_master_password_in_request()
+    if not ok:
+        return jsonify({"error": msg}), 403
 
-    # 2. Extract JSON payload
     backup_data = data.get("backup_data", {})
     if not backup_data:
         return jsonify({"error": "No backup data provided"}), 400
 
-    # 3. Perform destructive import
     try:
         import_all_data(backup_data)
         log_audit("RESTORE", entidad="sistema", detalle="restauracion_backup_completa")
-        return jsonify({"status": "ok"})
+        return jsonify({"ok": True, "status": "ok"})
     except Exception as e:
         return jsonify({"error": f"Error al restaurar: {str(e)}"}), 500
 

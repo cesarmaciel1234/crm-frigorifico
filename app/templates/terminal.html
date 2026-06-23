@@ -1572,6 +1572,35 @@
         </div>
     </div>
 
+    <!-- Modal Backup y Restauración -->
+    <div class="modal-overlay" id="modalBackup">
+        <div class="modal-content" style="max-width:450px;">
+            <div class="modal-header">
+                <h2>⛁ Backup y Restauración</h2>
+                <button type="button" class="modal-close" id="btnCerrarBackup" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 0 20px 20px;">
+                <p class="modal-sub">Exporta todos los datos de tu sistema a un archivo, o restaura un backup existente.</p>
+
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:16px;">
+                    <h4 style="margin:0 0 8px 0; color:#0f172a;">1. Exportar Datos (Crear Backup)</h4>
+                    <p style="font-size:0.85rem; color:#64748b; margin-bottom:12px;">Descarga la base de datos actual a tu dispositivo.</p>
+                    <button type="button" class="btn btn-primary" id="btnCrearBackup" style="width:100%;">Descargar Backup Ahora</button>
+                </div>
+
+                <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:16px;">
+                    <h4 style="margin:0 0 8px 0; color:#991b1b;">2. Restaurar Datos (Sobrescribir todo)</h4>
+                    <p style="font-size:0.85rem; color:#b91c1c; margin-bottom:12px;"><strong>⚠️ ATENCIÓN:</strong> Esto eliminará la base de datos actual y la reemplazará por la del archivo seleccionado.</p>
+                    <input type="file" id="inputBackupFile" accept=".json" style="width:100%; margin-bottom:12px; padding:8px; font-size:0.9rem;" />
+                    <button type="button" class="btn btn-danger" id="btnRestaurarBackup" style="width:100%;">Subir y Restaurar Backup</button>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 16px 20px;">
+                <button type="button" class="btn btn-ghost" id="btnCerrarBackupFooter" style="width:100%;">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Registro de Service Worker inline para asegurar actualización inmediata de caché
         if ('serviceWorker' in navigator) {
@@ -1599,31 +1628,6 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/app.js?v=2.47"></script>
-    <!-- Modal Backup y Restauración -->
-    <div id="modalBackup" class="modal">
-        <div class="modal-content" style="max-width:450px;">
-            <h3>⛁ Backup y Restauración</h3>
-            <p style="font-size:0.95rem; color:#64748b; margin-bottom:20px;">Exporta todos los datos de tu sistema a un archivo, o restaura un backup existente.</p>
-            
-            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:16px;">
-                <h4 style="margin:0 0 8px 0; color:#0f172a;">1. Exportar Datos (Crear Backup)</h4>
-                <p style="font-size:0.85rem; color:#64748b; margin-bottom:12px;">Descarga la base de datos actual a tu dispositivo.</p>
-                <button type="button" class="btn btn-primary" id="btnCrearBackup" style="width:100%;">Descargar Backup Ahora</button>
-            </div>
-
-            <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:16px; margin-bottom:20px;">
-                <h4 style="margin:0 0 8px 0; color:#991b1b;">2. Restaurar Datos (Sobrescribir todo)</h4>
-                <p style="font-size:0.85rem; color:#b91c1c; margin-bottom:12px;"><strong>⚠️ ATENCIÓN:</strong> Esto eliminará la base de datos actual y la reemplazará por la del archivo seleccionado.</p>
-                <input type="file" id="inputBackupFile" accept=".json" style="width:100%; margin-bottom:12px; padding:8px; font-size:0.9rem;" />
-                <button type="button" class="btn btn-danger" id="btnRestaurarBackup" style="width:100%;">Subir y Restaurar Backup</button>
-            </div>
-
-            <div style="text-align:right;">
-                <button type="button" class="btn btn-ghost btn-cerrar-modal" data-target="modalBackup">Cerrar</button>
-            </div>
-        </div>
-    </div>
-
+    <script src="/static/js/app.js?v=2.48"></script>
 </body>
 </html>
