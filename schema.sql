@@ -142,3 +142,10 @@ CREATE INDEX IF NOT EXISTS idx_op_alias ON operaciones_financieras(alias);
 CREATE INDEX IF NOT EXISTS idx_op_cfr ON operaciones_financieras(recibido, pagar, meses);
 CREATE INDEX IF NOT EXISTS idx_remitos_fecha ON remitos_carga(fecha);
 CREATE INDEX IF NOT EXISTS idx_bulk_fecha ON compras_bulk(fecha);
+
+-- Índices de rendimiento para consultas frecuentes de clientes y cobros
+CREATE INDEX IF NOT EXISTS idx_remitos_cliente ON remitos_carga(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_remitos_cliente_pagado ON remitos_carga(cliente_id, pagado);
+CREATE INDEX IF NOT EXISTS idx_pagos_cliente ON pagos_clientes(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_aplicacion_pago ON aplicacion_pagos(pago_id);
+

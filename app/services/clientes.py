@@ -56,6 +56,11 @@ def registrar_cliente(
 def list_clientes(limit: int | None = None, offset: int = 0, *, solo_con_saldo: bool = False) -> list[dict]:
     import datetime
     saldo_filter = "WHERE c.saldo_actual > 0" if solo_con_saldo else ""
+    limit_clause = ""
+    if limit is not None:
+        offset = max(0, int(offset))
+        limit = max(1, min(int(limit), 10_000))
+        limit_clause = f" LIMIT {limit} OFFSET {offset}"
     with get_db() as conn:
         # Consulta compatible con PostgreSQL (GROUP BY ANSI y sin aritmética de fecha nativa compleja)
         rows = conn.execute(
@@ -69,6 +74,7 @@ def list_clientes(limit: int | None = None, offset: int = 0, *, solo_con_saldo: 
             GROUP BY c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.saldo_inicial, c.created_at, c.fecha_ultimo_pago,
                      c.telefono, c.cuit, c.direccion, c.email
             ORDER BY c.nombre ASC
+            {limit_clause}
             """
         ).fetchall()
         
@@ -113,14 +119,14 @@ def list_clientes(limit: int | None = None, offset: int = 0, *, solo_con_saldo: 
                     f_ultimo = datetime.datetime.strptime(r["fecha_ultimo_pago"], "%Y-%m-%d").date()
                     if (today - f_ultimo).days > 60:
                         inrecuperable = True
-                except:
+                except (ValueError, TypeError):
                     pass
             elif r["oldest_unpaid"]:
                 try:
                     f_oldest = datetime.datetime.strptime(r["oldest_unpaid"], "%Y-%m-%d").date()
                     if (today - f_oldest).days > 60:
                         inrecuperable = True
-                except:
+                except (ValueError, TypeError):
                     pass
 
         remitos_vencidos = vencidos_map.get(r["id"], 0)
@@ -144,10 +150,6 @@ def list_clientes(limit: int | None = None, offset: int = 0, *, solo_con_saldo: 
             "en_mora": en_mora,
             "inrecuperable": inrecuperable
         })
-    if limit is not None:
-        offset = max(0, int(offset))
-        limit = max(1, min(int(limit), 10_000))
-        return out[offset : offset + limit]
     return out
 
 def recalcular_saldo_cliente(conn, cliente_id: int) -> float:

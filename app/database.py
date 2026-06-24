@@ -699,6 +699,9 @@ def _run_migrations(conn):
         CREATE INDEX IF NOT EXISTS idx_clientes_nombre ON clientes(nombre);
         CREATE INDEX IF NOT EXISTS idx_remitos_cliente ON remitos_carga(cliente_id);
         CREATE INDEX IF NOT EXISTS idx_remitos_fecha ON remitos_carga(fecha);
+        CREATE INDEX IF NOT EXISTS idx_remitos_cliente_pagado ON remitos_carga(cliente_id, pagado);
+        CREATE INDEX IF NOT EXISTS idx_pagos_cliente ON pagos_clientes(cliente_id);
+        CREATE INDEX IF NOT EXISTS idx_aplicacion_pago ON aplicacion_pagos(pago_id);
         """
     )
 
@@ -748,6 +751,32 @@ def _run_migrations(conn):
 
     for table in ("clientes", "remitos_carga", "operaciones_financieras"):
         _migrate_sync_entity_uuid(conn, table, is_pg)
+
+    _ensure_performance_indexes(conn)
+
+
+def _ensure_performance_indexes(conn) -> None:
+    """Índices para joins/filtros frecuentes (idempotente en DBs existentes)."""
+    if _table_exists(conn, "remitos_carga"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_remitos_cliente ON remitos_carga(cliente_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_remitos_fecha ON remitos_carga(fecha)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_remitos_cliente_pagado "
+            "ON remitos_carga(cliente_id, pagado)"
+        )
+    if _table_exists(conn, "pagos_clientes"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pagos_cliente ON pagos_clientes(cliente_id)"
+        )
+    if _table_exists(conn, "aplicacion_pagos"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_aplicacion_pago ON aplicacion_pagos(pago_id)"
+        )
+
 
 def _migrate_sync_entity_uuid(conn, table: str, is_pg: bool) -> None:
     import uuid as uuid_mod

@@ -4,12 +4,19 @@ const $ = id => document.getElementById(id);
         window.onerror = function(msg, url, lineNo, columnNo, error) {
             if (String(msg).includes('api.open-meteo.com')) return false;
             console.error("Error global de JS:", msg, "Línea:", lineNo, "Error:", error);
-            // alert solo si estamos en móvil para que el usuario pueda ver qué falló.
-            if(window.innerWidth < 1000) {
-                alert("Error JS: " + msg + "nLínea: " + lineNo + ":" + columnNo + "n" + (error ? error.stack : ""));
-            }
+            // Usar toast en lugar de alert para no bloquear la UI
+            try {
+                const toastEl = document.getElementById('toast');
+                if (toastEl) {
+                    toastEl.textContent = 'Error inesperado: ' + msg;
+                    toastEl.className = 'toast show error';
+                    clearTimeout(toastEl._t);
+                    toastEl._t = setTimeout(() => toastEl.classList.remove('show'), 5000);
+                }
+            } catch (_) {}
             return false;
         };
+
 
         // --- Módulos CRM (crm-db, crm-sync-api, crm-loader, crm-delete) ---
         const db = CrmDb.db;
@@ -323,6 +330,15 @@ const $ = id => document.getElementById(id);
         let selectedAuditId = null;
         let sessionUser = { role: 'admin', username: 'jefe', empresa_id: 1, empresa_nombre: '' };
 
+        let _remitosFullCache = null;
+        let _remitosFullCacheAt = 0;
+        const REMITOS_FULL_CACHE_MS = 60_000;
+
+        function invalidateRemitosFullCache() {
+            _remitosFullCache = null;
+            _remitosFullCacheAt = 0;
+        }
+
         let histPagosFiltro = '';
         let activeRowIndex = -1;
 
@@ -509,6 +525,7 @@ const $ = id => document.getElementById(id);
             }
             const remitoId = remitoPagoActual.id;
             aplicarCobroRemitoLocal(remitoId, monto);
+            invalidateRemitosFullCache();
             toast('Pago registrado');
             cerrarModalPagoRemito();
 
@@ -975,8 +992,25 @@ const $ = id => document.getElementById(id);
             }).join('') : '<tr><td colspan="4"><div class="empty-state">Sin remitos de venta</div></td></tr>';
         }
 
-        async function renderRemitosFull() {
-            const all = await api('/api/remitos');
+        async function renderRemitosFull(forceRefresh = false) {
+            const now = Date.now();
+            let all = null;
+            if (!forceRefresh && _remitosFullCache && (now - _remitosFullCacheAt) < REMITOS_FULL_CACHE_MS) {
+                all = _remitosFullCache;
+            } else {
+                try {
+                    all = await api('/api/remitos');
+                    _remitosFullCache = all;
+                    _remitosFullCacheAt = now;
+                } catch (e) {
+                    if (_remitosFullCache) {
+                        all = _remitosFullCache;
+                        toast('Mostrando remitos en caché', true);
+                    } else {
+                        throw e;
+                    }
+                }
+            }
             $('remitoCount').textContent = all.length + ' registros';
             $('tblRemitosFull').innerHTML = all.length ? all.map(r => {
                 const est = remitoEstado(r.estado_cobro ?? r.pagado);
@@ -1085,13 +1119,17 @@ const $ = id => document.getElementById(id);
             }).join('') : '<tr><td colspan="5" class="empty-state">No hay registros de auditoría</td></tr>';
         }
 
-        async function renderUsuarios() {
+        async function renderUsuarios(forceRefresh = false) {
             if (!$('tblUsuarios')) return;
-            try {
-                data.usuarios = await api('/api/usuarios');
-            } catch (e) {
-                toast(e.message || 'No se pudieron cargar usuarios', true);
-                data.usuarios = [];
+            if (!forceRefresh && Array.isArray(data.usuarios) && data.usuarios.length) {
+                // usar caché en memoria
+            } else {
+                try {
+                    data.usuarios = await api('/api/usuarios');
+                } catch (e) {
+                    toast(e.message || 'No se pudieron cargar usuarios', true);
+                    data.usuarios = [];
+                }
             }
             const arr = data.usuarios || [];
             $('usuariosCount').textContent = arr.length + ' usuario' + (arr.length === 1 ? '' : 's');
@@ -1125,10 +1163,10 @@ const $ = id => document.getElementById(id);
                             body: JSON.stringify({ role: sel.value })
                         });
                         toast('Rol actualizado');
-                        await renderUsuarios();
+                        await renderUsuarios(true);
                     } catch (e) {
                         toast(e.message, true);
-                        await renderUsuarios();
+                        await renderUsuarios(true);
                     }
                 });
             });
@@ -1143,7 +1181,7 @@ const $ = id => document.getElementById(id);
                             body: JSON.stringify({ activo })
                         });
                         toast(activo ? 'Usuario activado' : 'Usuario desactivado');
-                        await renderUsuarios();
+                        await renderUsuarios(true);
                     } catch (e) {
                         toast(e.message, true);
                     }
@@ -1541,8 +1579,7 @@ const $ = id => document.getElementById(id);
 
         async function openClientDrawer(clientId) {
             if (!$('view-cliente-detalle')) {
-                toast('Actualizando aplicación...', false);
-                setTimeout(() => window.location.reload(), 500);
+                toast('Vista de cliente no disponible. Recargá la aplicación.', true);
                 return;
             }
             const currentView = document.querySelector('.view.active')?.id?.replace(/^view-/, '') || '';
@@ -1787,6 +1824,13 @@ const $ = id => document.getElementById(id);
         function closeClientDrawer() {
             $('drawerClientOverlay').classList.remove('open');
             selectedClienteId = null;
+            // Restaurar topbar al estado normal (igual que volverDesdeClienteDetalle)
+            if ($('topbarNormalMode')) $('topbarNormalMode').style.setProperty('display', '', '');
+            if ($('topbarWspMode')) $('topbarWspMode').style.setProperty('display', 'none', 'important');
+            if ($('menuToggle')) $('menuToggle').style.setProperty('display', '', '');
+            if ($('btnVolverTop')) $('btnVolverTop').style.setProperty('display', 'none', 'important');
+            if ($('btnClientPrintWsp')) $('btnClientPrintWsp').style.setProperty('display', 'none', 'important');
+            if ($('btnTogglePro')) $('btnTogglePro').style.setProperty('display', '', '');
         }
 
         function updateSelectedRow(rows) {
@@ -1875,13 +1919,11 @@ const $ = id => document.getElementById(id);
                 });
             });
             document.querySelectorAll('[data-del]').forEach(btn => {
-                btn.addEventListener('click', async ev => {
+                btn.addEventListener('click', ev => {
                     ev.stopPropagation();
-                    if (!confirm('¿Eliminar esta obligación?')) return;
-                    await api('/api/operaciones/' + btn.dataset.del, { method: 'DELETE' });
-                    toast('Obligación eliminada');
-                    closeDrawer();
-                    await loadAll();
+                    const opId = btn.dataset.del;
+                    const e = data.enemigos.find(x => String(x.id) === String(opId));
+                    void CrmDelete.eliminarOperacion(opId, e?.alias);
                 });
             });
         }
@@ -2044,7 +2086,7 @@ const $ = id => document.getElementById(id);
                 });
                 toast('Usuario creado');
                 $('modalNuevoUsuario')?.classList.remove('open');
-                await renderUsuarios();
+                await renderUsuarios(true);
             } catch (e) {
                 toast(e.message, true);
             }
@@ -2799,6 +2841,10 @@ const $ = id => document.getElementById(id);
         });
         
         $('btnRefresh').addEventListener('click', () => {
+            const btn = $('btnRefresh');
+            if (btn.disabled) return;
+            btn.disabled = true;
+            btn.classList.add('btn-spinning');
             void refrescarManual().then(() => {
                 const v = document.querySelector('.nav-item.active')?.dataset.view;
                 if (v === 'remitos') void renderRemitosFull();
@@ -2807,7 +2853,10 @@ const $ = id => document.getElementById(id);
                 if (v === 'usuarios') renderUsuarios();
                 if (v === 'finanzas-aging') renderFinanzasAging();
                 if (v === 'finanzas-margenes') renderFinanzasMargenes();
-            }).catch(() => {});
+            }).catch(() => {}).finally(() => {
+                btn.disabled = false;
+                btn.classList.remove('btn-spinning');
+            });
         });
 
         function setSidebarOpen(open) {
@@ -3049,6 +3098,7 @@ const $ = id => document.getElementById(id);
                 toast('Remito de venta registrado');
                 ev.target.reset();
                 if (ev.target.plazo) ev.target.plazo.value = 30;
+                invalidateRemitosFullCache();
                 await loadAll();
                 if (currentClientData) {
                     await openClientDrawer(currentClientData.id);
@@ -3392,6 +3442,7 @@ const $ = id => document.getElementById(id);
             try {
                 const res = await api('/api/clientes/' + clientId + '/saldo-inicial', {
                     method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ saldo_inicial: parsed, password: pass })
                 });
                 toast(res.message || "Saldo actualizado");
@@ -3452,6 +3503,7 @@ const $ = id => document.getElementById(id);
             try {
                 const res = await api('/api/remitos/' + remitoId + '/reset-pago', {
                     method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password: pass })
                 });
                 toast(res.message || "Pago restablecido");
@@ -4011,7 +4063,6 @@ const $ = id => document.getElementById(id);
         actualizarUIOffline();
         window.abrirNuevaVenta = function() {
             $('formRemito').reset();
-            switchView('ventas-express');
             if (currentClientData) {
                 $('inpVentaCliente').value = currentClientData.nombre;
                 $('btnVolverVentasExpress').textContent = '← Volver al Perfil de ' + currentClientData.nombre;
@@ -4228,6 +4279,7 @@ const $ = id => document.getElementById(id);
             CrmBus.on('cerrarModalFacturaOriginal', () => cerrarModalFacturaOriginal());
             CrmBus.on('closeAuditModal', () => $('modalPasswordAuditoria')?.classList.remove('open'));
             CrmBus.on('getAuditDeletePassword', () => $('inpPasswordAuditoria')?.value || '');
+            CrmBus.on('invalidateRemitosCache', () => invalidateRemitosFullCache());
         }
 
         async function boot() {

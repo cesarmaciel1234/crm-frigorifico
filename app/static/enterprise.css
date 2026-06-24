@@ -465,7 +465,7 @@ body::before {
     border: 1px solid var(--border-default);
     border-radius: 14px;
     padding: 14px 16px;
-    background: var(--bg-surface-1);
+    background: var(--bg-surface);
     transition: box-shadow 0.15s, border-color 0.15s;
 }
 .bulk-lot-card:hover { border-color: var(--brand); box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08); }
@@ -886,6 +886,17 @@ table:not(.data-table):not(.xls-table) tr:hover td { background: var(--bg-hover)
 }
 .loader-text { font-size: 13px; color: var(--text-primary); font-weight: 600; letter-spacing: 0.02em; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Botón Actualizar: gira mientras carga, para al terminar */
+#btnRefresh.btn-spinning svg {
+    animation: spin 0.7s linear infinite;
+    transform-origin: center;
+}
+#btnRefresh:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    pointer-events: none;
+}
 
 .menu-toggle { display: none; }
 

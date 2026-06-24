@@ -488,7 +488,10 @@
                     }
                 }
             },
-            afterOptimistic: () => bus().emit('cerrarModalFacturaOriginal'),
+            afterOptimistic: () => {
+                bus().emit('invalidateRemitosCache');
+                bus().emit('cerrarModalFacturaOriginal');
+            },
         });
     };
 
@@ -512,14 +515,19 @@
         setData(data);
         void persistLocal();
         bus().emit('toast', 'Facturas eliminadas');
+        bus().emit('invalidateRemitosCache');
 
         void (async () => {
             try {
-                for (const rid of ids) {
-                    await api('/api/remitos/' + rid, {
+                const resultados = await Promise.allSettled(
+                    ids.map(rid => api('/api/remitos/' + rid, {
                         method: 'DELETE',
                         headers: deleteHeaders(pass),
-                    });
+                    }))
+                );
+                const fallos = resultados.filter(r => r.status === 'rejected');
+                if (fallos.length) {
+                    bus().emit('toast', `${fallos.length} factura(s) no se pudieron eliminar del servidor`, true);
                 }
                 if (selectedClienteId) await bus().emit('openClientDrawer', selectedClienteId);
             } catch (e) {

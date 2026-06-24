@@ -123,7 +123,7 @@
 
             const settled = await fetchDashboardBundle(
                 bust,
-                forzarServidor ? 25000 : 0,
+                forzarServidor ? 12000 : 0,
             );
             const labels = ['dashboard', 'historial-pagos', 'bulk', 'clientes', 'auditoria'];
             const pick = (i, fallback) => settled[i].status === 'fulfilled' ? settled[i].value : fallback;
@@ -147,22 +147,10 @@
 
             const shaped = ensureDataShape(freshData);
             bus().emit('setData', shaped);
+            bus().emit('invalidateRemitosCache');
             await tenantCachePut('appData', shaped);
             bus().emit('safeRenderAll');
             publishNodeBackupAfterSync();
-
-            void (async () => {
-                try {
-                    const delta = await global.CrmSync?.pullDeltaLight?.();
-                    if (delta?.changes?.length) {
-                        const refreshed = await tenantCacheGet('appData');
-                        if (refreshed) {
-                            bus().emit('setData', ensureDataShape(refreshed));
-                            bus().emit('renderAll');
-                        }
-                    }
-                } catch (_) {}
-            })();
 
             if (avisarSiVacio && !servidorTieneDatos(freshData)) {
                 try {
