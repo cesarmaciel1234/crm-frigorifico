@@ -227,7 +227,7 @@ def auth_reset_password():
 
 @views_bp.route("/")
 def index():
-    resp = make_response(render_template("terminal.html"))
+    resp = make_response(render_template("terminal.html", app_version=Config.APP_VERSION))
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp

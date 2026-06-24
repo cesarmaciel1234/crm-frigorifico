@@ -1437,56 +1437,91 @@ const $ = id => document.getElementById(id);
         }
 
         function renderBulkLots() {
-            const table = $('tblBulkLots');
-            if (!table) return;
+            const list = $('bulkLotsList');
+            const empty = $('bulkLotsEmpty');
+            const hint = $('bulkLotsHint');
+            if (!list) return;
+
+            const lotes = data.bulk || [];
             const now = new Date();
-            now.setHours(0,0,0,0);
-            
-            table.innerHTML = data.bulk && data.bulk.length ? data.bulk.map(b => {
+            now.setHours(0, 0, 0, 0);
+
+            let kgDisp = 0;
+            let valorStock = 0;
+            lotes.forEach(b => {
+                const rem = Number(b.kg_remanentes) || 0;
+                const tot = Number(b.kg_totales) || 0;
+                kgDisp += rem;
+                if (tot > 0 && rem > 0) {
+                    valorStock += rem * (Number(b.costo_total_bulk) / tot);
+                }
+            });
+
+            if ($('bulkStatLotes')) $('bulkStatLotes').textContent = String(lotes.length);
+            if ($('bulkStatKg')) $('bulkStatKg').textContent = fmt(kgDisp) + ' kg';
+            if ($('bulkStatValor')) $('bulkStatValor').textContent = '$' + fmtCompact(valorStock);
+
+            if (!lotes.length) {
+                list.innerHTML = '';
+                empty?.classList.remove('field-hidden');
+                hint?.classList.add('field-hidden');
+                return;
+            }
+
+            empty?.classList.add('field-hidden');
+            if (hint) {
+                if (sessionUser.role === 'admin') hint.classList.remove('field-hidden');
+                else hint.classList.add('field-hidden');
+            }
+
+            list.innerHTML = lotes.map(b => {
                 let badge = '';
                 if (b.kg_remanentes <= 0) {
                     badge = '<span class="badge badge-neutral">Agotado</span>';
+                } else if (b.fecha_vencimiento) {
+                    const vto = new Date(b.fecha_vencimiento + 'T00:00:00');
+                    const diffDays = Math.ceil((vto - now) / (1000 * 60 * 60 * 24));
+                    if (diffDays < 0) badge = '<span class="badge badge-danger">Vencido</span>';
+                    else if (diffDays <= 7) badge = '<span class="badge badge-warning">Vence pronto</span>';
+                    else badge = '<span class="badge badge-success">Activo</span>';
                 } else {
-                    if (b.fecha_vencimiento) {
-                        const vto = new Date(b.fecha_vencimiento + 'T00:00:00');
-                        const diffDays = Math.ceil((vto - now) / (1000 * 60 * 60 * 24));
-                        if (diffDays < 0) {
-                            badge = '<span class="badge badge-danger">Vencido</span>';
-                        } else if (diffDays <= 7) {
-                            badge = '<span class="badge badge-warning">Vence pronto</span>';
-                        } else {
-                            badge = '<span class="badge badge-success">Activo</span>';
-                        }
-                    } else {
-                        badge = '<span class="badge badge-success">Activo</span>';
-                    }
+                    badge = '<span class="badge badge-success">Activo</span>';
                 }
-                
-                const provText = b.proveedor ? `<div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-top:2px;">Prov: ${esc(b.proveedor)}</div>` : '';
-                const loteNumText = b.numero_lote ? ` - ${esc(b.numero_lote)}` : '';
-                const vtoText = b.fecha_vencimiento ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">Vto: ${b.fecha_vencimiento}</div>` : '';
-                
-                return `<tr>
-                    <td>
-                        <div class="home-contraparte" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Lote #${b.id}${loteNumText}</div>
-                        ${provText}
-                    </td>
-                    <td style="font-size:11px;line-height:1.3">
-                        <div>Com: ${b.fecha}</div>
-                        ${vtoText}
-                    </td>
-                    <td style="line-height:1.4; font-size:10px;">
-                        <div style="font-weight:600">${fmt(b.kg_remanentes)} kg</div>
-                        <div style="color:var(--text-muted);font-size:9px;margin-top:2px">Orig: ${fmt(b.kg_totales)} kg</div>
-                    </td>
-                    <td>
-                        <div class="home-amount" style="font-size:13px">$${fmtCompact(b.costo_total_bulk)}</div>
-                        <div class="home-subtext" style="font-size:9px;margin-top:2px">x Kg: $${fmtCompact(b.costo_kg)}</div>
-                    </td>
-                    <td style="text-align:center">${badge}</td>
-                    ${sessionUser.role === 'admin' ? `<td style="text-align:center"><button type="button" class="btn btn-ghost btn-sm" title="Eliminar lote mal cargado" onclick="eliminarLoteBulk(${b.id})" style="color:var(--danger);padding:4px 8px;">🗑</button></td>` : ''}
-                </tr>`;
-            }).join('') : '<tr><td colspan="' + (sessionUser.role === 'admin' ? 6 : 5) + '" style="color:var(--text-muted);padding:16px;text-align:center">Sin lotes de compra bulk registrados</td></tr>';
+
+                const loteNum = b.numero_lote ? ' · ' + esc(b.numero_lote) : '';
+                const prov = b.proveedor ? 'Proveedor: ' + esc(b.proveedor) : '';
+                const vto = b.fecha_vencimiento ? 'Vence: ' + b.fecha_vencimiento : '';
+                const meta = [prov, vto].filter(Boolean).join(' · ');
+
+                const deleteBtn = sessionUser.role === 'admin'
+                    ? `<button type="button" class="bulk-lot-delete" title="Eliminar lote mal cargado" onclick="eliminarLoteBulk(${b.id})">Eliminar</button>`
+                    : '';
+
+                return `<article class="bulk-lot-card">
+                    <div class="bulk-lot-head">
+                        <div>
+                            <div class="bulk-lot-title">Lote #${b.id}${loteNum}</div>
+                            <div class="bulk-lot-sub">Compra: ${esc(b.fecha || '—')}${meta ? ' · ' + meta : ''}</div>
+                        </div>
+                        <div class="bulk-lot-actions">${badge}${deleteBtn}</div>
+                    </div>
+                    <div class="bulk-lot-metrics">
+                        <div>
+                            <div class="bulk-lot-metric-label">Kg remanentes</div>
+                            <div class="bulk-lot-metric-value">${fmt(b.kg_remanentes)} kg</div>
+                            <div class="bulk-lot-sub">Orig: ${fmt(b.kg_totales)} kg</div>
+                        </div>
+                        <div>
+                            <div class="bulk-lot-metric-label">Costo total</div>
+                            <div class="bulk-lot-metric-value">$${fmtCompact(b.costo_total_bulk)}</div>
+                        </div>
+                        <div>
+                            <div class="bulk-lot-metric-label">Costo / kg</div>
+                            <div class="bulk-lot-metric-value">$${fmtCompact(b.costo_kg)}</div>
+                        </div>
+                    </div>
+                </article>`;
+            }).join('');
         }
 
         window.eliminarLoteBulk = async function(loteId) {
@@ -3047,6 +3082,7 @@ const $ = id => document.getElementById(id);
             document.querySelectorAll('.bulk-subview').forEach(el => el.classList.add('field-hidden'));
             $(id).classList.remove('field-hidden');
             $(id).classList.add('fade-in');
+            if (id === 'bulkHistorial') renderBulkLots();
             setTimeout(() => $(id).classList.remove('fade-in'), 300);
         };
 

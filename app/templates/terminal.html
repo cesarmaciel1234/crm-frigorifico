@@ -26,7 +26,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/enterprise.css?v=1730000008">
+    <link rel="stylesheet" href="/static/enterprise.css?v=3.3.1">
     <style>
         .balance-grid {
             display: grid;
@@ -328,7 +328,7 @@
         <div class="sidebar-foot" style="flex-direction: column; align-items: stretch; gap: 8px;">
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <span>Distribuidora de carne</span>
-                <span class="version-tag">v3.2 PRO</span>
+                <span class="version-tag">v{{ app_version }} PRO</span>
             </div>
             <button type="button" class="btn btn-ghost btn-sm" id="btnBackup" style="width:100%; color:#3b82f6;">⛁ Backup / Nube</button>
             <button type="button" class="btn btn-ghost btn-sm" id="btnLogoutSidebar" style="width:100%;">Cerrar sesión</button>
@@ -1008,25 +1008,37 @@
                 <!-- SUBVIEW: Historial Compras -->
                 <div id="bulkHistorial" class="bulk-subview field-hidden">
                     <button class="btn btn-ghost btn-volver-menu" onclick="volverMenuBulk()">← Volver a opciones</button>
-                    <div class="card" style="max-width: 800px; margin: 20px auto 0;">
-                        <div class="card-head"><h2>Historial de Lotes (Bulk)</h2></div>
+                    <div class="card bulk-historial-panel">
+                        <div class="card-head">
+                            <h2>Historial de Lotes (Bulk)</h2>
+                            <span>Stock mayorista cargado y disponible para ventas</span>
+                        </div>
                         <div class="card-body padded">
-                            <div class="table-wrap">
-                                <table class="data-table home-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Lote</th>
-                                            <th>Fecha</th>
-                                            <th>Kilos (Rem.)</th>
-                                            <th>Costo ($)</th>
-                                            <th>Estado</th>
-                                            <th style="width:52px;"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tblBulkLots"></tbody>
-                                </table>
+                            <div class="bulk-summary-row" id="bulkLotsSummary">
+                                <div class="bulk-summary-item">
+                                    <div class="bulk-summary-label">Lotes</div>
+                                    <div class="bulk-summary-value" id="bulkStatLotes">—</div>
+                                </div>
+                                <div class="bulk-summary-item">
+                                    <div class="bulk-summary-label">Kg disponibles</div>
+                                    <div class="bulk-summary-value" id="bulkStatKg">—</div>
+                                </div>
+                                <div class="bulk-summary-item">
+                                    <div class="bulk-summary-label">Valor en stock</div>
+                                    <div class="bulk-summary-value" id="bulkStatValor">—</div>
+                                </div>
                             </div>
-                            <p style="font-size:0.8rem;color:#64748b;margin-top:12px;">Para corregir cargas erróneas, eliminá el lote con contraseña maestra (solo si no tiene ventas asociadas).</p>
+                            <div class="bulk-hint-banner" id="bulkLotsHint">
+                                <span>🗑</span>
+                                <span>Para corregir una carga errónea, eliminá el lote con <strong>contraseña maestra</strong> (solo si no tiene ventas asociadas).</span>
+                            </div>
+                            <div id="bulkLotsEmpty" class="bulk-empty-state field-hidden">
+                                <div class="bulk-empty-icon">📦</div>
+                                <h3>Sin lotes bulk registrados</h3>
+                                <p>Cuando cargues un lote mayorista, aparecerá acá con kilos, costo y estado.</p>
+                                <button type="button" class="btn btn-primary" onclick="abrirSubVistaBulk('bulkCargar')">Registrar primer lote</button>
+                            </div>
+                            <div id="bulkLotsList" class="bulk-lots-list"></div>
                         </div>
                     </div>
                 </div>
@@ -1678,7 +1690,7 @@
 
     <script src="/static/js/crm-safe.js"></script>
     <script src="/static/vendor/dexie.min.js"></script>
-    <script src="/static/js/sync-engine.js?v=2.2"></script>
-    <script src="/static/js/app.js?v=2.71"></script>
+    <script src="/static/js/sync-engine.js?v=3.3"></script>
+    <script src="/static/js/app.js?v=3.3.1"></script>
 </body>
 </html>
