@@ -1,7 +1,40 @@
 from typing import Any, Optional
+
 from app.database import get_db
 from app.utils import fmt_plazo_dias
 from app.services.pagos import calc_estado_vencimiento, calc_plan_cuotas
+
+_OPERACIONES_SQL = """
+    SELECT id, alias, tipo, recibido, pagar, meses,
+           fecha_cierre, fecha_vencimiento, cuotas,
+           COALESCE(cuotas_pagadas, 0) AS cuotas_pagadas,
+           kg, precio_kg, plazo_dias, created_at
+    FROM operaciones_financieras
+"""
+
+
+def _get_operaciones_rows(conn=None) -> list[dict[str, Any]]:
+    """Carga operaciones_financieras una sola vez por request HTTP."""
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context() and getattr(g, "_operaciones_fin_rows", None) is not None:
+            return g._operaciones_fin_rows
+    except ImportError:
+        has_request_context = None
+
+    if conn is not None:
+        rows = [dict(row) for row in conn.execute(_OPERACIONES_SQL).fetchall()]
+    else:
+        with get_db() as db_conn:
+            rows = [dict(row) for row in db_conn.execute(_OPERACIONES_SQL).fetchall()]
+
+    try:
+        if has_request_context and has_request_context():
+            g._operaciones_fin_rows = rows
+    except ImportError:
+        pass
+    return rows
 
 def calc_cfr(recibido: float, pagar: float, meses: int) -> Optional[float]:
     """Costo Financiero Real mensual (%)."""
@@ -14,15 +47,10 @@ def sangria_diaria() -> dict[str, Any]:
     Sangría diaria = costo financiero/30 + reserva diaria de cheques pendientes.
     Proveedores quedan fuera del circuito financiero.
     """
-    with get_db() as conn:
-        rows = conn.execute(
-            """
-            SELECT id, tipo, recibido, pagar, cuotas, COALESCE(cuotas_pagadas, 0) AS cuotas_pagadas,
-                   fecha_vencimiento
-            FROM operaciones_financieras
-            WHERE LOWER(tipo) != 'proveedor'
-            """
-        ).fetchall()
+    rows = [
+        row for row in _get_operaciones_rows()
+        if (row.get("tipo") or "").lower() != "proveedor"
+    ]
 
     total_intereses = 0.0
     sangria_cheques = 0.0
@@ -30,8 +58,7 @@ def sangria_diaria() -> dict[str, Any]:
     cheques_activos = 0
     ops_activas = 0
 
-    for row in rows:
-        r = dict(row)
+    for r in rows:
         tipo = (r["tipo"] or "").lower()
         if r["cuotas"] is not None and r["cuotas_pagadas"] >= r["cuotas"]:
             continue
@@ -76,17 +103,12 @@ def _saldo_pendiente_operacion(row: dict) -> float:
 
 def _desglose_deuda_financiera(conn) -> tuple[float, float, float]:
     """Saldo pendiente de deuda real desglosado en capital e interés."""
-    rows = conn.execute(
-        """
-        SELECT tipo, recibido, pagar, meses, fecha_vencimiento,
-               cuotas, COALESCE(cuotas_pagadas, 0) AS cuotas_pagadas
-        FROM operaciones_financieras
-        WHERE LOWER(tipo) != 'proveedor'
-        """
-    ).fetchall()
+    rows = [
+        row for row in _get_operaciones_rows(conn)
+        if (row.get("tipo") or "").lower() != "proveedor"
+    ]
     total = capital = interes = 0.0
-    for row in rows:
-        row_dict = dict(row)
+    for row_dict in rows:
         saldo = _saldo_pendiente_operacion(row_dict)
         if saldo <= 0:
             continue
@@ -103,16 +125,9 @@ def _desglose_deuda_financiera(conn) -> tuple[float, float, float]:
     return total, capital, interes
 
 def _deuda_pendiente_total(conn) -> tuple[float, float, float]:
-    rows = conn.execute(
-        """
-        SELECT tipo, recibido, pagar, meses, fecha_vencimiento,
-               cuotas, COALESCE(cuotas_pagadas, 0) AS cuotas_pagadas
-        FROM operaciones_financieras
-        """
-    ).fetchall()
+    rows = _get_operaciones_rows(conn)
     total = prov = fin = 0.0
-    for row in rows:
-        row_dict = dict(row)
+    for row_dict in rows:
         saldo = _saldo_pendiente_operacion(row_dict)
         if saldo <= 0:
             continue
@@ -298,6 +313,19 @@ def panel_estrategia(excedente: Optional[float] = None) -> dict[str, Any]:
     p = proyeccion_liberacion(excedente)
     return {"sangria": s, "activo": a, "flujo": a, "respiracion": a, "proyeccion": p}
 
+def _calc_cfr_from_row(row: dict) -> Optional[float]:
+    tipo = (row.get("tipo") or "").lower()
+    recibido = float(row.get("recibido") or 0)
+    pagar = float(row.get("pagar") or 0)
+    meses = int(row.get("meses") or 0)
+    if tipo in ("cheque", "proveedor") and pagar <= recibido:
+        return None
+    if tipo == "cheque":
+        return None
+    if recibido > 0 and meses > 0:
+        return ((pagar / recibido) - 1) / meses * 100
+    return None
+
 def _enemigo_from_row(row: dict, index: int) -> dict[str, Any]:
     tipo = row["tipo"] or ""
     es_tarjeta = tipo.lower() == "tarjeta"
@@ -305,7 +333,7 @@ def _enemigo_from_row(row: dict, index: int) -> dict[str, Any]:
     es_proveedor = tipo.lower() == "proveedor"
     sin_interes = es_cheque or (es_proveedor and float(row["pagar"]) <= float(row["recibido"]))
 
-    cfr_raw = row["cfr"]
+    cfr_raw = row["cfr"] if "cfr" in row else _calc_cfr_from_row(row)
     cfr = None if sin_interes or es_cheque else cfr_raw
     interes = 0.0 if sin_interes else round(row["pagar"] - row["recibido"], 2)
 
@@ -347,31 +375,22 @@ def _enemigo_from_row(row: dict, index: int) -> dict[str, Any]:
     }
 
 def ranking_enemigos() -> list[dict[str, Any]]:
-    with get_db() as conn:
-        rows = conn.execute(
-            """
-            SELECT id, alias, tipo, recibido, pagar, meses,
-                   fecha_cierre, fecha_vencimiento, cuotas,
-                   COALESCE(cuotas_pagadas, 0) AS cuotas_pagadas,
-                   kg, precio_kg, plazo_dias,
-                   created_at,
-                   CASE
-                       WHEN LOWER(tipo) IN ('cheque', 'proveedor') AND pagar <= recibido THEN NULL
-                       WHEN LOWER(tipo) = 'cheque' THEN NULL
-                       WHEN recibido > 0 AND meses > 0
-                       THEN (((pagar / recibido) - 1) / meses) * 100
-                       ELSE NULL
-                   END AS cfr
-            FROM operaciones_financieras
-            ORDER BY cfr DESC NULLS LAST, id DESC
-            """
-        ).fetchall()
+    rows = _get_operaciones_rows()
+    enemigos = [_enemigo_from_row(row, i) for i, row in enumerate(rows)]
 
-    return [_enemigo_from_row(dict(row), i) for i, row in enumerate(rows)]
+    def sort_key(e: dict[str, Any]) -> tuple:
+        cfr = e.get("cfr")
+        if cfr is None:
+            return (1, 0.0, -int(e.get("id") or 0))
+        return (0, -float(cfr), -int(e.get("id") or 0))
 
-def historial_vencimientos() -> list[dict[str, Any]]:
+    enemigos.sort(key=sort_key)
+    return enemigos
+
+def historial_vencimientos(enemigos: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    fuente = enemigos if enemigos is not None else ranking_enemigos()
     items = [
-        e for e in ranking_enemigos()
+        e for e in fuente
         if e.get("fecha_vencimiento") and (e.get("es_tarjeta") or e.get("es_cheque") or e.get("es_proveedor"))
     ]
 

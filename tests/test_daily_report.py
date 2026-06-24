@@ -20,23 +20,32 @@ def tenant_db(tmp_path):
 def test_build_daily_report_structure(tenant_db):
     registrar_cliente("Carniceria Test", 100000, "A", saldo_inicial=5000)
     report = build_daily_report()
-    assert report["version"] == "informe_diario_v1"
+    assert report["version"] == "informe_empresarial_v2"
     assert "resumen" in report
+    assert "balance" in report
+    assert "resumen_ejecutivo" in report
+    assert "operacional" in report
+    assert "antiguedad" in report
     assert "clientes_a_cobrar" in report
     assert "obligaciones_a_pagar" in report
+    assert "vencimientos_vencidos" in report
+    assert "top_cfr" in report
     assert report["resumen"]["total_a_cobrar"] >= 5000
     assert len(report["clientes_a_cobrar"]) >= 1
+    assert len(report["resumen_ejecutivo"]) >= 1
 
 
 def test_render_html_and_pdf(tenant_db):
     report = build_daily_report()
     html_doc = render_daily_report_html(report)
-    assert "Informe ejecutivo diario" in html_doc
+    assert "Informe Empresarial" in html_doc
+    assert "Resumen ejecutivo" in html_doc
     assert "Clientes a cobrar" in html_doc
+    assert "Antigüedad de deuda" in html_doc
 
     pdf = render_daily_report_pdf(report)
     assert pdf[:4] == b"%PDF"
 
     texto = whatsapp_summary_text(report)
-    assert "Informe diario" in texto
-    assert "A cobrar" in texto
+    assert "Informe Empresarial" in texto
+    assert "Patrimonio" in texto

@@ -34,7 +34,7 @@ def api_reporte_diario_json():
 @api_bp.route("/reportes/diario/html")
 def api_reporte_diario_html():
     try:
-        report = build_daily_report()
+        report = build_daily_report(include_details=False)
         html_doc = render_daily_report_html(report)
         return Response(html_doc, mimetype="text/html; charset=utf-8")
     except Exception as e:
@@ -51,7 +51,7 @@ def api_reporte_diario_pdf():
             pdf,
             mimetype="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="informe-diario-{fecha}.pdf"',
+                "Content-Disposition": f'attachment; filename="informe-empresarial-{fecha}.pdf"',
             },
         )
     except Exception as e:

@@ -4311,7 +4311,7 @@ const $ = id => document.getElementById(id);
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'informe-diario-' + new Date().toISOString().slice(0, 10) + '.pdf';
+                a.download = 'informe-empresarial-' + new Date().toISOString().slice(0, 10) + '.pdf';
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
@@ -4333,7 +4333,7 @@ const $ = id => document.getElementById(id);
                 ]);
                 if (!pdfRes.ok) throw new Error('No se pudo generar el PDF');
                 const blob = await pdfRes.blob();
-                const file = new File([blob], 'informe-diario.pdf', { type: 'application/pdf' });
+                const file = new File([blob], 'informe-empresarial.pdf', { type: 'application/pdf' });
                 const texto = wa.texto || '';
 
                 if (navigator.share && navigator.canShare?.({ files: [file] })) {

@@ -90,8 +90,8 @@ def api_dashboard():
     # 2. Pide los últimos 8 remitos de carne
     remitos = list_remitos(8)
     
-    # 3. Pide la historia clínica de vencimientos
-    historial = historial_vencimientos()
+    # 3. Pide la historia clínica de vencimientos (reutiliza enemigos ya calculados)
+    historial = historial_vencimientos(enemigos)
     
     vencidos = [h for h in historial if h.get("vencido")]
     

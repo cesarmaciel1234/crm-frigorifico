@@ -39,6 +39,7 @@ def _pdf_safe(text: Any) -> str:
         .replace("ó", "o").replace("ú", "u").replace("ñ", "n")
         .replace("Á", "A").replace("É", "E").replace("Í", "I")
         .replace("Ó", "O").replace("Ú", "U").replace("Ñ", "N")
+        .replace("·", "-").replace("–", "-").replace("—", "-")
     )
 
 
@@ -123,6 +124,110 @@ def _obligaciones_rows(items: list[dict], limit: int = 30) -> str:
     return "".join(rows)
 
 
+def _vencimientos_rows(items: list[dict], limit: int = 15) -> str:
+    if not items:
+        return '<tr><td colspan="4" class="empty">Sin vencimientos en este tramo</td></tr>'
+    rows = []
+    for v in items[:limit]:
+        estado = "VENCIDO" if v.get("vencido") else str(v.get("estado_vencimiento") or "—").upper()
+        cls = " row-mora" if v.get("vencido") else (" row-urgente" if v.get("estado_vencimiento") == "hoy" else "")
+        rows.append(
+            f"<tr class{cls}>"
+            f"<td><span class='concepto'>{_esc(v.get('alias') or v.get('tipo'))}</span></td>"
+            f"<td>{_tipo_badge(v.get('tipo'))}</td>"
+            f"<td class='num strong'>{_fmt_money(v.get('saldo_pendiente') or v.get('total_pagar'))}</td>"
+            f"<td>{_esc(v.get('fecha_vencimiento') or '—')} <span class='muted'>· {estado}</span></td>"
+            f"</tr>"
+        )
+    return "".join(rows)
+
+
+def _cfr_rows(items: list[dict], limit: int = 10) -> str:
+    if not items:
+        return '<tr><td colspan="4" class="empty">Sin deuda financiera con CFR</td></tr>'
+    rows = []
+    for e in items[:limit]:
+        rows.append(
+            f"<tr>"
+            f"<td><span class='concepto'>{_esc(e.get('alias'))}</span></td>"
+            f"<td>{_tipo_badge(e.get('tipo'))}</td>"
+            f"<td class='num strong' style='color:#dc2626'>{float(e.get('cfr') or 0):.1f}%</td>"
+            f"<td class='num'>{_fmt_money(e.get('saldo_pendiente') or e.get('pagar'))}</td>"
+            f"</tr>"
+        )
+    return "".join(rows)
+
+
+def _remitos_rows(items: list[dict], limit: int = 12) -> str:
+    if not items:
+        return '<tr><td colspan="5" class="empty">Sin remitos recientes</td></tr>'
+    rows = []
+    for rem in items[:limit]:
+        estado = str(rem.get("estado_cobro") or "—")
+        est_cls = "pill-ok" if estado == "cobrado" else ("pill-danger" if estado == "incobrable" else "")
+        rows.append(
+            f"<tr>"
+            f"<td>{_esc(rem.get('fecha'))}</td>"
+            f"<td><span class='concepto'>{_esc(rem.get('cliente'))}</span></td>"
+            f"<td class='num'>{_fmt_kg(rem.get('kg'))}</td>"
+            f"<td class='num strong'>{_fmt_money(rem.get('precio_venta_total'))}</td>"
+            f"<td><span class='badge-pill {est_cls}'>{_esc(estado.upper())}</span></td>"
+            f"</tr>"
+        )
+    return "".join(rows)
+
+
+def _aging_bars_html(totales: dict[str, Any]) -> str:
+    labels = [
+        ("0_30", "0–30 días", "#10b981"),
+        ("31_60", "31–60 días", "#f59e0b"),
+        ("61_90", "61–90 días", "#f97316"),
+        ("90_plus", "+90 días", "#ef4444"),
+    ]
+    vals = [float(totales.get(k) or 0) for k, _, _ in labels]
+    max_v = max(vals) if vals and max(vals) > 0 else 1.0
+    bars = []
+    for (key, label, color), val in zip(labels, vals):
+        pct = max(4, int(val / max_v * 100)) if val > 0 else 0
+        bars.append(
+            f'<div class="aging-row">'
+            f'<div class="aging-lbl">{label}</div>'
+            f'<div class="aging-track"><div class="aging-fill" style="width:{pct}%;background:{color}"></div></div>'
+            f'<div class="aging-val">{_fmt_money(val)}</div>'
+            f'</div>'
+        )
+    return "".join(bars)
+
+
+def _balance_sheet_html(balance: dict[str, Any]) -> str:
+    act = balance.get("activos") or {}
+    pas = balance.get("pasivos") or {}
+    return f"""
+    <div class="balance-sheet">
+      <div class="bs-col">
+        <div class="bs-head">Activos</div>
+        <div class="bs-row"><span>Caja real</span><span class="num">{_fmt_money(act.get('caja_real'))}</span></div>
+        <div class="bs-row"><span>Cuentas por cobrar</span><span class="num">{_fmt_money(act.get('cuentas_por_cobrar'))}</span></div>
+        <div class="bs-row"><span>Inventario valorizado</span><span class="num">{_fmt_money(act.get('inventario'))}</span></div>
+        <div class="bs-row bs-total"><span>Total activos</span><span class="num">{_fmt_money(act.get('total'))}</span></div>
+      </div>
+      <div class="bs-col">
+        <div class="bs-head">Pasivos</div>
+        <div class="bs-row"><span>Deuda financiera</span><span class="num">{_fmt_money(pas.get('deuda_financiera'))}</span></div>
+        <div class="bs-row"><span>Deuda comercial</span><span class="num">{_fmt_money(pas.get('deuda_comercial'))}</span></div>
+        <div class="bs-row bs-total"><span>Total pasivos</span><span class="num">{_fmt_money(pas.get('total'))}</span></div>
+        <div class="bs-row bs-pat"><span>Patrimonio neto</span><span class="num">{_fmt_money(balance.get('patrimonio'))}</span></div>
+      </div>
+    </div>"""
+
+
+def _executive_html(bullets: list[str]) -> str:
+    if not bullets:
+        return ""
+    items = "".join(f"<li>{_esc(b)}</li>" for b in bullets)
+    return f'<div class="exec-box"><div class="exec-title">Resumen ejecutivo</div><ul class="exec-list">{items}</ul></div>'
+
+
 def _kpi_card(label: str, value: str, sub: str, tone: str = "", icon: str = "") -> str:
     tone_cls = f" kpi-{tone}" if tone else ""
     val_cls = f" val-{tone}" if tone in ("green", "red", "blue", "amber") else ""
@@ -138,39 +243,65 @@ def _kpi_card(label: str, value: str, sub: str, tone: str = "", icon: str = "") 
 def render_daily_report_html(report: dict[str, Any]) -> str:
     emp = report.get("empresa") or {}
     r = report.get("resumen") or {}
+    op = report.get("operacional") or {}
+    proy = report.get("proyeccion") or {}
     nombre_emp = emp.get("razon_social") or "Empresa"
     fecha = report.get("fecha_legible") or report.get("fecha") or ""
     salud = _esc(r.get("estado_salud"))
     salud_cls = _salud_class(r.get("estado_salud"))
     cuit = _esc(emp.get("cuit") or "")
+    contacto = " · ".join(
+        x for x in [
+            emp.get("telefono"),
+            emp.get("email"),
+            emp.get("direccion"),
+        ] if x
+    )
 
     alert_html = ""
     if r.get("clientes_en_mora") or r.get("total_a_pagar_vencido"):
         alert_html = (
             f'<div class="alert">'
             f'<div class="alert-icon">!</div>'
-            f'<div><strong>Atención requerida</strong>'
+            f'<div><strong>Alertas del día</strong>'
             f'<p>{r.get("clientes_en_mora", 0)} clientes en mora '
             f'({_fmt_money(r.get("monto_en_mora"))}) · '
-            f'{_fmt_money(r.get("total_a_pagar_vencido"))} vencidos a pagar hoy.</p></div>'
+            f'{_fmt_money(r.get("total_a_pagar_vencido"))} vencidos a pagar · '
+            f'{r.get("deudas_urgentes", 0)} obligaciones urgentes.</p></div>'
             f"</div>"
         )
 
     cobranza = (
-        _kpi_card("A cobrar", _fmt_money(r.get("total_a_cobrar")), f"{r.get('clientes_con_saldo', 0)} cuentas con saldo", "green", "↗")
-        + _kpi_card("En mora", _fmt_money(r.get("monto_en_mora")), f"{r.get('clientes_en_mora', 0)} clientes atrasados", "red", "⚠")
-        + _kpi_card("Incobrables", str(r.get("clientes_inrecuperables", 0)), "Clientes marcados", "amber", "✕")
+        _kpi_card("A cobrar", _fmt_money(r.get("total_a_cobrar")), f"{r.get('clientes_con_saldo', 0)} cuentas", "green", "↗")
+        + _kpi_card("En mora", _fmt_money(r.get("monto_en_mora")), f"{r.get('clientes_en_mora', 0)} clientes", "red", "⚠")
+        + _kpi_card("Incobrables", str(r.get("clientes_inrecuperables", 0)), "Marcados +60d", "amber", "✕")
     )
     pagos = (
-        _kpi_card("A pagar", _fmt_money(r.get("total_a_pagar_financiero")), f"{r.get('obligaciones_activas', 0)} obligaciones", "red", "↘")
-        + _kpi_card("Vencido hoy", _fmt_money(r.get("total_a_pagar_vencido")), f"{r.get('deudas_urgentes', 0)} urgentes", "red", "⏱")
-        + _kpi_card("Deuda comercial", _fmt_money(r.get("total_a_pagar_comercial")), "Proveedores / operativo", "amber", "◎")
+        _kpi_card("Deuda financiera", _fmt_money(r.get("total_a_pagar_financiero")), f"{r.get('obligaciones_activas', 0)} ops", "red", "↘")
+        + _kpi_card("Vencido", _fmt_money(r.get("total_a_pagar_vencido")), f"{r.get('deudas_urgentes', 0)} urgentes", "red", "⏱")
+        + _kpi_card("Deuda comercial", _fmt_money(r.get("total_a_pagar_comercial")), "Proveedores", "amber", "◎")
     )
     posicion = (
-        _kpi_card("Caja real", _fmt_money(r.get("caja_real")), "Efectivo disponible", "blue", "◆")
-        + _kpi_card("Patrimonio neto", _fmt_money(r.get("patrimonio_neto")), f"Salud: {salud}", "blue", "★")
-        + _kpi_card("Stock físico", _fmt_kg(r.get("stock_kg")), "Inventario en kg", "", "▣")
-        + _kpi_card("Sangría diaria", _fmt_money(r.get("sangria_diaria")), "Costo financiero estimado", "", "∿")
+        _kpi_card("Caja real", _fmt_money(r.get("caja_real")), "Disponible", "blue", "◆")
+        + _kpi_card("Patrimonio", _fmt_money(r.get("patrimonio_neto")), salud, "blue", "★")
+        + _kpi_card("Stock", _fmt_kg(r.get("stock_kg")), _fmt_money(r.get("stock_valorizado")), "", "▣")
+        + _kpi_card("Sangría/día", _fmt_money(r.get("sangria_diaria")), f"Fin {_fmt_money(r.get('sangria_financiera'))}", "", "∿")
+    )
+    operacion = (
+        _kpi_card("Ventas hoy", _fmt_money(op.get("ventas_hoy")), f"{op.get('remitos_hoy', 0)} remitos · {_fmt_kg(op.get('kg_hoy'))}", "green", "₿")
+        + _kpi_card("Ventas del mes", _fmt_money(op.get("ventas_mes")), f"Margen {op.get('margen_pct_mes', 0)}%", "blue", "◈")
+        + _kpi_card("Cobros hoy", _fmt_money(op.get("cobros_hoy")), f"{op.get('pagos_registrados_hoy', 0)} pagos", "green", "✓")
+    )
+    aging_html = _aging_bars_html((report.get("antiguedad") or {}).get("totales") or {})
+    balance_html = _balance_sheet_html(report.get("balance") or {})
+    exec_html = _executive_html(report.get("resumen_ejecutivo") or [])
+    meta_proy = proy.get("meta_texto") or "—"
+    proy_html = (
+        f'<div class="proy-box">'
+        f'<div><span class="proy-lbl">Liberación de deuda</span><strong>{_esc(meta_proy)}</strong> meses</div>'
+        f'<div><span class="proy-lbl">Excedente mensual</span><strong>{_fmt_money(proy.get("excedente_mensual"))}</strong></div>'
+        f'<div><span class="proy-lbl">Carga financiera</span><strong>{_fmt_money(proy.get("carga_financiera_mensual"))}</strong>/mes</div>'
+        f'</div>'
     )
 
     return f"""<!DOCTYPE html>
@@ -178,181 +309,161 @@ def render_daily_report_html(report: dict[str, Any]) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Informe diario — {_esc(nombre_emp)}</title>
+<title>Informe Empresarial — {_esc(nombre_emp)}</title>
 <style>
 * {{ box-sizing:border-box; margin:0; padding:0; }}
 body {{
-  font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-family:'Segoe UI',system-ui,sans-serif;
   color:#0f172a; font-size:10pt; line-height:1.55;
-  background:linear-gradient(160deg,#eef2ff 0%,#f8fafc 45%,#f1f5f9 100%);
-  min-height:100vh; padding:32px 20px;
+  background:#e8edf5; min-height:100vh; padding:28px 16px;
 }}
 @media print {{
   body {{ background:#fff; padding:0; }}
   * {{ -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }}
-  .hero, .balance-strip, .kpi, .alert {{ break-inside:avoid; }}
-  .container {{ box-shadow:none!important; border:none!important; }}
+  .section, .exec-box, .balance-sheet, .kpi {{ break-inside:avoid; }}
 }}
 .container {{
-  max-width:920px; margin:0 auto; background:#fff;
-  border-radius:20px; overflow:hidden;
-  box-shadow:0 20px 50px rgba(15,23,42,.08), 0 1px 0 rgba(15,23,42,.04);
-  border:1px solid rgba(226,232,240,.8);
+  max-width:980px; margin:0 auto; background:#fff;
+  border-radius:16px; overflow:hidden;
+  box-shadow:0 16px 48px rgba(15,23,42,.1);
+  border:1px solid #e2e8f0;
 }}
 .hero {{
-  background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 55%,#1d4ed8 100%);
-  color:#fff; padding:36px 40px 32px;
-  display:flex; justify-content:space-between; align-items:flex-start; gap:24px;
+  background:linear-gradient(135deg,#0c1222 0%,#1a2744 40%,#1e40af 100%);
+  color:#fff; padding:32px 36px 28px;
+  display:flex; justify-content:space-between; gap:20px;
 }}
-.hero-left {{ flex:1; }}
 .hero-tag {{
-  display:inline-flex; align-items:center; gap:6px;
-  font-size:7.5pt; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
-  background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2);
-  padding:5px 12px; border-radius:999px; margin-bottom:14px;
+  font-size:7pt; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+  background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2);
+  padding:4px 12px; border-radius:999px; margin-bottom:12px; display:inline-block;
 }}
-.brand {{ font-size:24pt; font-weight:800; letter-spacing:-.03em; line-height:1.15; }}
-.sub {{ color:rgba(255,255,255,.72); font-size:9.5pt; margin-top:8px; font-weight:500; }}
+.brand {{ font-size:22pt; font-weight:800; letter-spacing:-.02em; }}
+.sub {{ color:rgba(255,255,255,.7); font-size:9pt; margin-top:6px; }}
 .hero-right {{ text-align:right; }}
 .fecha-box {{
-  background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.18);
-  border-radius:14px; padding:14px 18px; min-width:140px;
+  background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15);
+  border-radius:12px; padding:12px 16px;
 }}
-.fecha-label {{ font-size:7pt; text-transform:uppercase; letter-spacing:.1em; opacity:.7; font-weight:600; }}
-.fecha-val {{ font-size:14pt; font-weight:800; margin-top:4px; }}
+.fecha-label {{ font-size:7pt; text-transform:uppercase; opacity:.65; }}
+.fecha-val {{ font-size:13pt; font-weight:800; margin-top:2px; }}
 .salud-pill {{
-  display:inline-block; margin-top:12px; padding:6px 14px; border-radius:999px;
-  font-size:8pt; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  display:inline-block; margin-top:10px; padding:5px 12px; border-radius:999px;
+  font-size:7.5pt; font-weight:700; text-transform:uppercase;
 }}
 .salud-good {{ background:#dcfce7; color:#166534; }}
 .salud-warn {{ background:#fef3c7; color:#92400e; }}
 .salud-bad {{ background:#fee2e2; color:#991b1b; }}
 .salud-neutral {{ background:#e2e8f0; color:#475569; }}
-.body-pad {{ padding:32px 40px 40px; }}
-.balance-strip {{
-  display:grid; grid-template-columns:repeat(3,1fr); gap:12px;
-  margin-bottom:28px; padding:16px 20px;
-  background:linear-gradient(90deg,#f8fafc,#f1f5f9);
-  border:1px solid #e2e8f0; border-radius:14px;
+.body-pad {{ padding:28px 36px 36px; }}
+.exec-box {{
+  background:linear-gradient(135deg,#f0f9ff,#f8fafc);
+  border:1px solid #bae6fd; border-radius:14px; padding:18px 22px; margin-bottom:24px;
 }}
-.balance-item {{ text-align:center; }}
-.balance-item .bl {{ font-size:7pt; text-transform:uppercase; letter-spacing:.08em; color:#64748b; font-weight:700; }}
-.balance-item .bv {{ font-size:13pt; font-weight:800; color:#0f172a; margin-top:4px; font-variant-numeric:tabular-nums; }}
-.balance-item .bv.pos {{ color:#059669; }}
-.balance-item .bv.neg {{ color:#dc2626; }}
-.kpi-group {{ margin-bottom:28px; }}
+.exec-title {{ font-size:8pt; font-weight:800; text-transform:uppercase; letter-spacing:.1em; color:#0369a1; margin-bottom:10px; }}
+.exec-list {{ margin:0; padding-left:18px; color:#334155; font-size:9.5pt; }}
+.exec-list li {{ margin-bottom:6px; }}
+.balance-sheet {{
+  display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px;
+}}
+.bs-col {{ border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }}
+.bs-head {{ background:#f1f5f9; padding:10px 16px; font-size:8pt; font-weight:800; text-transform:uppercase; color:#475569; }}
+.bs-row {{ display:flex; justify-content:space-between; padding:9px 16px; border-bottom:1px solid #f1f5f9; font-size:9.5pt; }}
+.bs-total {{ background:#f8fafc; font-weight:700; }}
+.bs-pat {{ background:#eff6ff; font-weight:800; color:#1d4ed8; }}
+.two-col {{ display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px; }}
+.aging-panel {{ border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; }}
+.aging-title {{ font-size:8pt; font-weight:800; text-transform:uppercase; color:#64748b; margin-bottom:12px; }}
+.aging-row {{ display:grid; grid-template-columns:72px 1fr 72px; gap:10px; align-items:center; margin-bottom:8px; }}
+.aging-lbl {{ font-size:8pt; color:#64748b; font-weight:600; }}
+.aging-track {{ height:8px; background:#f1f5f9; border-radius:999px; overflow:hidden; }}
+.aging-fill {{ height:100%; border-radius:999px; }}
+.aging-val {{ font-size:8.5pt; font-weight:700; text-align:right; }}
+.proy-box {{
+  border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px;
+  display:grid; grid-template-columns:repeat(3,1fr); gap:12px; text-align:center;
+}}
+.proy-lbl {{ display:block; font-size:7pt; text-transform:uppercase; color:#94a3b8; margin-bottom:4px; }}
+.kpi-group {{ margin-bottom:22px; }}
 .group-head {{
-  display:flex; align-items:center; gap:10px; margin-bottom:14px;
-  font-size:8pt; font-weight:800; text-transform:uppercase; letter-spacing:.1em; color:#64748b;
+  display:flex; align-items:center; gap:10px; margin-bottom:12px;
+  font-size:8pt; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#64748b;
 }}
 .group-head::after {{ content:''; flex:1; height:1px; background:#e2e8f0; }}
-.kpi-grid {{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }}
+.kpi-grid {{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }}
 .kpi-grid-4 {{ grid-template-columns:repeat(4,1fr); }}
-.kpi {{
-  border:1px solid #e2e8f0; border-radius:14px; padding:16px 18px;
-  background:#fff; position:relative; overflow:hidden;
-  transition:box-shadow .15s;
-}}
-.kpi::after {{
-  content:''; position:absolute; top:0; left:0; right:0; height:3px;
-  background:#cbd5e1;
-}}
-.kpi-green::after {{ background:linear-gradient(90deg,#10b981,#34d399); }}
-.kpi-red::after {{ background:linear-gradient(90deg,#ef4444,#f87171); }}
-.kpi-blue::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); }}
-.kpi-amber::after {{ background:linear-gradient(90deg,#f59e0b,#fbbf24); }}
-.kpi-top {{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }}
-.kpi-icon {{ font-size:11pt; opacity:.85; line-height:1; }}
-.lbl {{ font-size:7.5pt; text-transform:uppercase; letter-spacing:.06em; color:#64748b; font-weight:700; }}
-.val {{ font-size:17pt; font-weight:800; letter-spacing:-.02em; color:#0f172a; font-variant-numeric:tabular-nums; }}
-.val-green {{ color:#059669; }}
-.val-red {{ color:#dc2626; }}
-.val-blue {{ color:#2563eb; }}
-.val-amber {{ color:#d97706; }}
-.sub-text {{ font-size:8pt; color:#94a3b8; font-weight:500; margin-top:6px; }}
+.kpi {{ border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; background:#fff; position:relative; }}
+.kpi::after {{ content:''; position:absolute; top:0; left:0; right:0; height:3px; background:#cbd5e1; }}
+.kpi-green::after {{ background:#10b981; }}
+.kpi-red::after {{ background:#ef4444; }}
+.kpi-blue::after {{ background:#2563eb; }}
+.kpi-amber::after {{ background:#f59e0b; }}
+.kpi-top {{ display:flex; align-items:center; gap:6px; margin-bottom:8px; }}
+.kpi-icon {{ font-size:10pt; }}
+.lbl {{ font-size:7pt; text-transform:uppercase; letter-spacing:.05em; color:#64748b; font-weight:700; }}
+.val {{ font-size:15pt; font-weight:800; font-variant-numeric:tabular-nums; }}
+.val-green {{ color:#059669; }} .val-red {{ color:#dc2626; }}
+.val-blue {{ color:#2563eb; }} .val-amber {{ color:#d97706; }}
+.sub-text {{ font-size:7.5pt; color:#94a3b8; margin-top:4px; }}
 .alert {{
-  display:flex; gap:14px; align-items:flex-start;
-  background:linear-gradient(90deg,#fef2f2,#fff7ed);
-  border:1px solid #fecaca; border-left:4px solid #ef4444;
-  border-radius:12px; padding:16px 18px; margin-bottom:28px;
+  display:flex; gap:12px; background:#fef2f2; border:1px solid #fecaca;
+  border-left:4px solid #ef4444; border-radius:10px; padding:14px 16px; margin-bottom:22px;
 }}
 .alert-icon {{
-  width:28px; height:28px; border-radius:50%; background:#ef4444; color:#fff;
-  font-weight:800; font-size:14pt; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  width:26px; height:26px; border-radius:50%; background:#ef4444; color:#fff;
+  font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;
 }}
-.alert strong {{ display:block; color:#991b1b; font-size:10pt; margin-bottom:4px; }}
-.alert p {{ color:#7f1d1d; font-size:9pt; margin:0; }}
-.section {{ margin-bottom:32px; }}
+.section {{ margin-bottom:26px; }}
 .section-title {{
-  font-size:11pt; font-weight:800; color:#0f172a; margin-bottom:14px;
-  display:flex; align-items:center; gap:10px;
+  font-size:10.5pt; font-weight:800; margin-bottom:12px;
+  display:flex; align-items:center; gap:8px;
 }}
-.section-title span {{ color:#64748b; font-weight:600; font-size:9pt; }}
-.table-wrapper {{ border:1px solid #e2e8f0; border-radius:14px; overflow:hidden; }}
-table {{ width:100%; border-collapse:collapse; font-size:9.5pt; }}
+.section-title span {{ color:#94a3b8; font-weight:600; font-size:8.5pt; }}
+.table-wrapper {{ border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }}
+table {{ width:100%; border-collapse:collapse; font-size:9pt; }}
 th {{
-  background:#f8fafc; color:#475569; padding:11px 16px;
-  font-size:7.5pt; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
-  border-bottom:1px solid #e2e8f0; text-align:left;
+  background:#f8fafc; color:#475569; padding:10px 14px;
+  font-size:7pt; font-weight:800; text-transform:uppercase; text-align:left;
+  border-bottom:1px solid #e2e8f0;
 }}
-td {{ padding:11px 16px; border-bottom:1px solid #f1f5f9; vertical-align:middle; color:#334155; }}
-tr:last-child td {{ border-bottom:none; }}
+td {{ padding:10px 14px; border-bottom:1px solid #f1f5f9; }}
 tr:nth-child(even) td {{ background:#fafbfc; }}
 tr.row-mora td {{ background:#fff5f5!important; }}
 tr.row-urgente td {{ background:#fffbeb!important; }}
 .num {{ text-align:right; font-variant-numeric:tabular-nums; }}
-.muted {{ color:#94a3b8; font-weight:500; }}
-.strong {{ font-weight:700; color:#0f172a; }}
-.cliente-nombre, .concepto {{ font-weight:600; color:#1e293b; }}
-.badge-sc {{
-  display:inline-block; min-width:22px; text-align:center;
-  padding:3px 8px; border-radius:6px; font-size:8pt; font-weight:800;
-}}
-.sc-a {{ background:#dcfce7; color:#166534; }}
-.sc-b {{ background:#dbeafe; color:#1d4ed8; }}
-.sc-c {{ background:#fef3c7; color:#92400e; }}
-.sc-d {{ background:#fee2e2; color:#991b1b; }}
+.muted {{ color:#94a3b8; }}
+.strong {{ font-weight:700; }}
+.cliente-nombre, .concepto {{ font-weight:600; }}
+.badge-sc {{ display:inline-block; padding:2px 7px; border-radius:5px; font-size:7.5pt; font-weight:800; }}
+.sc-a {{ background:#dcfce7; color:#166534; }} .sc-b {{ background:#dbeafe; color:#1d4ed8; }}
+.sc-c {{ background:#fef3c7; color:#92400e; }} .sc-d {{ background:#fee2e2; color:#991b1b; }}
 .sc-x {{ background:#f1f5f9; color:#64748b; }}
-.badge-pill {{
-  display:inline-block; padding:3px 10px; border-radius:999px;
-  font-size:7.5pt; font-weight:700; letter-spacing:.03em;
-}}
-.pill-danger {{ background:#fee2e2; color:#b91c1c; }}
-.pill-ok {{ background:#ecfdf5; color:#047857; }}
-.badge-tipo {{
-  display:inline-block; padding:3px 9px; border-radius:6px;
-  font-size:7pt; font-weight:700; letter-spacing:.04em;
-}}
-.tipo-tarjeta {{ background:#ede9fe; color:#5b21b6; }}
-.tipo-cheque {{ background:#e0f2fe; color:#0369a1; }}
-.tipo-banco {{ background:#fce7f3; color:#9d174d; }}
-.tipo-otro {{ background:#f1f5f9; color:#475569; }}
-.empty {{ text-align:center; color:#94a3b8; padding:28px!important; font-style:italic; }}
+.badge-pill {{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:7pt; font-weight:700; }}
+.pill-danger {{ background:#fee2e2; color:#b91c1c; }} .pill-ok {{ background:#ecfdf5; color:#047857; }}
+.badge-tipo {{ display:inline-block; padding:2px 8px; border-radius:5px; font-size:6.5pt; font-weight:700; }}
+.tipo-tarjeta {{ background:#ede9fe; color:#5b21b6; }} .tipo-cheque {{ background:#e0f2fe; color:#0369a1; }}
+.tipo-banco {{ background:#fce7f3; color:#9d174d; }} .tipo-otro {{ background:#f1f5f9; color:#475569; }}
+.empty {{ text-align:center; color:#94a3b8; padding:24px!important; font-style:italic; }}
 .footer {{
-  padding:20px 40px; background:#f8fafc; border-top:1px solid #e2e8f0;
-  font-size:8pt; color:#94a3b8;
-  display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;
+  padding:16px 36px; background:#f8fafc; border-top:1px solid #e2e8f0;
+  font-size:7.5pt; color:#94a3b8; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;
 }}
-.footer strong {{ color:#64748b; }}
 @media (max-width:720px) {{
-  .hero {{ flex-direction:column; padding:28px 24px; }}
-  .hero-right {{ text-align:left; width:100%; }}
-  .body-pad {{ padding:24px; }}
-  .balance-strip, .kpi-grid, .kpi-grid-4 {{ grid-template-columns:1fr 1fr; }}
+  .hero {{ flex-direction:column; }} .balance-sheet, .two-col, .kpi-grid, .kpi-grid-4, .proy-box {{ grid-template-columns:1fr; }}
 }}
 </style>
 </head>
 <body>
 <div class="container">
   <header class="hero">
-    <div class="hero-left">
-      <div class="hero-tag">● Briefing del Jefe</div>
+    <div>
+      <div class="hero-tag">Informe Empresarial</div>
       <div class="brand">{_esc(nombre_emp)}</div>
-      <div class="sub">Informe ejecutivo diario · Master Total{f' · CUIT {cuit}' if cuit else ''}</div>
+      <div class="sub">Reporte de gestión · Master Total{f' · CUIT {cuit}' if cuit else ''}{f'<br>{_esc(contacto)}' if contacto else ''}</div>
     </div>
     <div class="hero-right">
       <div class="fecha-box">
-        <div class="fecha-label">Fecha del informe</div>
+        <div class="fecha-label">Fecha de corte</div>
         <div class="fecha-val">{_esc(fecha)}</div>
       </div>
       <span class="salud-pill {salud_cls}">{salud}</span>
@@ -360,60 +471,87 @@ tr.row-urgente td {{ background:#fffbeb!important; }}
   </header>
 
   <div class="body-pad">
-    <div class="balance-strip">
-      <div class="balance-item">
-        <div class="bl">Activo total</div>
-        <div class="bv pos">{_fmt_money(r.get('activo_total'))}</div>
-      </div>
-      <div class="balance-item">
-        <div class="bl">Pasivo total</div>
-        <div class="bv neg">{_fmt_money(r.get('pasivo_total'))}</div>
-      </div>
-      <div class="balance-item">
-        <div class="bl">Cuentas por cobrar</div>
-        <div class="bv">{_fmt_money(r.get('cuentas_por_cobrar'))}</div>
-      </div>
-    </div>
-
+    {exec_html}
     {alert_html}
+    {balance_html}
 
     <div class="kpi-group">
-      <div class="group-head">Cobranza</div>
+      <div class="group-head">Cobranza y cartera</div>
       <div class="kpi-grid">{cobranza}</div>
     </div>
     <div class="kpi-group">
-      <div class="group-head">Obligaciones de pago</div>
+      <div class="group-head">Pasivos y obligaciones</div>
       <div class="kpi-grid">{pagos}</div>
     </div>
     <div class="kpi-group">
       <div class="group-head">Posición financiera</div>
       <div class="kpi-grid kpi-grid-4">{posicion}</div>
     </div>
+    <div class="kpi-group">
+      <div class="group-head">Operación comercial</div>
+      <div class="kpi-grid">{operacion}</div>
+    </div>
+
+    <div class="two-col">
+      <div class="aging-panel">
+        <div class="aging-title">Antigüedad de deuda (cartera)</div>
+        {aging_html}
+      </div>
+      <div>{proy_html}</div>
+    </div>
 
     <div class="section">
-      <div class="section-title">Clientes a cobrar <span>{len(report.get('clientes_a_cobrar') or [])} registros</span></div>
+      <div class="section-title">Vencimientos vencidos <span>{len(report.get('vencimientos_vencidos') or [])}</span></div>
       <div class="table-wrapper">
-        <table>
-          <thead><tr><th>Cliente</th><th class="num">Scoring</th><th class="num">Límite</th><th class="num">Saldo</th><th class="num">Estado</th></tr></thead>
-          <tbody>{_clientes_rows(report.get('clientes_a_cobrar') or [])}</tbody>
-        </table>
+        <table><thead><tr><th>Concepto</th><th>Tipo</th><th class="num">Saldo</th><th>Vencimiento</th></tr></thead>
+        <tbody>{_vencimientos_rows(report.get('vencimientos_vencidos') or [])}</tbody></table>
       </div>
     </div>
 
     <div class="section">
-      <div class="section-title">Obligaciones a pagar <span>{len(report.get('obligaciones_a_pagar') or [])} registros</span></div>
+      <div class="section-title">Próximos vencimientos <span>{len(report.get('vencimientos_proximos') or [])}</span></div>
       <div class="table-wrapper">
-        <table>
-          <thead><tr><th>Concepto</th><th>Tipo</th><th class="num">Recibido</th><th class="num">Saldo</th><th>Vencimiento</th></tr></thead>
-          <tbody>{_obligaciones_rows(report.get('obligaciones_a_pagar') or [])}</tbody>
-        </table>
+        <table><thead><tr><th>Concepto</th><th>Tipo</th><th class="num">Saldo</th><th>Fecha</th></tr></thead>
+        <tbody>{_vencimientos_rows(report.get('vencimientos_proximos') or [])}</tbody></table>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Mayor costo financiero (CFR) <span>Top deudas</span></div>
+      <div class="table-wrapper">
+        <table><thead><tr><th>Operación</th><th>Tipo</th><th class="num">CFR mensual</th><th class="num">Saldo</th></tr></thead>
+        <tbody>{_cfr_rows(report.get('top_cfr') or [])}</tbody></table>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Clientes a cobrar <span>{len(report.get('clientes_a_cobrar') or [])}</span></div>
+      <div class="table-wrapper">
+        <table><thead><tr><th>Cliente</th><th class="num">Scoring</th><th class="num">Límite</th><th class="num">Saldo</th><th class="num">Estado</th></tr></thead>
+        <tbody>{_clientes_rows(report.get('clientes_a_cobrar') or [])}</tbody></table>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Obligaciones a pagar <span>{len(report.get('obligaciones_a_pagar') or [])}</span></div>
+      <div class="table-wrapper">
+        <table><thead><tr><th>Concepto</th><th>Tipo</th><th class="num">Recibido</th><th class="num">Saldo</th><th>Vencimiento</th></tr></thead>
+        <tbody>{_obligaciones_rows(report.get('obligaciones_a_pagar') or [])}</tbody></table>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Últimos remitos de venta <span>{len(report.get('remitos_recientes') or [])}</span></div>
+      <div class="table-wrapper">
+        <table><thead><tr><th>Fecha</th><th>Cliente</th><th class="num">Kg</th><th class="num">Venta</th><th>Estado</th></tr></thead>
+        <tbody>{_remitos_rows(report.get('remitos_recientes') or [])}</tbody></table>
       </div>
     </div>
   </div>
 
   <footer class="footer">
-    <span>Generado automáticamente para la gerencia · <strong>Master Total</strong></span>
-    <span>{_esc(report.get('generado_at', '')[:19].replace('T', ' '))} UTC</span>
+    <span>Informe Empresarial · <strong>Master Total</strong> · Confidencial</span>
+    <span>Generado {_esc(report.get('generado_at', '')[:19].replace('T', ' '))} UTC</span>
   </footer>
 </div>
 </body>
@@ -431,61 +569,126 @@ def render_daily_report_pdf(report: dict[str, Any]) -> bytes:
 
     emp = report.get("empresa") or {}
     r = report.get("resumen") or {}
+    op = report.get("operacional") or {}
+    bal = report.get("balance") or {}
+    act = bal.get("activos") or {}
+    pas = bal.get("pasivos") or {}
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=12)
     pdf.set_margins(12, 12, 12)
     pdf.add_page()
-    pdf.set_font("Helvetica", "B", 15)
-    pdf.cell(0, 8, _pdf_safe(emp.get("razon_social") or "Informe diario"), ln=True)
-    pdf.set_font("Helvetica", "", 9)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 7, _pdf_safe(emp.get("razon_social") or "Informe Empresarial"), ln=True)
+    pdf.set_font("Helvetica", "", 8)
     pdf.cell(
-        0, 5,
-        _pdf_safe(f"Informe ejecutivo · {report.get('fecha_legible', '')} · Salud: {r.get('estado_salud', '')}"),
+        0, 4,
+        _pdf_safe(
+            f"Informe Empresarial · {report.get('fecha_legible', '')} · "
+            f"Salud: {r.get('estado_salud', '')}"
+        ),
         ln=True,
     )
-    pdf.ln(3)
+    pdf.ln(2)
+
+    for bullet in (report.get("resumen_ejecutivo") or [])[:4]:
+        pdf.set_font("Helvetica", "", 7)
+        pdf.set_x(pdf.l_margin)
+        pdf.multi_cell(0, 3.5, _pdf_safe(f"- {str(bullet)[:140]}"))
+    pdf.ln(2)
+
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(0, 5, _pdf_safe("Balance patrimonial"), ln=True)
+    pdf.set_font("Helvetica", "", 7)
+    balance_lines = [
+        ("Caja real", act.get("caja_real")),
+        ("Cuentas por cobrar", act.get("cuentas_por_cobrar")),
+        ("Inventario", act.get("inventario")),
+        ("Total activos", act.get("total")),
+        ("Deuda financiera", pas.get("deuda_financiera")),
+        ("Deuda comercial", pas.get("deuda_comercial")),
+        ("Patrimonio neto", bal.get("patrimonio")),
+    ]
+    for label, val in balance_lines:
+        pdf.cell(55, 4, _pdf_safe(label))
+        pdf.cell(0, 4, _pdf_safe(_fmt_money(val)), ln=True)
+    pdf.ln(2)
 
     kpis = [
         ("A cobrar", _fmt_money(r.get("total_a_cobrar")), f"{r.get('clientes_con_saldo', 0)} ctas"),
         ("En mora", _fmt_money(r.get("monto_en_mora")), f"{r.get('clientes_en_mora', 0)} cli"),
-        ("A pagar", _fmt_money(r.get("total_a_pagar_financiero")), f"{r.get('obligaciones_activas', 0)} ops"),
-        ("Vencido", _fmt_money(r.get("total_a_pagar_vencido")), f"{r.get('deudas_urgentes', 0)} urg"),
+        ("A pagar fin.", _fmt_money(r.get("total_a_pagar_financiero")), f"{r.get('obligaciones_activas', 0)} ops"),
+        ("Vencido", _fmt_money(r.get("total_a_pagar_vencido")), ""),
+        ("Ventas mes", _fmt_money(op.get("ventas_mes")), f"Margen {op.get('margen_pct_mes', 0)}%"),
+        ("Ventas hoy", _fmt_money(op.get("ventas_hoy")), f"{op.get('remitos_hoy', 0)} rem"),
         ("Caja real", _fmt_money(r.get("caja_real")), ""),
-        ("Patrimonio", _fmt_money(r.get("patrimonio_neto")), ""),
-        ("Stock", _fmt_kg(r.get("stock_kg")), ""),
-        ("Sangria", _fmt_money(r.get("sangria_diaria")), ""),
+        ("Sangria/dia", _fmt_money(r.get("sangria_diaria")), ""),
     ]
     pdf.set_font("Helvetica", "B", 8)
     for label, val, sub in kpis:
-        pdf.cell(42, 5, _pdf_safe(label))
-        pdf.cell(48, 5, _pdf_safe(val))
-        pdf.cell(0, 5, _pdf_safe(sub), ln=True)
-    pdf.ln(3)
+        pdf.cell(38, 4, _pdf_safe(label))
+        pdf.cell(45, 4, _pdf_safe(val))
+        pdf.cell(0, 4, _pdf_safe(sub), ln=True)
+    pdf.ln(2)
+
+    aging = (report.get("antiguedad") or {}).get("totales") or {}
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.cell(0, 4, _pdf_safe("Antiguedad de deuda"), ln=True)
+    pdf.set_font("Helvetica", "", 7)
+    for key, lbl in [("0_30", "0-30d"), ("31_60", "31-60d"), ("61_90", "61-90d"), ("90_plus", "+90d")]:
+        pdf.cell(25, 4, _pdf_safe(lbl))
+        pdf.cell(0, 4, _pdf_safe(_fmt_money(aging.get(key))), ln=True)
+    pdf.ln(2)
 
     def table_block(title: str, headers: list[str], rows: list[list[str]], widths: list[int]):
         if pdf.get_y() > 255:
             pdf.add_page()
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(0, 6, _pdf_safe(title), ln=True)
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(0, 5, _pdf_safe(title), ln=True)
         pdf.set_font("Helvetica", "B", 7)
         for i, h in enumerate(headers):
-            pdf.cell(widths[i], 5, _pdf_safe(h), border=1)
+            pdf.cell(widths[i], 4, _pdf_safe(h), border=1)
         pdf.ln()
         pdf.set_font("Helvetica", "", 7)
         if not rows:
-            pdf.cell(sum(widths), 5, "Sin registros", border=1, ln=True)
+            pdf.cell(sum(widths), 4, "Sin registros", border=1, ln=True)
             pdf.ln(2)
             return
         for row in rows[:_PDF_MAX_ROWS]:
             for i, cell in enumerate(row):
-                pdf.cell(widths[i], 5, _pdf_safe(cell)[:36], border=1)
+                pdf.cell(widths[i], 4, _pdf_safe(cell)[:36], border=1)
             pdf.ln()
         extra = len(rows) - _PDF_MAX_ROWS
         if extra > 0:
             pdf.set_font("Helvetica", "I", 7)
             pdf.cell(0, 4, _pdf_safe(f"... y {extra} mas (ver informe HTML)"), ln=True)
-        pdf.ln(3)
+        pdf.ln(2)
 
+    table_block(
+        "Vencimientos vencidos",
+        ["Concepto", "Saldo", "Vto."],
+        [
+            [
+                str(v.get("alias") or v.get("tipo") or ""),
+                _fmt_money(v.get("saldo_pendiente") or v.get("total_pagar")),
+                str(v.get("fecha_vencimiento") or "-")[:10],
+            ]
+            for v in (report.get("vencimientos_vencidos") or [])
+        ],
+        [80, 40, 30],
+    )
+    table_block(
+        "Top CFR",
+        ["Operacion", "CFR%", "Saldo"],
+        [
+            [
+                str(e.get("alias") or ""),
+                f"{float(e.get('cfr') or 0):.1f}",
+                _fmt_money(e.get("saldo_pendiente") or e.get("pagar")),
+            ]
+            for e in (report.get("top_cfr") or [])
+        ],
+        [70, 20, 40],
+    )
     table_block(
         "Clientes a cobrar",
         ["Cliente", "Scor.", "Saldo", "Est."],
@@ -680,19 +883,24 @@ def _email_summary_html(report: dict[str, Any]) -> str:
     """HTML liviano para el cuerpo del email (el PDF lleva el detalle)."""
     emp = report.get("empresa") or {}
     r = report.get("resumen") or {}
+    op = report.get("operacional") or {}
     nombre = _esc(emp.get("razon_social") or "Empresa")
     fecha = _esc(report.get("fecha_legible") or "")
-    return f"""<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;color:#1e293b;padding:20px">
-<h2 style="margin:0 0 8px">Informe diario — {nombre}</h2>
-<p style="color:#64748b;margin:0 0 16px">{fecha}</p>
-<table style="border-collapse:collapse;font-size:14px">
-<tr><td style="padding:6px 16px 6px 0;color:#64748b">A cobrar</td><td><strong>{_fmt_money(r.get('total_a_cobrar'))}</strong></td></tr>
-<tr><td style="padding:6px 16px 6px 0;color:#64748b">En mora</td><td><strong style="color:#dc2626">{_fmt_money(r.get('monto_en_mora'))}</strong></td></tr>
-<tr><td style="padding:6px 16px 6px 0;color:#64748b">A pagar</td><td><strong>{_fmt_money(r.get('total_a_pagar_financiero'))}</strong></td></tr>
-<tr><td style="padding:6px 16px 6px 0;color:#64748b">Caja real</td><td><strong>{_fmt_money(r.get('caja_real'))}</strong></td></tr>
-<tr><td style="padding:6px 16px 6px 0;color:#64748b">Patrimonio</td><td><strong>{_fmt_money(r.get('patrimonio_neto'))}</strong></td></tr>
+    bullets = report.get("resumen_ejecutivo") or []
+    bullets_html = "".join(f"<li style='margin-bottom:6px'>{_esc(b)}</li>" for b in bullets[:4])
+    return f"""<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;color:#1e293b;padding:20px;max-width:600px">
+<h2 style="margin:0 0 8px">Informe Empresarial — {nombre}</h2>
+<p style="color:#64748b;margin:0 0 16px">{fecha} · Salud: <strong>{_esc(r.get('estado_salud'))}</strong></p>
+<ul style="font-size:14px;color:#334155;padding-left:18px;margin:0 0 18px">{bullets_html}</ul>
+<table style="border-collapse:collapse;font-size:14px;width:100%">
+<tr><td style="padding:6px 0;color:#64748b">Patrimonio neto</td><td style="text-align:right"><strong>{_fmt_money(r.get('patrimonio_neto'))}</strong></td></tr>
+<tr><td style="padding:6px 0;color:#64748b">A cobrar</td><td style="text-align:right"><strong>{_fmt_money(r.get('total_a_cobrar'))}</strong></td></tr>
+<tr><td style="padding:6px 0;color:#64748b">En mora</td><td style="text-align:right"><strong style="color:#dc2626">{_fmt_money(r.get('monto_en_mora'))}</strong></td></tr>
+<tr><td style="padding:6px 0;color:#64748b">A pagar</td><td style="text-align:right"><strong>{_fmt_money(r.get('total_a_pagar_financiero'))}</strong></td></tr>
+<tr><td style="padding:6px 0;color:#64748b">Ventas del mes</td><td style="text-align:right"><strong>{_fmt_money(op.get('ventas_mes'))}</strong></td></tr>
+<tr><td style="padding:6px 0;color:#64748b">Caja real</td><td style="text-align:right"><strong>{_fmt_money(r.get('caja_real'))}</strong></td></tr>
 </table>
-<p style="margin-top:20px;color:#64748b;font-size:13px">PDF completo adjunto.</p>
+<p style="margin-top:20px;color:#64748b;font-size:13px">Informe empresarial completo en PDF adjunto.</p>
 </body></html>"""
 
 
@@ -718,9 +926,9 @@ def send_daily_report_email(report: dict[str, Any], recipients: list[str] | None
 
     nombre = empresa.get("razon_social") or "Empresa"
     fecha = report.get("fecha_legible") or report.get("fecha") or ""
-    subject = f"Informe diario {nombre} — {fecha}"
-    plain = f"Informe ejecutivo diario de {nombre} ({fecha}). PDF adjunto."
-    pdf_name = f"informe-diario-{fecha.replace('/', '-')}.pdf"
+    subject = f"Informe Empresarial {nombre} — {fecha}"
+    plain = f"Informe empresarial de {nombre} ({fecha}). Resumen ejecutivo y PDF adjunto."
+    pdf_name = f"informe-empresarial-{fecha.replace('/', '-')}.pdf"
 
     try:
         pdf_bytes = render_daily_report_pdf(report)
@@ -766,20 +974,22 @@ def send_daily_report_email(report: dict[str, Any], recipients: list[str] | None
 
 def whatsapp_summary_text(report: dict[str, Any]) -> str:
     r = report.get("resumen") or {}
+    op = report.get("operacional") or {}
     emp = (report.get("empresa") or {}).get("razon_social") or "Empresa"
     fecha = report.get("fecha_legible") or ""
     lines = [
-        f"📊 *Informe diario — {emp}*",
-        f"📅 {fecha}",
+        f"📊 *Informe Empresarial — {emp}*",
+        f"📅 {fecha} · Salud: {r.get('estado_salud', '—')}",
         "",
-        f"💰 *A cobrar:* {_fmt_money(r.get('total_a_cobrar'))} ({r.get('clientes_con_saldo', 0)} clientes)",
-        f"🚨 *En mora:* {_fmt_money(r.get('monto_en_mora'))} ({r.get('clientes_en_mora', 0)} clientes)",
-        f"💳 *A pagar:* {_fmt_money(r.get('total_a_pagar_financiero'))}",
-        f"⏰ *Vencido:* {_fmt_money(r.get('total_a_pagar_vencido'))}",
-        f"🏦 *Caja real:* {_fmt_money(r.get('caja_real'))}",
         f"📈 *Patrimonio:* {_fmt_money(r.get('patrimonio_neto'))}",
-        f"Salud: {r.get('estado_salud', '—')}",
+        f"💰 *A cobrar:* {_fmt_money(r.get('total_a_cobrar'))} ({r.get('clientes_con_saldo', 0)} ctas)",
+        f"🚨 *En mora:* {_fmt_money(r.get('monto_en_mora'))}",
+        f"💳 *Deuda fin.:* {_fmt_money(r.get('total_a_pagar_financiero'))}",
+        f"⏰ *Vencido:* {_fmt_money(r.get('total_a_pagar_vencido'))}",
+        f"🏦 *Caja:* {_fmt_money(r.get('caja_real'))}",
+        f"🥩 *Ventas mes:* {_fmt_money(op.get('ventas_mes'))} (margen {op.get('margen_pct_mes', 0)}%)",
+        f"📦 *Stock:* {_fmt_kg(r.get('stock_kg'))}",
         "",
-        "PDF completo adjunto en el informe del panel del jefe.",
+        "PDF empresarial completo en el panel del jefe.",
     ]
     return "\n".join(lines)

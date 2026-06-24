@@ -53,17 +53,19 @@ def registrar_cliente(
     # 4. Le devuelve al Mozo el "número de cliente" para que le entregue su tarjeta
     return cliente_id
 
-def list_clientes(limit: int | None = None, offset: int = 0) -> list[dict]:
+def list_clientes(limit: int | None = None, offset: int = 0, *, solo_con_saldo: bool = False) -> list[dict]:
     import datetime
+    saldo_filter = "WHERE c.saldo_actual > 0" if solo_con_saldo else ""
     with get_db() as conn:
         # Consulta compatible con PostgreSQL (GROUP BY ANSI y sin aritmética de fecha nativa compleja)
         rows = conn.execute(
-            """
+            f"""
             SELECT c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.saldo_inicial, c.created_at, c.fecha_ultimo_pago,
                    c.telefono, c.cuit, c.direccion, c.email,
                    MIN(r.fecha) as oldest_unpaid
             FROM clientes c
             LEFT JOIN remitos_carga r ON c.id = r.cliente_id AND r.pagado = 0
+            {saldo_filter}
             GROUP BY c.id, c.nombre, c.scoring, c.techo_deuda, c.saldo_actual, c.saldo_inicial, c.created_at, c.fecha_ultimo_pago,
                      c.telefono, c.cuit, c.direccion, c.email
             ORDER BY c.nombre ASC
@@ -71,9 +73,19 @@ def list_clientes(limit: int | None = None, offset: int = 0) -> list[dict]:
         ).fetchall()
         
         # Obtener los remitos impagos para calcular los vencidos en Python de forma dialécticamente neutra
-        unpaid = conn.execute(
-            "SELECT cliente_id, fecha, plazo_cobro_dias FROM remitos_carga WHERE pagado = 0"
-        ).fetchall()
+        if solo_con_saldo:
+            unpaid = conn.execute(
+                """
+                SELECT r.cliente_id, r.fecha, r.plazo_cobro_dias
+                FROM remitos_carga r
+                INNER JOIN clientes c ON c.id = r.cliente_id AND c.saldo_actual > 0
+                WHERE r.pagado = 0
+                """
+            ).fetchall()
+        else:
+            unpaid = conn.execute(
+                "SELECT cliente_id, fecha, plazo_cobro_dias FROM remitos_carga WHERE pagado = 0"
+            ).fetchall()
         
     vencidos_map = {}
     today = datetime.date.today()
