@@ -117,7 +117,14 @@ def _desglose_deuda_financiera(conn) -> tuple[float, float, float]:
         recibido = float(row_dict["recibido"])
         pagar = float(row_dict["pagar"])
         tipo = (row_dict["tipo"] or "").lower()
-        if tipo == "cheque" or pagar <= recibido:
+        if tipo == "cheque":
+            imp = _impuesto_cheque_interes(row_dict)
+            if pagar > 0 and imp > 0:
+                capital += saldo * (recibido / pagar)
+                interes += saldo * (imp / pagar)
+            else:
+                capital += saldo
+        elif pagar <= recibido:
             capital += saldo
         else:
             ratio_capital = recibido / pagar
@@ -314,6 +321,48 @@ def panel_estrategia(excedente: Optional[float] = None) -> dict[str, Any]:
     p = proyeccion_liberacion(excedente)
     return {"sangria": s, "activo": a, "flujo": a, "respiracion": a, "proyeccion": p}
 
+def _impuesto_cheque_interes(row: dict) -> float:
+    """Impuesto al cheque contabilizado como interés en métricas y tarjetas."""
+    imp = float(row.get("impuesto_cheque") or 0)
+    if imp <= 0:
+        imp = max(0.0, float(row.get("pagar") or 0) - float(row.get("recibido") or 0))
+    return round(imp, 2)
+
+
+def calc_metricas_flotantes(enemigos: list[dict], estrategia: dict) -> dict[str, Any]:
+    """Sangre/día, deuda e interés para la barra flotante del panel."""
+    sangre_diaria = 0.0
+    interes_diario = 0.0
+    deuda_total = 0.0
+    interes_acumulado = 0.0
+    for d in enemigos:
+        monto = float(d.get("recibido") or 0)
+        interes = float(d.get("interes") or 0)
+        total = float(d.get("total_pagar") or d.get("pagar") or (monto + interes))
+        if d.get("vencido"):
+            dias = max(1, int(d.get("dias_retraso") or 1))
+            sangre_diaria += total / dias
+            interes_diario += interes / dias
+        else:
+            dias = max(1, int(d.get("dias_faltantes") or 30))
+            sangre_diaria += (monto + interes) / dias
+            interes_diario += interes / dias
+        deuda_total += total
+        interes_acumulado += interes
+    capital_disponible = estrategia.get("activo", {}).get("capital_neto", 0) + interes_acumulado
+    cubre = estrategia.get("activo", {}).get("activo_pendiente", 0) >= (
+        estrategia.get("activo", {}).get("deuda_real", 0) - interes_acumulado
+    )
+    return {
+        "sangre": sangre_diaria,
+        "int_diario": interes_diario,
+        "deuda": deuda_total,
+        "int_acumulado": interes_acumulado,
+        "capital": capital_disponible,
+        "tendencia": "up" if cubre else "down",
+    }
+
+
 def _calc_cfr_from_row(row: dict) -> Optional[float]:
     tipo = (row.get("tipo") or "").lower()
     recibido = float(row.get("recibido") or 0)
@@ -332,11 +381,15 @@ def _enemigo_from_row(row: dict, index: int) -> dict[str, Any]:
     es_tarjeta = tipo.lower() == "tarjeta"
     es_cheque = tipo.lower() == "cheque"
     es_proveedor = tipo.lower() == "proveedor"
-    sin_interes = es_cheque or (es_proveedor and float(row["pagar"]) <= float(row["recibido"]))
+    if es_cheque:
+        interes = _impuesto_cheque_interes(row)
+        sin_interes = interes <= 0
+    else:
+        sin_interes = es_proveedor and float(row["pagar"]) <= float(row["recibido"])
+        interes = 0.0 if sin_interes else round(float(row["pagar"]) - float(row["recibido"]), 2)
 
     cfr_raw = row["cfr"] if "cfr" in row else _calc_cfr_from_row(row)
     cfr = None if sin_interes or es_cheque else cfr_raw
-    interes = 0.0 if sin_interes else round(row["pagar"] - row["recibido"], 2)
 
     usa_venc = es_tarjeta or es_cheque or es_proveedor
     venc = calc_estado_vencimiento(row["fecha_vencimiento"] if usa_venc else None)
@@ -371,7 +424,9 @@ def _enemigo_from_row(row: dict, index: int) -> dict[str, Any]:
         "precio_kg": row["precio_kg"],
         "plazo_dias": row["plazo_dias"],
         "plazo_texto": plazo_txt,
-        "impuesto_cheque": round(float(row.get("impuesto_cheque") or 0), 2) or None,
+        "impuesto_cheque": (_impuesto_cheque_interes(row) or None) if es_cheque else (
+            round(float(row.get("impuesto_cheque") or 0), 2) or None
+        ),
         **venc,
         **plan,
     }

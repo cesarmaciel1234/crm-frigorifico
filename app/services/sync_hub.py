@@ -6,12 +6,18 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.database import ensure_tenant_migrations, get_db
+from app.utils import parse_operacion_payload
 from app.services.audit import list_audit_log
 from app.services.bancos import list_bancos
 from app.services.bulk import list_bulk_lots
 from app.services.clientes import list_clientes, list_perdidas_acumuladas
 from app.services.export_data import export_all_data
-from app.services.finanzas import historial_vencimientos, panel_estrategia, ranking_enemigos
+from app.services.finanzas import (
+    calc_metricas_flotantes,
+    historial_vencimientos,
+    panel_estrategia,
+    ranking_enemigos,
+)
 from app.services.pagos import list_historial_pagos
 from app.services.remitos import list_remitos
 
@@ -24,30 +30,7 @@ def _utc_now() -> str:
 
 
 def _metricas_flotantes(enemigos: list[dict], estrategia: dict) -> dict[str, Any]:
-    sangre_diaria = 0.0
-    interes_diario = 0.0
-    deuda_total = 0.0
-    interes_acumulado = 0.0
-    for d in enemigos:
-        monto = d.get("recibido") or 0
-        interes = d.get("interes") or 0
-        dias = max(1, d.get("dias_faltantes") or 30)
-        sangre_diaria += (monto + interes) / dias
-        interes_diario += interes / dias
-        deuda_total += monto + interes
-        interes_acumulado += interes
-    capital_disponible = estrategia.get("activo", {}).get("capital_neto", 0) + interes_acumulado
-    cubre = estrategia.get("activo", {}).get("activo_pendiente", 0) >= (
-        estrategia.get("activo", {}).get("deuda_real", 0) - interes_acumulado
-    )
-    return {
-        "sangre": sangre_diaria,
-        "int_diario": interes_diario,
-        "deuda": deuda_total,
-        "int_acumulado": interes_acumulado,
-        "capital": capital_disponible,
-        "tendencia": "up" if cubre else "down",
-    }
+    return calc_metricas_flotantes(enemigos, estrategia)
 
 
 def build_client_app_data() -> dict[str, Any]:
@@ -128,35 +111,38 @@ def _apply_operacion_lww(conn, entity_uuid: str, action: str, payload: dict, ts:
     if row and not _should_apply_lww(ts, row["updated_at_utc"]):
         return False
 
+    merged = {**payload, "uuid": entity_uuid}
+    parsed = parse_operacion_payload(merged)
+
     fields = {
-        "alias": payload.get("alias") or "Sin alias",
-        "tipo": payload.get("tipo") or "otro",
-        "recibido": float(payload.get("recibido") or 0),
-        "pagar": float(payload.get("pagar") or payload.get("recibido") or 0),
-        "meses": max(int(payload.get("meses") or 1), 1),
-        "fecha_cierre": payload.get("fecha_cierre"),
-        "fecha_vencimiento": payload.get("fecha_vencimiento"),
-        "cuotas": payload.get("cuotas"),
-        "kg": payload.get("kg"),
-        "precio_kg": payload.get("precio_kg"),
-        "plazo_dias": payload.get("plazo_dias"),
+        "alias": parsed["alias"],
+        "tipo": parsed["tipo"],
+        "recibido": float(parsed["recibido"]),
+        "pagar": float(parsed["pagar"]),
+        "meses": int(parsed["meses"]),
+        "fecha_cierre": parsed.get("fecha_cierre"),
+        "fecha_vencimiento": parsed.get("fecha_vencimiento"),
+        "cuotas": parsed.get("cuotas"),
+        "kg": parsed.get("kg"),
+        "precio_kg": parsed.get("precio_kg"),
+        "plazo_dias": parsed.get("plazo_dias"),
+        "impuesto_cheque": parsed.get("impuesto_cheque"),
     }
-    if fields["pagar"] < fields["recibido"]:
-        fields["pagar"] = fields["recibido"]
 
     if row:
         conn.execute(
             """
             UPDATE operaciones_financieras
             SET alias=?, tipo=?, recibido=?, pagar=?, meses=?, fecha_cierre=?,
-                fecha_vencimiento=?, cuotas=?, kg=?, precio_kg=?, plazo_dias=?, updated_at_utc=?
+                fecha_vencimiento=?, cuotas=?, kg=?, precio_kg=?, plazo_dias=?,
+                impuesto_cheque=?, updated_at_utc=?
             WHERE uuid=?
             """,
             (
                 fields["alias"], fields["tipo"], fields["recibido"], fields["pagar"],
                 fields["meses"], fields["fecha_cierre"], fields["fecha_vencimiento"],
                 fields["cuotas"], fields["kg"], fields["precio_kg"], fields["plazo_dias"],
-                ts, entity_uuid,
+                fields["impuesto_cheque"], ts, entity_uuid,
             ),
         )
     else:
@@ -164,14 +150,14 @@ def _apply_operacion_lww(conn, entity_uuid: str, action: str, payload: dict, ts:
             """
             INSERT INTO operaciones_financieras
                 (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento,
-                 cuotas, kg, precio_kg, plazo_dias, updated_at_utc)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 cuotas, kg, precio_kg, plazo_dias, impuesto_cheque, updated_at_utc)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entity_uuid, fields["alias"], fields["tipo"], fields["recibido"],
                 fields["pagar"], fields["meses"], fields["fecha_cierre"],
                 fields["fecha_vencimiento"], fields["cuotas"], fields["kg"],
-                fields["precio_kg"], fields["plazo_dias"], ts,
+                fields["precio_kg"], fields["plazo_dias"], fields["impuesto_cheque"], ts,
             ),
         )
     return True

@@ -11,33 +11,29 @@ const $ = id => document.getElementById(id);
             return false;
         };
 
-        // --- OFFLINE SYNC ENGINE (Dexie) ---
-        const MODO_PRUEBA = false; // Cambiar a false para enviar datos a la nube
-        const db = new Dexie('CarniceriaContableDB');
-        db.version(3).stores({
-            transacciones: '++id, uuid, tipo, monto, fecha, status, updated_at',
-            cache: 'key, updated_at',
-            solicitudes_pendientes: '++id, url, method, body, created_at'
-        });
-        db.version(4).stores({
-            transacciones: '++id, uuid, tipo, monto, fecha, status, updated_at',
-            cache: 'key, updated_at',
-            solicitudes_pendientes: '++id, url, method, body, created_at',
-            pending_sync: '++local_id, op_id, entity, entity_uuid, status, updated_at_utc, device_id',
-            sync_meta: 'key',
-        });
+        // --- Módulos CRM (crm-db, crm-sync-api, crm-loader, crm-delete) ---
+        const db = CrmDb.db;
+        const ensureDataShape = CrmDb.ensureDataShape;
+        const tenantCacheGet = (name) => CrmDb.tenantCacheGet(name);
+        const tenantCacheGetEntry = (name) => CrmDb.tenantCacheGetEntry(name);
+        const tenantCachePut = (name, payload) => CrmDb.tenantCachePut(name, payload);
+        const api = CrmApi.api.bind(CrmApi);
+        const countPendingOutbox = CrmApi.countPendingOutbox.bind(CrmApi);
+        const drainOutboxAll = CrmApi.drainOutboxAll.bind(CrmApi);
+        const dispararSyncInmediato = CrmApi.dispararSyncInmediato.bind(CrmApi);
+        const actualizarUIOffline = CrmApi.actualizarUIOffline.bind(CrmApi);
+        const sincronizarSolicitudesPendientes = CrmApi.sincronizarSolicitudesPendientes.bind(CrmApi);
+        const publishNodeBackupAfterSync = CrmApi.publishNodeBackupAfterSync.bind(CrmApi);
+        const loadAll = CrmLoader.loadAll.bind(CrmLoader);
+        const descargarDatosDeLaNube = CrmLoader.descargarDatosDeLaNube.bind(CrmLoader);
+        const servidorTieneDatos = CrmLoader.servidorTieneDatos.bind(CrmLoader);
+        const aplicarCambioOptimista = CrmDelete.aplicarCambioOptimista.bind(CrmDelete);
 
         async function registrarTransaccion(datos) {
-            const registro = {
-                uuid: crypto.randomUUID(),
-                ...datos,
-                status: 0,
-                updated_at: Date.now()
-            };
+            const uuid = crypto.randomUUID();
             try {
-                await db.transacciones.add(registro);
-                console.log("Guardado localmente:", registro.uuid);
-                await intentarSincronizar();
+                await aplicarOperacionOptimista(datos, uuid);
+                void enviarOperacionFinanciera(datos, uuid);
                 return true;
             } catch (e) {
                 console.error("Error al guardar localmente:", e);
@@ -45,155 +41,181 @@ const $ = id => document.getElementById(id);
             }
         }
 
-        async function intentarSincronizar(opts) {
-            opts = opts || {};
-            if (!navigator.onLine) {
-                console.log("Sin conexión. Los datos están seguros en el dispositivo.");
-                return { syncCount: 0 };
-            }
-            const pendientes = await db.transacciones.where('status').equals(0).toArray();
-            let syncCount = 0;
-            for (const item of pendientes) {
-                try {
-                    let responseOk = false;
-                    let responseStatus = 0;
-
-                    if (MODO_PRUEBA) {
-                        console.log("[MODO PRUEBA] Simulación de envío a la nube:", item.uuid);
-                        await new Promise(r => setTimeout(r, 300));
-                        responseOk = true;
-                    } else {
-                        const response = await (window.CrmSafe?.apiFetch || fetch)('/api/operaciones', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'same-origin',
-                            body: JSON.stringify(item)
-                        });
-                        responseOk = response.ok;
-                        responseStatus = response.status;
-                    }
-
-                    if (responseOk) {
-                        await db.transacciones.update(item.id, { status: 1 });
-                        console.log("Sincronizado con éxito:", item.uuid);
-                        syncCount++;
-                    } else if (responseStatus >= 500 || responseStatus === 408) {
-                        break;
-                    }
-                } catch (error) {
-                    console.warn("Error de conexión al sincronizar:", error);
-                    break;
-                }
-            }
-            if (syncCount > 0 && !opts.skipReload) {
-                toast(`Sincronizados ${syncCount} registros pendientes`);
-                loadAll();
-            }
-            return { syncCount };
-        }
-
-        async function countPendingOutbox() {
-            let pendingSync = 0;
+        async function enviarOperacionFinanciera(payload, uuid) {
+            const body = JSON.stringify({ ...payload, uuid });
             try {
-                pendingSync = await db.pending_sync
-                    .where('status').anyOf(['pending', 'pushing']).count();
-            } catch (_) {}
-            const solicitudesRows = await db.solicitudes_pendientes.toArray();
-            const solicitudes = solicitudesRows.filter(s => !s.failed).length;
-            const transacciones = await db.transacciones.where('status').equals(0).count();
-            return pendingSync + solicitudes + transacciones;
-        }
-
-        function buildSyncOpFromRequest(url, method, body) {
-            if (!body || method === 'GET') return null;
-            let parsed = {};
-            try { parsed = JSON.parse(body); } catch (_) { return null; }
-            const ts = new Date().toISOString();
-            const uuid = parsed.uuid || crypto.randomUUID();
-
-            if (url.includes('/api/operaciones') && method === 'POST') {
-                return {
-                    entity: 'operacion',
-                    entity_uuid: uuid,
-                    action: 'CREATE',
-                    payload: { ...parsed, uuid, updated_at_utc: ts },
-                };
-            }
-            if (url.includes('/api/clientes') && method === 'POST'
-                && !url.includes('/cobrar') && !url.includes('/saldo-inicial') && !url.includes('/incobrable')) {
-                return {
-                    entity: 'cliente',
-                    entity_uuid: uuid,
-                    action: 'CREATE',
-                    payload: { ...parsed, uuid, updated_at_utc: ts },
-                };
-            }
-            if (url.includes('/api/clientes/') && method === 'PUT') {
-                return {
-                    entity: 'cliente',
-                    entity_uuid: parsed.uuid || uuid,
-                    action: 'UPDATE',
-                    payload: { ...parsed, uuid: parsed.uuid || uuid, updated_at_utc: ts },
-                };
-            }
-            return null;
-        }
-
-        async function drainOutboxAll() {
-            if (window.CrmSync?.drainPendingSync) {
-                try {
-                    await CrmSync.drainPendingSync();
-                } catch (e) {
-                    console.warn('pending_sync drain:', e);
-                }
-            }
-            await intentarSincronizar({ skipReload: true });
-            return drainSolicitudesPendientes();
-        }
-
-        async function drainSolicitudesPendientes() {
-            if (!navigator.onLine) return { exito: 0, fallo: 0 };
-            const pendientes = await db.solicitudes_pendientes.orderBy('id').toArray();
-            let exitoCount = 0;
-            let falloCount = 0;
-
-            for (const item of pendientes) {
-                try {
-                    const response = await (window.CrmSafe?.apiFetch || fetch)(item.url, {
-                        method: item.method,
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'same-origin',
-                        body: item.body
-                    });
-
-                    if (response.ok) {
-                        await db.solicitudes_pendientes.delete(item.id);
-                        exitoCount++;
-                    } else if (response.status >= 500 || response.status === 408) {
-                        console.warn('Reintentar solicitud pendiente más tarde:', item.url, response.status);
-                        break;
-                    } else {
-                        const d = await response.json().catch(() => ({}));
-                        console.error('Error al sincronizar operación:', d.error || response.statusText);
-                        await db.solicitudes_pendientes.update(item.id, {
-                            failed: true,
-                            last_status: response.status,
-                            last_error: d.error || response.statusText,
+                if (!navigator.onLine) {
+                    if (window.CrmSync?.enqueueChange) {
+                        await CrmSync.enqueueChange({
+                            entity: 'operacion',
+                            entity_uuid: uuid,
+                            action: 'CREATE',
+                            payload: { ...payload, uuid },
                         });
-                        falloCount++;
+                    } else {
+                        await db.solicitudes_pendientes.add({
+                            url: '/api/operaciones',
+                            method: 'POST',
+                            body,
+                            created_at: new Date().toISOString(),
+                        });
                     }
-                } catch (error) {
-                    console.warn('Fallo de red en sincronización, deteniendo cola:', error);
-                    break;
+                    void actualizarUIOffline();
+                    void dispararSyncInmediato(false);
+                    return;
                 }
+                await api('/api/operaciones', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body,
+                });
+                void loadAll({ enSegundoPlano: true, bloquearUI: false, avisarSiVacio: false });
+            } catch (e) {
+                console.warn('enviar operación financiera:', e);
             }
-            return { exito: exitoCount, fallo: falloCount };
         }
 
-        function publishNodeBackupAfterSync() {
-            if (window.CrmSync && data && navigator.onLine) {
-                void CrmSync.pushNode(data).catch(() => {});
+        // -----------------------------------
+        function parseNumLocal(v) {
+            const n = parseFloat(v);
+            return Number.isFinite(n) ? n : 0;
+        }
+
+        function buildEnemigoOptimista(payload, uuid) {
+            const tipo = String(payload.tipo || '').toLowerCase();
+            const recibido = tipo === 'cheque' ? parseNumLocal(payload.monto) : parseNumLocal(payload.recibido);
+            let pagar = parseNumLocal(payload.pagar);
+            if (tipo === 'cheque') {
+                const monto = parseNumLocal(payload.monto);
+                let imp = 0;
+                if (payload.impuesto_cheque_tipo === 'porcentaje') {
+                    imp = monto * parseNumLocal(payload.impuesto_cheque_valor) / 100;
+                } else if (payload.impuesto_cheque_tipo === 'monto') {
+                    imp = parseNumLocal(payload.impuesto_cheque_valor);
+                }
+                pagar = monto + imp;
+            } else if (tipo === 'proveedor' && !pagar) {
+                pagar = recibido;
             }
+            const meses = parseInt(payload.meses, 10) || 0;
+            const es_cheque = tipo === 'cheque';
+            const es_proveedor = tipo === 'proveedor';
+            const es_tarjeta = tipo === 'tarjeta';
+            let impuestoCheque = 0;
+            if (es_cheque) {
+                if (payload.impuesto_cheque_tipo === 'porcentaje') {
+                    impuestoCheque = recibido * parseNumLocal(payload.impuesto_cheque_valor) / 100;
+                } else if (payload.impuesto_cheque_tipo === 'monto') {
+                    impuestoCheque = parseNumLocal(payload.impuesto_cheque_valor);
+                } else if (payload.impuesto_cheque) {
+                    impuestoCheque = parseNumLocal(payload.impuesto_cheque);
+                } else {
+                    impuestoCheque = Math.max(0, pagar - recibido);
+                }
+            }
+            const sin_interes = es_cheque ? impuestoCheque <= 0 : (es_proveedor && pagar <= recibido);
+            const interes = es_cheque ? impuestoCheque : (sin_interes ? 0 : Math.max(0, pagar - recibido));
+            let cfr = null;
+            if (!sin_interes && !es_cheque && recibido > 0 && meses > 0) {
+                cfr = ((pagar / recibido) - 1) / meses * 100;
+            }
+            const tempId = 'temp_' + String(uuid).replace(/-/g, '').slice(0, 12);
+            return {
+                id: tempId,
+                uuid,
+                alias: payload.alias || 'Sin nombre',
+                tipo: payload.tipo,
+                recibido,
+                pagar,
+                total_pagar: pagar,
+                meses,
+                fecha_cierre: payload.fecha_cierre || null,
+                fecha_vencimiento: payload.fecha_vencimiento || null,
+                cuotas: parseInt(payload.cuotas, 10) || null,
+                cuotas_pagadas: 0,
+                interes: Math.round(interes * 100) / 100,
+                cfr: cfr != null ? Math.round(cfr * 100) / 100 : null,
+                sin_interes,
+                urgente: cfr != null && cfr > 10,
+                es_tarjeta,
+                es_cheque,
+                es_proveedor,
+                kg: parseNumLocal(payload.kg) || null,
+                precio_kg: parseNumLocal(payload.precio_kg) || null,
+                plazo_dias: parseInt(payload.plazo_dias, 10) || null,
+                dias_faltantes: 30,
+                completa: false,
+                monto_pagado: 0,
+                _optimistic: true,
+            };
+        }
+
+        function calcMetricasFlotantes(enemigos, estrategia) {
+            let sangre_diaria = 0;
+            let interes_diario = 0;
+            let deuda_total = 0;
+            let interes_acumulado = 0;
+            for (const d of enemigos || []) {
+                const monto = d.recibido || 0;
+                const interes = d.interes || 0;
+                const total = d.total_pagar || d.pagar || (monto + interes);
+                if (d.vencido) {
+                    const dias = Math.max(1, d.dias_retraso || 1);
+                    sangre_diaria += total / dias;
+                    interes_diario += interes / dias;
+                } else {
+                    const dias = Math.max(1, d.dias_faltantes || 30);
+                    sangre_diaria += (monto + interes) / dias;
+                    interes_diario += interes / dias;
+                }
+                deuda_total += total;
+                interes_acumulado += interes;
+            }
+            const activo = estrategia?.activo || estrategia?.flujo || {};
+            const capital_disponible = (activo.capital_neto || 0) + interes_acumulado;
+            const cubre = (activo.activo_pendiente || 0) >= ((activo.deuda_real || 0) - interes_acumulado);
+            return {
+                sangre: sangre_diaria,
+                int_diario: interes_diario,
+                deuda: deuda_total,
+                int_acumulado: interes_acumulado,
+                capital: capital_disponible,
+                tendencia: cubre ? 'up' : 'down',
+            };
+        }
+
+        function recalcularMetricasLocales() {
+            data.metricas_flotantes = calcMetricasFlotantes(data.enemigos || [], data.estrategia || {});
+            data.totales = data.totales || {};
+            data.totales.deudas_activas = (data.enemigos || []).length;
+            data.totales.urgentes = (data.enemigos || []).filter(e => e.urgente).length;
+        }
+
+        async function persistirYRefrescarUI() {
+            data = ensureDataShape(data);
+            await tenantCachePut('appData', data);
+            safeRenderAll();
+            void actualizarUIOffline();
+        }
+
+        function safeRenderAll() {
+            try {
+                data = ensureDataShape(data);
+                renderAll();
+            } catch (e) {
+                console.error('renderAll:', e);
+                setLoading(false);
+            }
+        }
+
+        async function aplicarOperacionOptimista(payload, uuid) {
+            data = ensureDataShape(data);
+            const enemigo = buildEnemigoOptimista(payload, uuid);
+            if (!data.enemigos.some(e => e.uuid === uuid)) {
+                data.enemigos.push(enemigo);
+            }
+            recalcularMetricasLocales();
+            await persistirYRefrescarUI();
         }
 
         // -----------------------------------
@@ -262,26 +284,11 @@ const $ = id => document.getElementById(id);
         let cobranzaClienteActual = null;
         let pagoCentralDeudaActual = null;
 
-        let data = { enemigos: [], remitos: [], estrategia: {}, bancos: [], historial: [], historialPagos: [], bulk: [], clientes: [], auditoria: [], usuarios: [] };
+        let data = CrmDb.emptyAppData();
         let isProMode = true;
         let selectedDeuda = null;
         let selectedAuditId = null;
         let sessionUser = { role: 'admin', username: 'jefe', empresa_id: 1, empresa_nombre: '' };
-
-        function tenantCacheKey(name) {
-            const eid = sessionUser?.empresa_id || 1;
-            return name + ':' + eid;
-        }
-        async function tenantCacheGet(name) {
-            const row = await db.cache.get(tenantCacheKey(name));
-            return row?.data ?? null;
-        }
-        async function tenantCacheGetEntry(name) {
-            return db.cache.get(tenantCacheKey(name));
-        }
-        async function tenantCachePut(name, payload) {
-            await db.cache.put({ key: tenantCacheKey(name), data: payload, updated_at: Date.now() });
-        }
 
         let histPagosFiltro = '';
         let activeRowIndex = -1;
@@ -327,265 +334,6 @@ const $ = id => document.getElementById(id);
             t.className = 'toast show' + (err ? ' error' : '');
             clearTimeout(toast._t);
             toast._t = setTimeout(() => t.classList.remove('show'), 3500);
-        }
-
-        async function api(url, opts) {
-            opts = opts || {};
-            opts.credentials = 'same-origin';
-            opts.headers = Object.assign({ Accept: 'application/json' }, opts.headers || {});
-            
-            const method = (opts.method || 'GET').toUpperCase();
-            const isGet = method === 'GET';
-            
-            try {
-                const r = await (window.CrmSafe?.apiFetch || fetch)(url, opts);
-                const d = await r.json().catch(() => ({}));
-                if (!r.ok) throw new Error(d.error || d.message || 'Error en la operación');
-                return d;
-            } catch (error) {
-                if (isGet) throw error;
-                
-                const isNetworkError = !navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('network error');
-                if (isNetworkError) {
-                    const syncOp = buildSyncOpFromRequest(url, method, opts.body);
-                    if (syncOp && window.CrmSync?.enqueueChange) {
-                        await CrmSync.enqueueChange(syncOp);
-                        if (opts.body) {
-                            try {
-                                const parsed = JSON.parse(opts.body);
-                                if (!parsed.uuid) {
-                                    opts.body = JSON.stringify({ ...parsed, uuid: syncOp.entity_uuid });
-                                }
-                            } catch (_) {}
-                        }
-                    } else {
-                        await db.solicitudes_pendientes.add({
-                            url,
-                            method,
-                            body: opts.body || null,
-                            created_at: new Date().toISOString()
-                        });
-                    }
-                    
-                    toast('⚠️ Sin conexión. Registrado localmente.', false);
-                    aplicarCambioOptimista(url, method, opts.body);
-                    actualizarUIOffline();
-                    
-                    return { ok: true, offline: true, message: 'Operación guardada localmente' };
-                } else {
-                    throw error;
-                }
-            }
-        }
-
-        async function actualizarUIOffline() {
-            const count = await countPendingOutbox();
-            const badge = document.getElementById('offlineBadge');
-            const cntSpan = document.getElementById('offlinePendingCount');
-            const greeting = document.querySelector('.topbar-greeting-block');
-            const weather = document.getElementById('weatherWidget');
-            const isMobile = window.innerWidth <= 768;
-            
-            if (badge && cntSpan) {
-                if (count > 0 || !navigator.onLine) {
-                    badge.style.display = 'inline-flex';
-                    cntSpan.textContent = count;
-                    if (!navigator.onLine) {
-                        badge.style.backgroundColor = '#fee2e2';
-                        badge.style.color = '#991b1b';
-                        badge.title = `Sin conexión a Internet. ${count} acciones pendientes de subir.`;
-                    } else {
-                        badge.style.backgroundColor = '#fef3c7';
-                        badge.style.color = '#92400e';
-                        badge.title = `${count} acciones pendientes de subir al servidor. Haz clic para sincronizar ahora.`;
-                    }
-                    if (isMobile) {
-                        if (greeting) greeting.style.display = 'none';
-                        if (weather) weather.style.display = 'none';
-                    }
-                } else {
-                    badge.style.display = 'none';
-                    if (greeting) greeting.style.display = '';
-                    if (weather) weather.style.display = 'inline-flex';
-                }
-            }
-        }
-
-        async function sincronizarSolicitudesPendientes() {
-            if (!navigator.onLine) return;
-            const antes = await countPendingOutbox();
-            try {
-                await drainOutboxAll();
-            } catch (e) {
-                console.warn('sync manual:', e);
-            }
-            const pending = await countPendingOutbox();
-            if (pending === 0) {
-                await loadAll({ forzarServidor: true, enSegundoPlano: true, bloquearUI: false });
-                if (antes > 0) toast('Datos sincronizados con la nube');
-            } else {
-                actualizarUIOffline();
-                if (antes > pending) {
-                    toast(`Quedan ${pending} cambios por sincronizar`, true);
-                }
-            }
-        }
-
-        async function aplicarCambioOptimista(url, method, body) {
-            try {
-                if (!data) return;
-                const parsedBody = body ? JSON.parse(body) : {};
-                
-                // 1. Crear cliente
-                if (url.includes('/api/clientes') && method === 'POST' && !url.includes('/cobrar') && !url.includes('/saldo-inicial') && !url.includes('/incobrable')) {
-                    const clientUuid = parsedBody.uuid || crypto.randomUUID();
-                    const newCli = {
-                        id: 'temp_' + clientUuid,
-                        uuid: clientUuid,
-                        nombre: parsedBody.nombre || 'Nuevo Cliente (Offline)',
-                        techo_deuda: parseFloat(parsedBody.techo_deuda || 0),
-                        scoring: parseFloat(parsedBody.scoring || 5),
-                        telefono: parsedBody.telefono || '',
-                        cuit: parsedBody.cuit || '',
-                        direccion: parsedBody.direccion || '',
-                        email: parsedBody.email || '',
-                        saldo_inicial: parseFloat(parsedBody.saldo_inicial || 0),
-                        saldo_actual: parseFloat(parsedBody.saldo_inicial || 0),
-                        remitos: [],
-                        pagos: []
-                    };
-                    data.clientes = data.clientes || [];
-                    data.clientes.push(newCli);
-                }
-                
-                // 2. Crear Remito
-                if (url.includes('/api/remitos') && method === 'POST' && !url.includes('/reset-pago')) {
-                    const clientVal = parsedBody.cliente;
-                    const c = data.clientes.find(cli => cli.nombre === clientVal || String(cli.id) === String(clientVal));
-                    const precio = parseFloat(parsedBody.precio_por_kg || 0);
-                    const kg = parseFloat(parsedBody.kg || 0);
-                    const total = precio * kg;
-                    
-                    const remitoUuid = parsedBody.uuid || crypto.randomUUID();
-                    const newRemito = {
-                        id: 'temp_' + remitoUuid,
-                        uuid: remitoUuid,
-                        cliente: c ? c.nombre : clientVal,
-                        tipo_corte: parsedBody.tipo_corte || '',
-                        cantidad: parseInt(parsedBody.cantidad || 1, 10),
-                        kg: kg,
-                        precio_por_kg: precio,
-                        precio_venta_total: total,
-                        pagado: 0,
-                        monto_pagado: 0,
-                        fecha: new Date().toISOString().split('T')[0]
-                    };
-                    
-                    if (c) {
-                        c.remitos = c.remitos || [];
-                        c.remitos.push(newRemito);
-                        c.saldo_actual = (c.saldo_actual || 0) + total;
-                    }
-                }
-                
-                // 3. Cobro a cliente
-                if (url.includes('/api/clientes/') && url.includes('/cobrar') && method === 'POST') {
-                    const match = url.match(/\/api\/clientes\/([^\/]+)\/cobrar/);
-                    if (match) {
-                        const clientId = match[1];
-                        const c = data.clientes.find(cli => String(cli.id) === String(clientId));
-                        const monto = parseFloat(parsedBody.monto_pagado || 0);
-                        if (c) {
-                            c.saldo_actual = (c.saldo_actual || 0) - monto;
-                            c.pagos = c.pagos || [];
-                            c.pagos.push({
-                                id: 'temp_' + crypto.randomUUID(),
-                                monto: monto,
-                                fecha: new Date().toISOString().split('T')[0],
-                                tipo: 'COBRO'
-                            });
-                        }
-                    }
-                }
-                
-                // 4. Cobro a Remito
-                if (url.includes('/api/remitos/') && url.includes('/cobrar') && method === 'POST') {
-                    const match = url.match(/\/api\/remitos\/([^\/]+)\/cobrar/);
-                    if (match) {
-                        const remitoId = match[1];
-                        const monto = parseFloat(parsedBody.monto_pagado || 0);
-                        for (const c of (data.clientes || [])) {
-                            const r = (c.remitos || []).find(rem => String(rem.id) === String(remitoId));
-                            if (r) {
-                                r.monto_pagado = (r.monto_pagado || 0) + monto;
-                                if (r.monto_pagado >= r.precio_venta_total - 0.01) {
-                                    r.pagado = 1;
-                                }
-                                c.saldo_actual = (c.saldo_actual || 0) - monto;
-                                c.pagos = c.pagos || [];
-                                c.pagos.push({
-                                    id: 'temp_' + Date.now(),
-                                    monto: monto,
-                                    fecha: new Date().toISOString().split('T')[0],
-                                    tipo: 'COBRO'
-                                });
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // 5. Eliminar Remito
-                if (url.includes('/api/remitos/') && method === 'DELETE') {
-                    const match = url.match(/\/api\/remitos\/([^\/]+)/);
-                    if (match) {
-                        const remitoId = match[1];
-                        for (const c of (data.clientes || [])) {
-                            const rIndex = (c.remitos || []).findIndex(rem => String(rem.id) === String(remitoId));
-                            if (rIndex !== -1) {
-                                const r = c.remitos[rIndex];
-                                c.saldo_actual = (c.saldo_actual || 0) - (r.precio_venta_total - (r.monto_pagado || 0));
-                                c.remitos.splice(rIndex, 1);
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // 6. Eliminar Pago
-                if (url.includes('/api/pagos/') && method === 'DELETE') {
-                    const match = url.match(/\/api\/pagos\/([^\/]+)/);
-                    if (match) {
-                        const pagoId = match[1];
-                        for (const c of (data.clientes || [])) {
-                            const pIndex = (c.pagos || []).findIndex(p => String(p.id) === String(pagoId));
-                            if (pIndex !== -1) {
-                                const p = c.pagos[pIndex];
-                                c.saldo_actual = (c.saldo_actual || 0) + p.monto;
-                                c.pagos.splice(pIndex, 1);
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // 7. Eliminar Cliente
-                if (url.includes('/api/clientes/') && method === 'DELETE') {
-                    const match = url.match(/\/api\/clientes\/([^\/]+)/);
-                    if (match) {
-                        const clientId = match[1];
-                        const cIndex = (data.clientes || []).findIndex(cli => String(cli.id) === String(clientId));
-                        if (cIndex !== -1) {
-                            data.clientes.splice(cIndex, 1);
-                        }
-                    }
-                }
-
-                await tenantCachePut('appData', data);
-                renderAll();
-            } catch (err) {
-                console.error("Error al aplicar cambio optimista:", err);
-            }
         }
 
         function plazoTexto(e) {
@@ -922,6 +670,7 @@ const $ = id => document.getElementById(id);
 
         function renderHistorialSidebar() {
             const box = $('historialSidebar');
+            if (!box) return;
             const items = data.historial || [];
             if (!items.length) {
                 box.innerHTML = '<div class="hist-empty">Sin vencimientos próximos</div>';
@@ -960,9 +709,10 @@ const $ = id => document.getElementById(id);
         }
 
         function renderKpis() {
-            const s = data.estrategia.sangria || {};
-            const a = data.estrategia.activo || data.estrategia.flujo || data.estrategia.respiracion || {};
-            const p = data.estrategia.proyeccion || {};
+            const estrategia = data.estrategia || {};
+            const s = estrategia.sangria || {};
+            const a = estrategia.activo || estrategia.flujo || estrategia.respiracion || {};
+            const p = estrategia.proyeccion || {};
             
             const mf = data.metricas_flotantes;
             if (mf) {
@@ -1002,7 +752,8 @@ const $ = id => document.getElementById(id);
         }
 
         function renderHealth() {
-            const a = data.estrategia.activo || data.estrategia.flujo || data.estrategia.respiracion || {};
+            const estrategia = data.estrategia || {};
+            const a = estrategia.activo || estrategia.flujo || estrategia.respiracion || {};
             $('healthGrid').innerHTML = `
                 <div class="health-item"><div class="lbl">Activo ventas (Por cobrar)</div><div class="val" style="color:var(--success)">$${fmt(a.activo_pendiente || 0)}</div></div>
                 <div class="health-item"><div class="lbl">Caja real (Efectivo disponible)</div><div class="val" style="color:var(--success)">$${fmt(a.caja_real || 0)}</div></div>
@@ -1020,7 +771,7 @@ const $ = id => document.getElementById(id);
         }
 
         function renderChartCfr() {
-            const top = data.enemigos
+            const top = (data.enemigos || [])
                 .filter(e => !e.es_proveedor && e.cfr != null)
                 .slice(0, 5);
             const max = top.length ? Math.max(...top.map(e => e.cfr || 0), 1) : 1;
@@ -1173,7 +924,7 @@ const $ = id => document.getElementById(id);
         }
 
         function renderRemitosDash() {
-            const rows = data.remitos.slice(0, 8);
+            const rows = (data.remitos || []).slice(0, 8);
             $('tblRemitosDash').innerHTML = rows.length ? rows.map(r => {
                 const badge = r.pagado || (r.estado_cobro === 'cobrado') 
                     ? '<div style="margin-bottom:4px"><span class="badge badge-success" style="font-size:9px;padding:2px 4px">Cobrado</span></div>' 
@@ -1431,7 +1182,8 @@ const $ = id => document.getElementById(id);
         }
 
         function renderBancos() {
-            $('tblBancos').innerHTML = data.bancos.length ? data.bancos.map(b => `
+            const bancos = data.bancos || [];
+            $('tblBancos').innerHTML = bancos.length ? bancos.map(b => `
                 <tr><td>${esc(b.nombre)}</td><td>$${fmt(b.limite)}</td></tr>
             `).join('') : '<tr><td colspan="2" style="color:var(--text-muted);padding:16px">Sin entidades bancarias</td></tr>';
         }
@@ -1523,31 +1275,6 @@ const $ = id => document.getElementById(id);
                 </article>`;
             }).join('');
         }
-
-        window.eliminarLoteBulk = async function(loteId) {
-            if (sessionUser.role !== 'admin') {
-                toast('Solo administradores pueden eliminar lotes', true);
-                return;
-            }
-            const lote = (data.bulk || []).find(b => b.id === loteId);
-            const label = lote ? `Lote #${loteId}` : `lote #${loteId}`;
-            const pw = await window.promptMasterPasswordAsync('Contraseña maestra para eliminar ' + label + ' (stock mal cargado):');
-            if (!pw) return;
-            if (!confirm('¿Eliminar ' + label + '? Esta acción no se puede deshacer.')) return;
-            try {
-                setLoading(true, 'Eliminando lote…');
-                await api('/api/bulk/' + loteId, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pw },
-                });
-                toast('Lote eliminado');
-                await loadAll();
-            } catch (e) {
-                toast(e.message || 'No se pudo eliminar el lote', true);
-            } finally {
-                setLoading(false);
-            }
-        };
 
         window.filtrarClientes = (term) => {
             const termLower = term.toLowerCase();
@@ -1872,28 +1599,6 @@ const $ = id => document.getElementById(id);
         }
         window.toggleSelectFactura = toggleSelectFactura;
 
-        async function eliminarFacturasSeleccionadas() {
-            if (!window.wspSelectedInvoices || window.wspSelectedInvoices.length === 0) return;
-            const ids = window.wspSelectedInvoices;
-            const pass = await promptMasterPasswordAsync("Eliminar " + ids.length + " factura(s)");
-            if (!pass) return;
-            
-            try {
-                for (const rid of ids) {
-                    await api('/api/remitos/' + rid, {
-                        method: 'DELETE',
-                        headers: { 'Content-Type': 'application/json', 'X-Master-Password': pass }
-                    });
-                }
-                toast('Facturas eliminadas');
-                openClientDrawer(selectedClienteId);
-                await loadAll();
-            } catch (e) {
-                toast(e.message, true);
-            }
-        }
-        window.eliminarFacturasSeleccionadas = eliminarFacturasSeleccionadas;
-
         function abrirCobranzaWsp() {
             abrirCobranzaClienteGlobal(selectedClienteId);
         }
@@ -2201,14 +1906,6 @@ const $ = id => document.getElementById(id);
             } catch (_) {}
         }
 
-        function servidorTieneDatos(freshData) {
-            if (!freshData) return false;
-            const ops = freshData.enemigos?.length || 0;
-            const cli = freshData.clientes?.length || 0;
-            const rem = freshData.remitos?.length || 0;
-            const bulk = freshData.bulk?.length || 0;
-            return ops + cli + rem + bulk > 0;
-        }
         const SESSION_SNAPSHOT_KEY = 'session_snapshot';
 
         function sessionUserFromLocalSnapshot() {
@@ -2846,159 +2543,6 @@ const $ = id => document.getElementById(id);
             }
         });
 
-        let _bgLoadAllPromise = null;
-
-        async function loadAll(opts = {}) {
-            if (opts.enSegundoPlano && _bgLoadAllPromise) {
-                return _bgLoadAllPromise;
-            }
-            const run = () => loadAllCore(opts);
-            if (opts.enSegundoPlano) {
-                _bgLoadAllPromise = run().finally(() => { _bgLoadAllPromise = null; });
-                return _bgLoadAllPromise;
-            }
-            return run();
-        }
-
-        async function loadAllCore(opts = {}) {
-            const forzarServidor = !!opts.forzarServidor;
-            const sincronizarOutbox = !!opts.sincronizarOutbox;
-            const enSegundoPlano = !!opts.enSegundoPlano;
-            const avisarSiVacio = opts.avisarSiVacio !== false;
-            const bust = '_=' + Date.now();
-
-            let loaderActivo = false;
-            if (opts.bloquearUI === true) {
-                setLoading(true, opts.textoCarga || 'Descargando datos…');
-                loaderActivo = true;
-            } else if (opts.bloquearUI !== false && !enSegundoPlano && (opts.mostrarExito || (forzarServidor && !data))) {
-                setLoading(true, 'Cargando datos…');
-                loaderActivo = true;
-            }
-
-            try {
-                if (!forzarServidor || enSegundoPlano) {
-                    const cached = await tenantCacheGet('appData');
-                    if (cached) {
-                        data = cached;
-                        renderAll();
-                        if (loaderActivo) {
-                            setLoading(false);
-                            loaderActivo = false;
-                        }
-                    }
-                }
-
-                if (navigator.onLine && sincronizarOutbox) {
-                    try {
-                        await Promise.race([
-                            drainOutboxAll(),
-                            new Promise((_, rej) => setTimeout(() => rej(new Error('outbox timeout')), 12000)),
-                        ]);
-                    } catch (e) {
-                        console.warn('Outbox drain omitido o lento:', e?.message || e);
-                    }
-                }
-
-                const pending = await countPendingOutbox();
-                if (pending > 0 && data && !forzarServidor) {
-                    console.warn('Outbox con pendientes: no se pisa la caché local.');
-                    actualizarUIOffline();
-                    return;
-                }
-
-                if (!navigator.onLine) {
-                    if (!data) {
-                        const cached = await tenantCacheGet('appData');
-                        if (cached) {
-                            data = cached;
-                            renderAll();
-                        } else {
-                            toast('Sin conexión y sin datos en este dispositivo', true);
-                        }
-                    }
-                    actualizarUIOffline();
-                    return;
-                }
-
-                const settled = await Promise.allSettled([
-                    api('/api/dashboard?' + bust),
-                    api('/api/historial-pagos?' + bust),
-                    api('/api/bulk?' + bust),
-                    api('/api/clientes?' + bust),
-                    api('/api/auditoria?' + bust),
-                ]);
-                const labels = ['dashboard', 'historial-pagos', 'bulk', 'clientes', 'auditoria'];
-                const pick = (i, fallback) => settled[i].status === 'fulfilled' ? settled[i].value : fallback;
-                const dash = pick(0, null);
-                if (!dash) {
-                    const err = settled[0].status === 'rejected' ? settled[0].reason : null;
-                    throw new Error((err && err.message) || 'Error al cargar el panel principal');
-                }
-                settled.forEach((res, i) => {
-                    if (res.status === 'rejected') console.warn('API ' + labels[i] + ' falló:', res.reason);
-                });
-                const freshData = {
-                    ...dash,
-                    historialPagos: pick(1, data?.historialPagos || []),
-                    bulk: pick(2, data?.bulk || []),
-                    clientes: pick(3, data?.clientes || []),
-                    auditoria: pick(4, data?.auditoria || []),
-                };
-
-                data = freshData;
-                await tenantCachePut('appData', data);
-                renderAll();
-                publishNodeBackupAfterSync();
-
-                void (async () => {
-                    try {
-                        const delta = await window.CrmSync?.pullDeltaLight?.();
-                        if (delta?.changes?.length) {
-                            const refreshed = await tenantCacheGet('appData');
-                            if (refreshed) {
-                                data = refreshed;
-                                renderAll();
-                            }
-                        }
-                    } catch (_) {}
-                })();
-
-                if (avisarSiVacio && !servidorTieneDatos(freshData)) {
-                    try {
-                        const nube = await api('/api/nube/resumen?_=' + Date.now());
-                        const cuenta = nube.empresa_nombre || sessionUser.empresa_nombre || sessionUser.username || 'esta empresa';
-                        toast(
-                            'La nube está vacía para ' + cuenta + '. Subí tu backup .json en Backup / Nube.',
-                            true
-                        );
-                    } catch (_) {
-                        toast('La nube parece vacía para esta empresa. Subí el backup .json en Backup / Nube.', true);
-                    }
-                } else if (opts.mostrarExito) {
-                    toast('Datos descargados de la nube correctamente');
-                }
-            } catch (e) {
-                console.warn('Error al cargar del servidor.', e);
-                if (forzarServidor || !data) {
-                    toast('No se pudieron descargar los datos: ' + (e.message || 'revisá tu conexión'), true);
-                }
-            } finally {
-                if (loaderActivo) setLoading(false);
-            }
-        }
-        async function descargarDatosDeLaNube() {
-            toast('Descargando datos del servidor...');
-            await loadAll({
-                forzarServidor: true,
-                sincronizarOutbox: true,
-                bloquearUI: true,
-                textoCarga: 'Descargando datos de la nube…',
-                avisarSiVacio: true,
-                mostrarExito: true,
-            });
-        }
-
         window.abrirFormularioRegistro = abrirFormularioRegistro;
         function abrirFormularioRegistro(id, tipo = null) {
             switchView('registro');
@@ -3294,37 +2838,12 @@ const $ = id => document.getElementById(id);
         $('drawerPagar')?.addEventListener('click', abrirModalPago);
         $('drawerDelete').addEventListener('click', async () => {
             if (!selectedDeuda) return;
-            const pw = await window.promptMasterPasswordAsync('Ingrese la contraseña maestra para eliminar la deuda:');
-            if (!pw) return;
-            if (!confirm('¿Eliminar ' + selectedDeuda.alias + '?')) return;
-            await api('/api/operaciones/' + selectedDeuda.id, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json', 'X-Master-Password': pw }
-            });
-            toast('Obligación eliminada');
-            closeDrawer();
-            await loadAll();
+            await CrmDelete.eliminarOperacion(selectedDeuda.id, selectedDeuda.alias);
         });
 
         $('btnConfirmDeleteAuditoria')?.addEventListener('click', async () => {
             if (!selectedAuditId) return;
-            const pw = $('inpPasswordAuditoria').value;
-            if (!pw) {
-                toast('Debe ingresar la contraseña maestra', true);
-                return;
-            }
-            if (!confirm('¿Borrar definitivamente este registro de auditoría?')) return;
-            try {
-                await api('/api/auditoria/' + selectedAuditId, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pw }
-                });
-                toast('Registro de auditoría eliminado');
-                $('modalPasswordAuditoria').classList.remove('open');
-                await loadAll();
-            } catch (e) {
-                toast(e.message, true);
-            }
+            await CrmDelete.eliminarAuditoria(selectedAuditId);
         });
 
         $('btnCancelarPago').addEventListener('click', cerrarModalPago);
@@ -3396,6 +2915,9 @@ const $ = id => document.getElementById(id);
 
         $('formDeuda').addEventListener('submit', async ev => {
             ev.preventDefault();
+            const btn = ev.target.querySelector('button[type=submit]');
+            if (btn?.disabled) return;
+
             const fd = new FormData(ev.target);
             const payload = Object.fromEntries(fd);
             if (payload.tipo === 'tarjeta') {
@@ -3442,14 +2964,20 @@ const $ = id => document.getElementById(id);
                 delete payload.precio_kg;
                 delete payload.plazo_dias;
             }
-            const guardado = await registrarTransaccion(payload);
-            if (guardado) {
-                toast('Datos cargados, en unos instantes lo verás reflejado. Gracias.', false, 4000);
+
+            const uuid = crypto.randomUUID();
+            if (btn) btn.disabled = true;
+            try {
+                await aplicarOperacionOptimista(payload, uuid);
+                toast('Obligación registrada');
                 ev.target.reset();
                 toggleFormTipo();
                 switchView('home');
-            } else {
-                toast('Error al guardar localmente', true);
+                void enviarOperacionFinanciera(payload, uuid);
+            } catch (e) {
+                toast(e.message || 'Error al guardar', true);
+            } finally {
+                if (btn) btn.disabled = false;
             }
         });
 
@@ -3891,77 +3419,6 @@ const $ = id => document.getElementById(id);
             });
         };
 
-        window.eliminarCliente = async function(clientId) {
-            const pass = await window.promptMasterPasswordAsync("⚠️ Se borrarán permanentemente este cliente, TODAS sus facturas/remitos (se devolverán los kilos al stock) y TODOS sus pagos.");
-            if (!pass) return;
-            try {
-                const res = await api('/api/clientes/' + clientId, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pass }
-                });
-                toast(res.message || "Cliente eliminado permanentemente");
-                
-                // Eliminar optimísticamente del estado local antes de recargar
-                if (data && data.clientes) {
-                    const idx = data.clientes.findIndex(c => String(c.id) === String(clientId));
-                    if (idx !== -1) {
-                        data.clientes.splice(idx, 1);
-                        await tenantCachePut('appData', data);
-                    }
-                }
-                
-                await loadAll();
-                switchView('clientes');
-            } catch(e) {
-                toast(e.message, true);
-            }
-        };
-
-        window.eliminarPagoCliente = async function(pagoId) {
-            const pass = await window.promptMasterPasswordAsync("⚠️ Se eliminará este pago. La deuda de las facturas cobradas con este pago se restablecerá.");
-            if (!pass) return;
-            try {
-                const res = await api('/api/pagos/' + pagoId, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pass }
-                });
-                toast(res.message || "Pago eliminado y deuda restablecida");
-                
-                // Eliminar optimísticamente del estado local antes de recargar
-                if (data) {
-                    if (data.historialPagos) {
-                        const idx = data.historialPagos.findIndex(p => String(p.id) === String(pagoId));
-                        if (idx !== -1) data.historialPagos.splice(idx, 1);
-                    }
-                    if (currentClientData && currentClientData.pagos) {
-                        const idx = currentClientData.pagos.findIndex(p => String(p.id) === String(pagoId));
-                        if (idx !== -1) {
-                            const p = currentClientData.pagos[idx];
-                            currentClientData.saldo_actual = (currentClientData.saldo_actual || 0) + p.monto;
-                            currentClientData.pagos.splice(idx, 1);
-                        }
-                    }
-                    if (data.clientes) {
-                        const c = data.clientes.find(cli => String(cli.id) === String(selectedClienteId));
-                        if (c && c.pagos) {
-                            const idx = c.pagos.findIndex(p => String(p.id) === String(pagoId));
-                            if (idx !== -1) {
-                                const p = c.pagos[idx];
-                                c.saldo_actual = (c.saldo_actual || 0) + p.monto;
-                                c.pagos.splice(idx, 1);
-                            }
-                        }
-                    }
-                    await tenantCachePut('appData', data);
-                }
-                
-                await loadAll();
-                if (selectedClienteId) await openClientDrawer(selectedClienteId);
-            } catch(e) {
-                toast(e.message, true);
-            }
-        };
-
         window.restablecerPagoFactura = async function(remitoId) {
             if (!confirm("⚠️ ¿Está seguro de restablecer el pago de esta factura?\nEl monto pagado volverá a cero y se sumará a la deuda del cliente.")) return;
             const pass = await window.promptMasterPasswordAsync("⚠️ Ingrese la contraseña maestra para restablecer el pago de esta factura:");
@@ -3973,50 +3430,6 @@ const $ = id => document.getElementById(id);
                 });
                 toast(res.message || "Pago restablecido");
                 cerrarModalFacturaOriginal();
-                await loadAll();
-                if (selectedClienteId) {
-                    await openClientDrawer(selectedClienteId);
-                }
-            } catch(e) {
-                toast(e.message, true);
-            }
-        };
-
-        window.eliminarFactura = async function(remitoId) {
-            const pass = await window.promptMasterPasswordAsync("⚠️ Se eliminará esta factura permanentemente. Los kilos volverán a estar disponibles en el stock.");
-            if (!pass) return;
-            try {
-                const res = await api('/api/remitos/' + remitoId, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pass }
-                });
-                toast(res.message || "Factura eliminada. Stock repuesto.");
-                cerrarModalFacturaOriginal();
-                
-                // Eliminar optimísticamente del estado local antes de recargar
-                if (data) {
-                    if (currentClientData && currentClientData.remitos) {
-                        const idx = currentClientData.remitos.findIndex(r => String(r.id) === String(remitoId));
-                        if (idx !== -1) {
-                            const r = currentClientData.remitos[idx];
-                            currentClientData.saldo_actual = (currentClientData.saldo_actual || 0) - (r.precio_venta_total - (r.monto_pagado || 0));
-                            currentClientData.remitos.splice(idx, 1);
-                        }
-                    }
-                    if (data.clientes) {
-                        const c = data.clientes.find(cli => String(cli.id) === String(selectedClienteId));
-                        if (c && c.remitos) {
-                            const idx = c.remitos.findIndex(r => String(r.id) === String(remitoId));
-                            if (idx !== -1) {
-                                const r = c.remitos[idx];
-                                c.saldo_actual = (c.saldo_actual || 0) - (r.precio_venta_total - (r.monto_pagado || 0));
-                                c.remitos.splice(idx, 1);
-                            }
-                        }
-                    }
-                    await tenantCachePut('appData', data);
-                }
-                
                 await loadAll();
                 if (selectedClienteId) {
                     await openClientDrawer(selectedClienteId);
@@ -4764,59 +4177,47 @@ const $ = id => document.getElementById(id);
         registerServiceWorker();
         initIosInstallHint();
 
+        function wireCrmModules() {
+            CrmDb.setEmpresaIdResolver(() => sessionUser?.empresa_id || 1);
+            CrmBus.on('getData', () => data);
+            CrmBus.on('setData', (d) => { data = d; });
+            CrmBus.on('getSessionUser', () => sessionUser);
+            CrmBus.on('toast', (msg, err) => toast(msg, err));
+            CrmBus.on('setLoading', (on, texto) => setLoading(on, texto));
+            CrmBus.on('renderAll', () => renderAll());
+            CrmBus.on('safeRenderAll', () => safeRenderAll());
+            CrmBus.on('loadAll', (opts) => loadAll(opts));
+            CrmBus.on('loadSession', () => loadSession());
+            CrmBus.on('switchView', (name) => switchView(name));
+            CrmBus.on('applyPwaDeepLink', () => applyPwaDeepLink());
+            CrmBus.on('aplicarCambioOptimista', (url, method, body) => aplicarCambioOptimista(url, method, body));
+            CrmBus.on('aplicarOperacionOptimista', (payload, uuid) => aplicarOperacionOptimista(payload, uuid));
+            CrmBus.on('persistirYRefrescarUI', () => persistirYRefrescarUI());
+            CrmBus.on('recalcularMetricasLocales', () => recalcularMetricasLocales());
+            CrmBus.on('getSelectedClienteId', () => selectedClienteId);
+            CrmBus.on('getCurrentClientData', () => currentClientData);
+            CrmBus.on('openClientDrawer', (id) => openClientDrawer(id));
+            CrmBus.on('closeDrawer', () => closeDrawer());
+            CrmBus.on('cerrarModalFacturaOriginal', () => cerrarModalFacturaOriginal());
+            CrmBus.on('closeAuditModal', () => $('modalPasswordAuditoria')?.classList.remove('open'));
+            CrmBus.on('getAuditDeletePassword', () => $('inpPasswordAuditoria')?.value || '');
+        }
+
         async function boot() {
-            const sessionFromServer = await loadSession();
-            const prevUser = localStorage.getItem('sync_user') || '';
-            const prevEmpresa = localStorage.getItem('sync_empresa') || '';
-            const curUser = sessionUser.username || '';
-            const curEmpresa = String(sessionUser.empresa_id || '1');
-            const usuarioCambio = sessionFromServer && prevUser && prevUser !== curUser;
-            const empresaCambio = sessionFromServer && prevEmpresa && prevEmpresa !== curEmpresa;
-            if (usuarioCambio || empresaCambio) {
-                await Promise.all([
-                    db.cache.clear(),
-                    db.transacciones.clear(),
-                    db.solicitudes_pendientes.clear(),
-                ]);
-                try { await db.pending_sync.clear(); } catch (_) {}
-            }
-            if (curUser) localStorage.setItem('sync_user', curUser);
-            if (curEmpresa) localStorage.setItem('sync_empresa', curEmpresa);
-
-            const cached = await tenantCacheGet('appData');
-            const sinCacheLocal = !cached;
-            const cuentaNueva = sinCacheLocal || usuarioCambio || empresaCambio;
-
-            if (cached && !cuentaNueva) {
-                data = cached;
-                renderAll();
-                actualizarUIOffline();
-            }
-
-            if (new URLSearchParams(window.location.search).get('view')) {
-                applyPwaDeepLink();
-            } else {
+            try {
+                wireCrmModules();
+                await CrmLoader.runBoot();
+            } catch (e) {
+                console.error('boot:', e);
+                setLoading(false);
+                data = ensureDataShape(data);
                 switchView('home');
-            }
-
-            void loadAll({
-                forzarServidor: cuentaNueva,
-                bloquearUI: cuentaNueva,
-                avisarSiVacio: cuentaNueva,
-                enSegundoPlano: !cuentaNueva,
-            });
-
-            if (navigator.onLine) {
-                void (async () => {
-                    try {
-                        await drainOutboxAll();
-                        actualizarUIOffline();
-                    } catch (e) {
-                        console.warn('outbox al iniciar:', e);
-                    }
-                })();
+                toast('Error al cargar. Recargá la página.', true);
             }
         }
+
+        window.loadAll = loadAll;
+        window.descargarDatosDeLaNube = descargarDatosDeLaNube;
 
         async function updateWeather() {
             function fetchW(lat, lon) {
@@ -4846,3 +4247,8 @@ const $ = id => document.getElementById(id);
 
         boot();
         setInterval(() => void loadAll({ enSegundoPlano: true, bloquearUI: false }), 60000);
+        setInterval(async () => {
+            if (!navigator.onLine) return;
+            const pending = await countPendingOutbox();
+            if (pending > 0) void dispararSyncInmediato();
+        }, 12000);

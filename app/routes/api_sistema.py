@@ -7,7 +7,12 @@ from app.services.audit import log_audit
 from datetime import date
 
 
-from app.services.finanzas import panel_estrategia, ranking_enemigos, historial_vencimientos
+from app.services.finanzas import (
+    calc_metricas_flotantes,
+    panel_estrategia,
+    ranking_enemigos,
+    historial_vencimientos,
+)
 from app.services.remitos import list_remitos
 from app.services.bancos import list_bancos
 from app.services.clientes import list_perdidas_acumuladas
@@ -95,36 +100,7 @@ def api_dashboard():
     
     vencidos = [h for h in historial if h.get("vencido")]
     
-    sangre_diaria = 0
-    interes_diario = 0
-    deuda_total = 0
-    interes_acumulado = 0
-
-    for d in enemigos:
-        monto = d.get('recibido') or 0  # El capital original sin intereses
-        interes = d.get('interes') or 0 # El interés calculado
-        dias = max(1, d.get('dias_faltantes') or 30)
-
-        # Usamos tu fórmula explícita
-        sangre_diaria += (monto + interes) / dias
-        interes_diario += interes / dias
-        deuda_total += (monto + interes)
-        interes_acumulado += interes
-
-    # Lógica de cálculo solicitada por el usuario
-    # Al capital neto (que restaba la deuda total) le devolvemos (descontamos) el interés acumulado para que sea puro capital
-    capital_disponible = estrategia.get("activo", {}).get("capital_neto", 0) + interes_acumulado
-    cubre = estrategia.get("activo", {}).get("activo_pendiente", 0) >= (estrategia.get("activo", {}).get("deuda_real", 0) - interes_acumulado)
-    tendencia_capital = 'up' if cubre else 'down'
-    
-    metricas_flotantes = {
-        "sangre": sangre_diaria,
-        "int_diario": interes_diario,
-        "deuda": deuda_total,
-        "int_acumulado": interes_acumulado,
-        "capital": capital_disponible,
-        "tendencia": tendencia_capital
-    }
+    metricas_flotantes = calc_metricas_flotantes(enemigos, estrategia)
     
     # 5. Devuelve todo empaquetado en una caja llamada "JSON" para que la app lo lea
     return jsonify(
