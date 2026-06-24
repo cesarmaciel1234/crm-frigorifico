@@ -70,6 +70,32 @@ def list_bulk_lots() -> list[dict]:
         })
     return out
 
+def eliminar_lote_bulk(lote_id: int) -> dict:
+    """Elimina un lote bulk sin ventas asociadas (carga errónea)."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, kg_totales, kg_remanentes, numero_lote FROM compras_bulk WHERE id = ?",
+            (lote_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("Lote no encontrado")
+        used_row = conn.execute(
+            "SELECT COALESCE(SUM(kg_descontados), 0) AS kg FROM remitos_fracciones WHERE lote_id = ?",
+            (lote_id,),
+        ).fetchone()
+        kg_usados = float(used_row["kg"] or 0) if used_row else 0.0
+        if kg_usados > 0:
+            raise ValueError(
+                "No se puede eliminar: este lote ya tiene remitos de venta asociados. "
+                "Eliminá esos remitos primero."
+            )
+        conn.execute("DELETE FROM compras_bulk WHERE id = ?", (lote_id,))
+    return {
+        "id": int(row["id"]),
+        "kg_totales": float(row["kg_totales"]),
+        "numero_lote": row["numero_lote"] or "",
+    }
+
 def fraccionar_lote_fifo(conn, kg_venta: float) -> tuple[float, list[dict]]:
     """
     Descuenta kg_venta de los lotes de compras_bulk activos siguiendo la estrategia FIFO.

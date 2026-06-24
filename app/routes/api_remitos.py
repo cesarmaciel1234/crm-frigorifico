@@ -8,7 +8,7 @@ from datetime import date
 
 
 from app.services.remitos import list_remitos, marcar_remito_pagado, registrar_pago_remito, get_remito_detalle, eliminar_remito
-from app.services.bulk import registrar_lote_bulk, list_bulk_lots, fraccionar_lote_fifo
+from app.services.bulk import registrar_lote_bulk, list_bulk_lots, fraccionar_lote_fifo, eliminar_lote_bulk
 from app.services.clientes import buscar_o_crear_cliente, recalcular_saldo_cliente
 
 @api_bp.route("/remitos", methods=["GET", "POST"])
@@ -134,6 +134,25 @@ def api_bulk_endpoint():
         }), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+
+@api_bp.route("/bulk/<int:lid>", methods=["DELETE"])
+def api_eliminar_bulk_endpoint(lid: int):
+    guard = _guard_master_admin()
+    if guard:
+        return guard
+    try:
+        result = eliminar_lote_bulk(lid)
+        log_audit(
+            "DELETE",
+            entidad="compras_bulk",
+            entidad_id=lid,
+            detalle=f"Lote bulk #{lid} eliminado ({result.get('kg_totales')} kg)",
+        )
+        return jsonify({"ok": True, **result, "message": "Lote eliminado con éxito"})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error al eliminar lote: {str(e)}"}), 500
 
 @api_bp.route("/remitos/<int:rid>/cobrar", methods=["POST"])
 def api_remito_cobrar_endpoint(rid: int):

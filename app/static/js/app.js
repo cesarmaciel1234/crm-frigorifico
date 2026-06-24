@@ -1484,9 +1484,35 @@ const $ = id => document.getElementById(id);
                         <div class="home-subtext" style="font-size:9px;margin-top:2px">x Kg: $${fmtCompact(b.costo_kg)}</div>
                     </td>
                     <td style="text-align:center">${badge}</td>
+                    ${sessionUser.role === 'admin' ? `<td style="text-align:center"><button type="button" class="btn btn-ghost btn-sm" title="Eliminar lote mal cargado" onclick="eliminarLoteBulk(${b.id})" style="color:var(--danger);padding:4px 8px;">🗑</button></td>` : ''}
                 </tr>`;
-            }).join('') : '<tr><td colspan="5" style="color:var(--text-muted);padding:16px;text-align:center">Sin lotes de compra bulk registrados</td></tr>';
+            }).join('') : '<tr><td colspan="' + (sessionUser.role === 'admin' ? 6 : 5) + '" style="color:var(--text-muted);padding:16px;text-align:center">Sin lotes de compra bulk registrados</td></tr>';
         }
+
+        window.eliminarLoteBulk = async function(loteId) {
+            if (sessionUser.role !== 'admin') {
+                toast('Solo administradores pueden eliminar lotes', true);
+                return;
+            }
+            const lote = (data.bulk || []).find(b => b.id === loteId);
+            const label = lote ? `Lote #${loteId}` : `lote #${loteId}`;
+            const pw = await window.promptMasterPasswordAsync('Contraseña maestra para eliminar ' + label + ' (stock mal cargado):');
+            if (!pw) return;
+            if (!confirm('¿Eliminar ' + label + '? Esta acción no se puede deshacer.')) return;
+            try {
+                setLoading(true, 'Eliminando lote…');
+                await api('/api/bulk/' + loteId, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pw },
+                });
+                toast('Lote eliminado');
+                await loadAll();
+            } catch (e) {
+                toast(e.message || 'No se pudo eliminar el lote', true);
+            } finally {
+                setLoading(false);
+            }
+        };
 
         window.filtrarClientes = (term) => {
             const termLower = term.toLowerCase();
