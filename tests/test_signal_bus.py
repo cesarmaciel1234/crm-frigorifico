@@ -65,6 +65,34 @@ def test_sync_push_broadcasts_on_success(client, tenant_db):
         unsubscribe(1, inbox)
 
 
+def test_delete_operacion_broadcasts_before_db(client, tenant_db):
+    from app.config import Config
+    from app.database import get_db
+
+    with get_db() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO operaciones_financieras (alias, tipo, recibido, pagar, meses)
+            VALUES ('Test SSE', 'tarjeta', 1000, 1200, 3)
+            """
+        )
+        op_id = cur.lastrowid
+
+    inbox = subscribe(1)
+    try:
+        resp = client.delete(
+            f"/api/operaciones/{op_id}",
+            headers={"X-Master-Password": Config.MASTER_PASSWORD, "X-Device-Id": "dev-del-1"},
+        )
+        assert resp.status_code == 200
+        msg = inbox.get(timeout=1)
+        assert msg["event"] == "refrescar"
+        assert msg["reason"] == "delete_operacion"
+        assert msg["source_device_id"] == "dev-del-1"
+    finally:
+        unsubscribe(1, inbox)
+
+
 @pytest.fixture()
 def tenant_db(tmp_path):
     from app.config import Config

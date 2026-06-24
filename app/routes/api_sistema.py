@@ -19,6 +19,7 @@ from app.services.clientes import list_perdidas_acumuladas
 from app.services.audit import list_audit_log
 from app.services.export_data import export_all_data
 from app.services.import_data import import_all_data
+from app.services.signal_bus import notify_tenant_refresh_from_request
 from app.services.users import get_empresa_config, save_empresa_config, list_users, create_user, update_user
 
 _COUNT_TABLES = ("clientes", "operaciones_financieras", "remitos_carga", "compras_bulk")
@@ -136,6 +137,7 @@ def api_delete_auditoria(audit_id: int):
         return jsonify({"error": msg}), 403
     if not role_at_least("admin"):
         return jsonify({"error": "Solo administradores pueden eliminar auditoría"}), 403
+    notify_tenant_refresh_from_request("delete_auditoria")
     with get_db() as conn:
         n = conn.execute("DELETE FROM auditoria_operaciones WHERE id = ?", (audit_id,)).rowcount
     return jsonify({"ok": True}) if n else (jsonify({"error": "No encontrada"}), 404)

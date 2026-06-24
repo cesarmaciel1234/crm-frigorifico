@@ -60,3 +60,12 @@ def subscriber_count(empresa_id: int | None = None) -> int:
         if empresa_id is not None:
             return len(_subscribers.get(int(empresa_id), ()))
         return sum(len(s) for s in _subscribers.values())
+
+
+def notify_tenant_refresh_from_request(reason: str = "data_change") -> int:
+    """Dispara SSE a la empresa de la sesión (antes del trabajo pesado de DB)."""
+    from flask import request, session
+
+    empresa_id = int(session.get("empresa_id") or 1)
+    source = (request.headers.get("X-Device-Id") or "").strip() or None
+    return broadcast_refresh(empresa_id, source_device_id=source, reason=reason)

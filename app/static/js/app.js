@@ -31,14 +31,14 @@ const $ = id => document.getElementById(id);
 
         async function registrarTransaccion(datos) {
             const uuid = crypto.randomUUID();
-            try {
-                await aplicarOperacionOptimista(datos, uuid);
-                void enviarOperacionFinanciera(datos, uuid);
-                return true;
-            } catch (e) {
-                console.error("Error al guardar localmente:", e);
-                return false;
-            }
+            toast('Obligación registrada');
+            void aplicarOperacionOptimista(datos, uuid)
+                .then(() => void enviarOperacionFinanciera(datos, uuid))
+                .catch((e) => {
+                    console.error('Error al guardar localmente:', e);
+                    toast(e.message || 'Error al guardar', true);
+                });
+            return true;
         }
 
         async function enviarOperacionFinanciera(payload, uuid) {
@@ -64,15 +64,47 @@ const $ = id => document.getElementById(id);
                     void dispararSyncInmediato(false);
                     return;
                 }
-                await api('/api/operaciones', {
+                const res = await api('/api/operaciones', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body,
+                    _skipOfflineOptimistic: true,
                 });
-                void loadAll({ enSegundoPlano: true, bloquearUI: false, avisarSiVacio: false });
+                if (res?.id) {
+                    data = ensureDataShape(data);
+                    const e = data.enemigos.find(x => x.uuid === uuid);
+                    if (e) e.id = res.id;
+                    void persistirYRefrescarUI();
+                }
             } catch (e) {
                 console.warn('enviar operación financiera:', e);
+                toast(e.message || 'No se pudo sincronizar la obligación', true);
             }
+        }
+
+        function aplicarPagoLocalOptimista(opId, numero, monto) {
+            data = ensureDataShape(data);
+            CrmDelete.aplicarPagoCuotaOptimista(data, opId, numero, monto);
+            recalcularMetricasLocales();
+            void persistirYRefrescarUI();
+        }
+
+        function aplicarCobroRemitoLocal(remitoId, monto) {
+            data = ensureDataShape(data);
+            CrmDelete.aplicarCobroRemitoOptimista(data, remitoId, monto);
+            void persistirYRefrescarUI();
+            if (currentClientData && $('view-cliente-detalle')?.classList.contains('active')) {
+                renderClientDashboard();
+            } else {
+                renderRemitosFull();
+            }
+        }
+
+        function aplicarCobroClienteLocal(clientId, monto) {
+            data = ensureDataShape(data);
+            CrmDelete.aplicarCobroClienteOptimista(data, clientId, monto);
+            void persistirYRefrescarUI();
+            renderCobranzas();
         }
 
         // -----------------------------------
@@ -420,24 +452,24 @@ const $ = id => document.getElementById(id);
             planPagoActual = null;
         }
 
-        async function confirmarPago() {
+        function confirmarPago() {
             if (!planPagoActual) return;
             const numero = parseInt($('inpCuotaNum').value, 10);
             const monto = parseFloat($('inpMontoPago').value);
-            try {
-                const res = await api('/api/operaciones/' + planPagoActual.id + '/pagar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ numero_cuota: numero, monto_pagado: monto })
-                });
-                let msg = `Cuota ${res.numero_cuota}/${res.cuotas_total} registrada`;
-                if (res.interes_punitorio > 0) msg += ` · Punitorio $${fmt(res.interes_punitorio)}`;
-                if (res.descuento > 0) msg += ` · Descuento $${fmt(res.descuento)}`;
-                toast(msg);
-                cerrarModalPago();
-                closeDrawer();
-                await loadAll();
-            } catch (e) { toast(e.message, true); }
+            const opId = planPagoActual.id;
+            const cuotasTotal = planPagoActual.cuotas_total;
+
+            aplicarPagoLocalOptimista(opId, numero, monto);
+            toast(`Cuota ${numero}/${cuotasTotal} registrada`);
+            cerrarModalPago();
+            closeDrawer();
+
+            void api('/api/operaciones/' + opId + '/pagar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ numero_cuota: numero, monto_pagado: monto }),
+                _skipOfflineOptimistic: true,
+            }).catch((e) => toast(e.message, true));
         }
 
         function abrirModalPagoRemito(remito) {
@@ -462,7 +494,7 @@ const $ = id => document.getElementById(id);
             remitoPagoActual = null;
         }
 
-        async function confirmarPagoRemito() {
+        function confirmarPagoRemito() {
             if (!remitoPagoActual) return;
             const saldo = remitoSaldoPendiente(remitoPagoActual);
             const monto = parseFloat($('inpMontoRemitoPago').value);
@@ -474,24 +506,17 @@ const $ = id => document.getElementById(id);
                 toast('El monto supera el saldo pendiente', true);
                 return;
             }
-            try {
-                const res = await api('/api/remitos/' + remitoPagoActual.id + '/cobrar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ monto_pagado: monto })
-                });
-                toast(res.message || 'Pago registrado');
-                cerrarModalPagoRemito();
-                await loadAll();
-                if (currentClientData && $('view-cliente-detalle')?.classList.contains('active')) {
-                    const c = await api('/api/clientes/' + currentClientData.id);
-                    currentClientData = c;
-                    if ($('viewClientTitle')) $('viewClientTitle').textContent = c.nombre;
-                    renderClientDashboard();
-                } else {
-                    await renderRemitosFull();
-                }
-            } catch (e) { toast(e.message, true); }
+            const remitoId = remitoPagoActual.id;
+            aplicarCobroRemitoLocal(remitoId, monto);
+            toast('Pago registrado');
+            cerrarModalPagoRemito();
+
+            void api('/api/remitos/' + remitoId + '/cobrar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ monto_pagado: monto }),
+                _skipOfflineOptimistic: true,
+            }).catch((e) => toast(e.message, true));
         }
 
         function abrirAccionCobranza(clientId) {
@@ -542,7 +567,7 @@ const $ = id => document.getElementById(id);
             cobranzaClienteActual = null;
         }
 
-        async function confirmarPagoGlobal() {
+        function confirmarPagoGlobal() {
             if (!cobranzaClienteActual) return;
             const saldo = Number(cobranzaClienteActual.saldo_actual || 0);
             const monto = parseFloat($('inpMontoPagoGlobal').value);
@@ -554,17 +579,17 @@ const $ = id => document.getElementById(id);
                 toast('El monto supera la deuda pendiente', true);
                 return;
             }
-            try {
-                const res = await api('/api/clientes/' + cobranzaClienteActual.id + '/cobrar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ monto_pagado: monto })
-                });
-                toast(res.message || 'Cobro registrado');
-                cerrarModalPagoGlobal();
-                await loadAll();
-                renderCobranzas();
-            } catch (e) { toast(e.message, true); }
+            const clientId = cobranzaClienteActual.id;
+            aplicarCobroClienteLocal(clientId, monto);
+            toast('Cobro registrado');
+            cerrarModalPagoGlobal();
+
+            void api('/api/clientes/' + clientId + '/cobrar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ monto_pagado: monto }),
+                _skipOfflineOptimistic: true,
+            }).catch((e) => toast(e.message, true));
         }
 
         function toggleFormTipo() {
@@ -2836,14 +2861,14 @@ const $ = id => document.getElementById(id);
         }, true);
 
         $('drawerPagar')?.addEventListener('click', abrirModalPago);
-        $('drawerDelete').addEventListener('click', async () => {
+        $('drawerDelete').addEventListener('click', () => {
             if (!selectedDeuda) return;
-            await CrmDelete.eliminarOperacion(selectedDeuda.id, selectedDeuda.alias);
+            void CrmDelete.eliminarOperacion(selectedDeuda.id, selectedDeuda.alias);
         });
 
-        $('btnConfirmDeleteAuditoria')?.addEventListener('click', async () => {
+        $('btnConfirmDeleteAuditoria')?.addEventListener('click', () => {
             if (!selectedAuditId) return;
-            await CrmDelete.eliminarAuditoria(selectedAuditId);
+            void CrmDelete.eliminarAuditoria(selectedAuditId);
         });
 
         $('btnCancelarPago').addEventListener('click', cerrarModalPago);
@@ -2966,19 +2991,13 @@ const $ = id => document.getElementById(id);
             }
 
             const uuid = crypto.randomUUID();
-            if (btn) btn.disabled = true;
-            try {
-                await aplicarOperacionOptimista(payload, uuid);
-                toast('Obligación registrada');
-                ev.target.reset();
-                toggleFormTipo();
-                switchView('home');
-                void enviarOperacionFinanciera(payload, uuid);
-            } catch (e) {
-                toast(e.message || 'Error al guardar', true);
-            } finally {
-                if (btn) btn.disabled = false;
-            }
+            toast('Obligación registrada');
+            ev.target.reset();
+            toggleFormTipo();
+            switchView('home');
+            void aplicarOperacionOptimista(payload, uuid)
+                .then(() => void enviarOperacionFinanciera(payload, uuid))
+                .catch((e) => toast(e.message || 'Error al guardar', true));
         });
 
         $('selTipo').addEventListener('change', toggleFormTipo);

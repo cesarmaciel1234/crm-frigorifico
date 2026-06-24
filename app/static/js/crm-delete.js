@@ -27,6 +27,66 @@
         void global.CrmApi.actualizarUIOffline();
     }
 
+    function deleteHeaders(pw) {
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-Master-Password': pw,
+        };
+        const deviceId = global.CrmSync?.deviceId || '';
+        if (deviceId) headers['X-Device-Id'] = deviceId;
+        return headers;
+    }
+
+    function aplicarPagoCuotaOptimista(data, opId, numero, monto) {
+        const e = data.enemigos.find(x => String(x.id) === String(opId));
+        if (!e || !numero) return;
+        e.cuotas_pagadas = Math.max(e.cuotas_pagadas || 0, numero);
+        const total = parseInt(e.cuotas || e.cuotas_total || e.meses, 10) || 0;
+        if (total && e.cuotas_pagadas >= total) e.completa = true;
+        e.monto_pagado = (e.monto_pagado || 0) + (monto || 0);
+    }
+
+    function aplicarCobroRemitoOptimista(data, remitoId, monto) {
+        const m = parseFloat(monto) || 0;
+        for (const c of data.clientes) {
+            const r = (c.remitos || []).find(rem => String(rem.id) === String(remitoId));
+            if (!r) continue;
+            r.monto_pagado = (r.monto_pagado || 0) + m;
+            if (r.monto_pagado >= (r.precio_venta_total || 0) - 0.01) r.pagado = 1;
+            c.saldo_actual = (c.saldo_actual || 0) - m;
+            c.pagos = c.pagos || [];
+            c.pagos.push({
+                id: 'temp_' + crypto.randomUUID(),
+                monto: m,
+                fecha: new Date().toISOString().split('T')[0],
+                tipo: 'COBRO',
+            });
+            break;
+        }
+    }
+
+    function aplicarCobroClienteOptimista(data, clientId, monto) {
+        const m = parseFloat(monto) || 0;
+        const c = data.clientes.find(cli => String(cli.id) === String(clientId));
+        if (!c) return;
+        c.saldo_actual = (c.saldo_actual || 0) - m;
+        c.pagos = c.pagos || [];
+        c.pagos.push({
+            id: 'temp_' + crypto.randomUUID(),
+            monto: m,
+            fecha: new Date().toISOString().split('T')[0],
+            tipo: 'COBRO',
+        });
+        if (!data.historialPagos) data.historialPagos = [];
+        data.historialPagos.unshift({
+            id: 'temp_' + Date.now(),
+            cliente: c.nombre,
+            monto: m,
+            fecha: new Date().toISOString().split('T')[0],
+            tipo: 'COBRO',
+        });
+    }
+
     async function aplicarCambioOptimista(url, method, body) {
         try {
             let data = getData();
@@ -160,6 +220,18 @@
                 }
             }
 
+            if (url.includes('/api/operaciones/') && url.includes('/pagar') && method === 'POST') {
+                const match = url.match(/\/api\/operaciones\/([^/]+)\/pagar/);
+                if (match) {
+                    aplicarPagoCuotaOptimista(
+                        data,
+                        match[1],
+                        parseInt(parsedBody.numero_cuota, 10),
+                        parseFloat(parsedBody.monto_pagado || 0),
+                    );
+                }
+            }
+
             if (url.includes('/api/bulk/') && method === 'DELETE') {
                 const match = url.match(/\/api\/bulk\/([^/?]+)/);
                 if (match) {
@@ -228,32 +300,45 @@
             url,
             confirmMessage,
             passwordPrompt,
-            loadingText,
             successMessage,
-            refresh = true,
-            onSuccess,
+            optimisticApply,
+            afterOptimistic,
+            refresh = false,
+            onSynced,
         } = opts;
 
         if (confirmMessage && !confirm(confirmMessage)) return false;
         const pw = await global.promptMasterPasswordAsync?.(passwordPrompt || 'Contraseña maestra:');
         if (!pw) return false;
 
-        if (loadingText) bus().emit('setLoading', true, loadingText);
-        try {
-            const res = await api(url, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json', 'X-Master-Password': pw },
+        const data = getData();
+        if (typeof optimisticApply === 'function') optimisticApply(data);
+        setData(data);
+        void persistLocal();
+
+        if (typeof afterOptimistic === 'function') afterOptimistic(data);
+
+        const msg = typeof successMessage === 'function'
+            ? successMessage({ ok: true })
+            : (successMessage || 'Eliminado');
+        if (msg) bus().emit('toast', msg);
+
+        void api(url, { method: 'DELETE', headers: deleteHeaders(pw) })
+            .then((res) => {
+                if (onSynced) onSynced(res);
+                if (refresh) {
+                    void global.CrmLoader.loadAll({
+                        enSegundoPlano: true,
+                        bloquearUI: false,
+                        avisarSiVacio: false,
+                    });
+                }
+            })
+            .catch((e) => {
+                bus().emit('toast', e.message || 'No se pudo sincronizar la eliminación', true);
             });
-            if (successMessage) bus().emit('toast', typeof successMessage === 'function' ? successMessage(res) : successMessage);
-            if (onSuccess) await onSuccess(res);
-            if (refresh) await global.CrmLoader.loadAll();
-            return true;
-        } catch (e) {
-            bus().emit('toast', e.message || 'No se pudo eliminar', true);
-            return false;
-        } finally {
-            if (loadingText) bus().emit('setLoading', false);
-        }
+
+        return true;
     }
 
     async function eliminarOperacion(opId, alias) {
@@ -262,7 +347,12 @@
             confirmMessage: '¿Eliminar ' + (alias || 'esta obligación') + '?',
             passwordPrompt: 'Ingrese la contraseña maestra para eliminar la deuda:',
             successMessage: 'Obligación eliminada',
-            onSuccess: () => bus().emit('closeDrawer'),
+            optimisticApply: (data) => {
+                data.enemigos = data.enemigos.filter(
+                    e => String(e.id) !== String(opId) && String(e.uuid) !== String(opId),
+                );
+            },
+            afterOptimistic: () => bus().emit('closeDrawer'),
         });
     }
 
@@ -273,23 +363,27 @@
             return false;
         }
         if (!confirm('¿Borrar definitivamente este registro de auditoría?')) return false;
-        try {
-            await api('/api/auditoria/' + auditId, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json', 'X-Master-Password': pw },
-            });
-            bus().emit('toast', 'Registro de auditoría eliminado');
-            bus().emit('closeAuditModal');
-            await global.CrmLoader.loadAll();
-            return true;
-        } catch (e) {
-            bus().emit('toast', e.message, true);
-            return false;
-        }
+
+        const data = getData();
+        data.auditoria = (data.auditoria || []).filter(a => String(a.id) !== String(auditId));
+        setData(data);
+        void persistLocal();
+        bus().emit('toast', 'Registro de auditoría eliminado');
+        bus().emit('closeAuditModal');
+
+        void api('/api/auditoria/' + auditId, {
+            method: 'DELETE',
+            headers: deleteHeaders(pw),
+        }).catch((e) => bus().emit('toast', e.message, true));
+
+        return true;
     }
 
     global.CrmDelete = {
         aplicarCambioOptimista,
+        aplicarPagoCuotaOptimista,
+        aplicarCobroRemitoOptimista,
+        aplicarCobroClienteOptimista,
         deleteWithMasterPassword,
         eliminarOperacion,
         eliminarAuditoria,
@@ -308,8 +402,10 @@
             url: '/api/bulk/' + loteId,
             confirmMessage: '¿Eliminar ' + label + '? Esta acción no se puede deshacer.',
             passwordPrompt: 'Contraseña maestra para eliminar ' + label + ' (stock mal cargado):',
-            loadingText: 'Eliminando lote…',
             successMessage: 'Lote eliminado',
+            optimisticApply: (d) => {
+                d.bulk = d.bulk.filter(b => String(b.id) !== String(loteId));
+            },
         });
     };
 
@@ -317,14 +413,11 @@
         await deleteWithMasterPassword({
             url: '/api/clientes/' + clientId,
             passwordPrompt: '⚠️ Se borrarán permanentemente este cliente, TODAS sus facturas/remitos (se devolverán los kilos al stock) y TODOS sus pagos.',
-            successMessage: (res) => res.message || 'Cliente eliminado permanentemente',
-            onSuccess: async () => {
-                const data = getData();
-                data.clientes = data.clientes.filter(c => String(c.id) !== String(clientId));
-                setData(data);
-                await tenantCachePut('appData', data);
-                bus().emit('switchView', 'clientes');
+            successMessage: 'Cliente eliminado permanentemente',
+            optimisticApply: (d) => {
+                d.clientes = d.clientes.filter(c => String(c.id) !== String(clientId));
             },
+            afterOptimistic: () => bus().emit('switchView', 'clientes'),
         });
     };
 
@@ -332,11 +425,10 @@
         await deleteWithMasterPassword({
             url: '/api/pagos/' + pagoId,
             passwordPrompt: '⚠️ Se eliminará este pago. La deuda de las facturas cobradas con este pago se restablecerá.',
-            successMessage: (res) => res.message || 'Pago eliminado y deuda restablecida',
-            onSuccess: async () => {
-                const data = getData();
-                if (data.historialPagos) {
-                    data.historialPagos = data.historialPagos.filter(p => String(p.id) !== String(pagoId));
+            successMessage: 'Pago eliminado y deuda restablecida',
+            optimisticApply: (d) => {
+                if (d.historialPagos) {
+                    d.historialPagos = d.historialPagos.filter(p => String(p.id) !== String(pagoId));
                 }
                 const selectedClienteId = bus().emit('getSelectedClienteId');
                 const currentClientData = bus().emit('getCurrentClientData');
@@ -348,8 +440,8 @@
                         currentClientData.pagos.splice(idx, 1);
                     }
                 }
-                if (selectedClienteId && data.clientes) {
-                    const c = data.clientes.find(cli => String(cli.id) === String(selectedClienteId));
+                if (selectedClienteId && d.clientes) {
+                    const c = d.clientes.find(cli => String(cli.id) === String(selectedClienteId));
                     if (c?.pagos) {
                         const idx = c.pagos.findIndex(p => String(p.id) === String(pagoId));
                         if (idx !== -1) {
@@ -359,9 +451,10 @@
                         }
                     }
                 }
-                setData(data);
-                await tenantCachePut('appData', data);
-                if (selectedClienteId) await bus().emit('openClientDrawer', selectedClienteId);
+            },
+            afterOptimistic: () => {
+                const selectedClienteId = bus().emit('getSelectedClienteId');
+                if (selectedClienteId) void bus().emit('openClientDrawer', selectedClienteId);
             },
         });
     };
@@ -370,10 +463,8 @@
         await deleteWithMasterPassword({
             url: '/api/remitos/' + remitoId,
             passwordPrompt: '⚠️ Se eliminará esta factura permanentemente. Los kilos volverán a estar disponibles en el stock.',
-            successMessage: (res) => res.message || 'Factura eliminada. Stock repuesto.',
-            onSuccess: async () => {
-                bus().emit('cerrarModalFacturaOriginal');
-                const data = getData();
+            successMessage: 'Factura eliminada. Stock repuesto.',
+            optimisticApply: (d) => {
                 const selectedClienteId = bus().emit('getSelectedClienteId');
                 const currentClientData = bus().emit('getCurrentClientData');
                 if (currentClientData?.remitos) {
@@ -385,8 +476,8 @@
                         currentClientData.remitos.splice(idx, 1);
                     }
                 }
-                if (selectedClienteId && data.clientes) {
-                    const c = data.clientes.find(cli => String(cli.id) === String(selectedClienteId));
+                if (selectedClienteId && d.clientes) {
+                    const c = d.clientes.find(cli => String(cli.id) === String(selectedClienteId));
                     if (c?.remitos) {
                         const idx = c.remitos.findIndex(r => String(r.id) === String(remitoId));
                         if (idx !== -1) {
@@ -396,9 +487,8 @@
                         }
                     }
                 }
-                setData(data);
-                await tenantCachePut('appData', data);
             },
+            afterOptimistic: () => bus().emit('cerrarModalFacturaOriginal'),
         });
     };
 
@@ -407,19 +497,34 @@
         if (!ids.length) return;
         const pass = await global.promptMasterPasswordAsync('Eliminar ' + ids.length + ' factura(s)');
         if (!pass) return;
-        try {
-            for (const rid of ids) {
-                await api('/api/remitos/' + rid, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json', 'X-Master-Password': pass },
-                });
+
+        const data = getData();
+        const selectedClienteId = bus().emit('getSelectedClienteId');
+        const idSet = new Set(ids.map(String));
+        for (const c of data.clientes) {
+            if (!c.remitos) continue;
+            for (const r of c.remitos) {
+                if (!idSet.has(String(r.id))) continue;
+                c.saldo_actual = (c.saldo_actual || 0) - (r.precio_venta_total - (r.monto_pagado || 0));
             }
-            bus().emit('toast', 'Facturas eliminadas');
-            const selectedClienteId = bus().emit('getSelectedClienteId');
-            if (selectedClienteId) await bus().emit('openClientDrawer', selectedClienteId);
-            await global.CrmLoader.loadAll();
-        } catch (e) {
-            bus().emit('toast', e.message, true);
+            c.remitos = c.remitos.filter(r => !idSet.has(String(r.id)));
         }
+        setData(data);
+        void persistLocal();
+        bus().emit('toast', 'Facturas eliminadas');
+
+        void (async () => {
+            try {
+                for (const rid of ids) {
+                    await api('/api/remitos/' + rid, {
+                        method: 'DELETE',
+                        headers: deleteHeaders(pass),
+                    });
+                }
+                if (selectedClienteId) await bus().emit('openClientDrawer', selectedClienteId);
+            } catch (e) {
+                bus().emit('toast', e.message, true);
+            }
+        })();
     };
 })(window);

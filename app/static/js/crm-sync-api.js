@@ -258,7 +258,10 @@
     async function api(url, opts) {
         opts = opts || {};
         opts.credentials = 'same-origin';
-        opts.headers = Object.assign({ Accept: 'application/json' }, opts.headers || {});
+        const deviceId = global.CrmSync?.deviceId || '';
+        const baseHeaders = { Accept: 'application/json' };
+        if (deviceId) baseHeaders['X-Device-Id'] = deviceId;
+        opts.headers = Object.assign(baseHeaders, opts.headers || {});
 
         const method = (opts.method || 'GET').toUpperCase();
         const isGet = method === 'GET';
@@ -292,7 +295,9 @@
                 }
 
                 bus().emit('toast', '⚠️ Sin conexión. Guardado localmente — se sincroniza al volver internet.', false);
-                await bus().emit('aplicarCambioOptimista', url, method, opts.body);
+                if (!opts._skipOfflineOptimistic) {
+                    await bus().emit('aplicarCambioOptimista', url, method, opts.body);
+                }
                 void actualizarUIOffline();
                 void dispararSyncInmediato(false);
                 return { ok: true, offline: true, message: 'Operación guardada localmente' };

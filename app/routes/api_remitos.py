@@ -10,6 +10,7 @@ from datetime import date
 from app.services.remitos import list_remitos, marcar_remito_pagado, registrar_pago_remito, get_remito_detalle, eliminar_remito
 from app.services.bulk import registrar_lote_bulk, list_bulk_lots, fraccionar_lote_fifo, eliminar_lote_bulk
 from app.services.clientes import buscar_o_crear_cliente, recalcular_saldo_cliente
+from app.services.signal_bus import notify_tenant_refresh_from_request
 
 @api_bp.route("/remitos", methods=["GET", "POST"])
 def api_remitos_endpoint():
@@ -141,6 +142,7 @@ def api_eliminar_bulk_endpoint(lid: int):
     if guard:
         return guard
     try:
+        notify_tenant_refresh_from_request("delete_bulk")
         result = eliminar_lote_bulk(lid)
         log_audit(
             "DELETE",
@@ -160,8 +162,10 @@ def api_remito_cobrar_endpoint(rid: int):
         d = request.get_json(silent=True) or {}
         monto = d.get("monto_pagado")
         if monto is None:
+            notify_tenant_refresh_from_request("cobro_remito")
             marcar_remito_pagado(rid)
             return jsonify({"ok": True, "message": "Remito marcado como pagado/cobrado"})
+        notify_tenant_refresh_from_request("cobro_remito")
         result = registrar_pago_remito(rid, float(monto))
         msg = "Pago parcial registrado" if not result["cobrado_completo"] else "Remito cobrado completamente"
         return jsonify({**result, "message": msg})
@@ -186,6 +190,7 @@ def api_eliminar_remito_endpoint(rid: int):
         guard = _guard_master_admin()
         if guard:
             return guard
+        notify_tenant_refresh_from_request("delete_remito")
         from app.services.remitos import eliminar_remito
         cliente_id = eliminar_remito(rid)
         return jsonify({"ok": True, "cliente_id": cliente_id, "message": "Remito eliminado con éxito (stock restituido)"})

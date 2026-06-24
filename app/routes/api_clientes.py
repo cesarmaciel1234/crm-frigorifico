@@ -9,6 +9,7 @@ from datetime import date
 
 from app.services.clientes import (list_clientes, registrar_cliente, get_cliente_detalle, actualizar_cliente, registrar_pago_cliente_global, marcar_cliente_incobrable, list_perdidas_acumuladas, actualizar_saldo_inicial, eliminar_cliente)
 from app.services.ventas_mostrador import list_ventas_mostrador, sync_ventas_offline
+from app.services.signal_bus import notify_tenant_refresh_from_request
 
 @api_bp.route("/clientes", methods=["GET", "POST"])
 def api_clientes_endpoint():
@@ -118,6 +119,7 @@ def api_cliente_cobrar_endpoint(cid: int):
         if monto is None:
             return jsonify({"error": "monto_pagado es requerido"}), 400
         result = registrar_pago_cliente_global(cid, float(monto))
+        notify_tenant_refresh_from_request("cobro_cliente")
         return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -181,6 +183,7 @@ def api_eliminar_cliente_endpoint(cid: int):
         guard = _guard_master_admin()
         if guard:
             return guard
+        notify_tenant_refresh_from_request("delete_cliente")
         from app.services.clientes import eliminar_cliente
         eliminar_cliente(cid)
         return jsonify({"ok": True, "message": "Cliente y sus remitos eliminados con éxito (stock restituido)"})

@@ -3,6 +3,7 @@ from app.routes.api import api_bp, _guard_master_admin
 from app.database import get_db
 from app.utils import parse_operacion_payload, fmt_plazo_dias, _i, _f, resolve_remito_kg, pesos_piezas_to_json
 from app.security import require_master_password_in_request, role_at_least
+from app.services.signal_bus import notify_tenant_refresh_from_request
 from app.services.audit import log_audit
 from datetime import date
 
@@ -111,6 +112,8 @@ def api_create_op():
             return jsonify({"error": "Esta operación ya ha sido registrada"}), 400
         return jsonify({"error": f"Error al guardar la operación: {str(e)}"}), 500
 
+    notify_tenant_refresh_from_request("create_operacion")
+
     return jsonify(
         {
             "id": op_id,
@@ -139,6 +142,7 @@ def api_delete_op(op_id: int):
         row = conn.execute("SELECT alias, recibido FROM operaciones_financieras WHERE id = ?", (op_id,)).fetchone()
         if not row:
             return jsonify({"error": "No encontrada"}), 404
+        notify_tenant_refresh_from_request("delete_operacion")
         conn.execute("DELETE FROM pagos_cuotas WHERE operacion_id = ?", (op_id,))
         conn.execute("DELETE FROM operaciones_financieras WHERE id = ?", (op_id,))
     log_audit(
@@ -198,6 +202,7 @@ def api_pagar_cuota(op_id: int):
         result = registrar_pago(op_id, numero_cuota, monto_pagado)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    notify_tenant_refresh_from_request("pago_cuota")
     return jsonify(result), 201
 
 @api_bp.route("/operaciones/<int:op_id>/preview-pago")
@@ -243,6 +248,7 @@ def api_eliminar_pago_endpoint(pago_id: int):
         guard = _guard_master_admin()
         if guard:
             return guard
+        notify_tenant_refresh_from_request("delete_pago")
         from app.services.clientes import eliminar_pago_cliente
         eliminar_pago_cliente(pago_id)
         return jsonify({"ok": True, "message": "Pago eliminado con éxito (deuda restituida)"})
