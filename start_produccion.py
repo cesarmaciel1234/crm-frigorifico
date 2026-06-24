@@ -55,7 +55,7 @@ def main():
     url = f"http://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
 
     print("=" * 55)
-    print("  MASTER TOTAL — PRODUCCION v3.5")
+    print("  MASTER TOTAL — PRODUCCION v3.6")
     print("  Distribuidora y Carniceria Minorista")
     print(f"  URL local: {url}")
     if host == "0.0.0.0":

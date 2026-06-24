@@ -26,6 +26,7 @@ const $ = id => document.getElementById(id);
         const publishNodeBackupAfterSync = CrmApi.publishNodeBackupAfterSync.bind(CrmApi);
         const loadAll = CrmLoader.loadAll.bind(CrmLoader);
         const descargarDatosDeLaNube = CrmLoader.descargarDatosDeLaNube.bind(CrmLoader);
+        const refrescarManual = CrmLoader.refrescarManual.bind(CrmLoader);
         const servidorTieneDatos = CrmLoader.servidorTieneDatos.bind(CrmLoader);
         const aplicarCambioOptimista = CrmDelete.aplicarCambioOptimista.bind(CrmDelete);
 
@@ -1954,6 +1955,25 @@ const $ = id => document.getElementById(id);
             } catch (_) {}
         }
 
+        function updateSessionGreetingUI() {
+            const nameEl = document.querySelector('.topbar-greeting-block div div:last-child');
+            if (!nameEl) return;
+            const etiqueta = sessionUser.empresa_nombre || sessionUser.username;
+            nameEl.textContent = etiqueta;
+            nameEl.title = 'Cuenta: ' + sessionUser.username + ' (empresa #' + sessionUser.empresa_id + ')';
+        }
+
+        function hydrateSessionLocal() {
+            sessionUser = sessionUserFromLocalSnapshot();
+            updateSessionGreetingUI();
+            if (window.CrmSync) {
+                CrmSync.init(db, sessionUser);
+                CrmSync.setApi(api);
+            }
+            applyRoleUi();
+            return sessionUser;
+        }
+
         async function loadSession() {
             let fromServer = false;
             try {
@@ -1967,20 +1987,10 @@ const $ = id => document.getElementById(id);
                 };
                 fromServer = true;
                 persistSessionSnapshot(sessionUser);
-                const nameEl = document.querySelector('.topbar-greeting-block div div:last-child');
-                if (nameEl) {
-                    const etiqueta = sessionUser.empresa_nombre || sessionUser.username;
-                    nameEl.textContent = etiqueta;
-                    nameEl.title = 'Cuenta: ' + sessionUser.username + ' (empresa #' + sessionUser.empresa_id + ')';
-                }
+                updateSessionGreetingUI();
             } catch (_) {
                 sessionUser = sessionUserFromLocalSnapshot();
-                const nameEl = document.querySelector('.topbar-greeting-block div div:last-child');
-                if (nameEl) {
-                    const etiqueta = sessionUser.empresa_nombre || sessionUser.username;
-                    nameEl.textContent = etiqueta;
-                    nameEl.title = 'Cuenta: ' + sessionUser.username + ' (empresa #' + sessionUser.empresa_id + ')';
-                }
+                updateSessionGreetingUI();
             }
             if (window.CrmSync) {
                 CrmSync.init(db, sessionUser);
@@ -2510,13 +2520,10 @@ const $ = id => document.getElementById(id);
                 toast('Error al guardar caché: ' + (e.message || ''), true);
             }
         });
-        $('btnDescargarNube')?.addEventListener('click', async () => {
-            try {
-                await descargarDatosDeLaNube();
-                cerrarModalBackup();
-            } catch (e) {
-                toast('Error al descargar: ' + (e.message || ''), true);
-            }
+        $('btnDescargarNube')?.addEventListener('click', () => {
+            void descargarDatosDeLaNube()
+                .then(() => cerrarModalBackup())
+                .catch((e) => toast('Error al descargar: ' + (e?.message || ''), true));
         });
         $('btnSubirServidor')?.addEventListener('click', async () => {
             const fileInput = $('inputBackupFile');
@@ -2791,16 +2798,16 @@ const $ = id => document.getElementById(id);
             renderHomeTable();
         });
         
-        $('btnRefresh').addEventListener('click', async () => {
-            await loadAll();
-            const v = document.querySelector('.nav-item.active')?.dataset.view;
-            if (v === 'remitos') await renderRemitosFull();
-            if (v === 'historial-pagos') renderHistorialPagos();
-            if (v === 'auditoria') renderAuditoria();
-            if (v === 'usuarios') renderUsuarios();
-            if (v === 'finanzas-aging') renderFinanzasAging();
-            if (v === 'finanzas-margenes') renderFinanzasMargenes();
-            toast('Panel actualizado');
+        $('btnRefresh').addEventListener('click', () => {
+            void refrescarManual().then(() => {
+                const v = document.querySelector('.nav-item.active')?.dataset.view;
+                if (v === 'remitos') void renderRemitosFull();
+                if (v === 'historial-pagos') renderHistorialPagos();
+                if (v === 'auditoria') renderAuditoria();
+                if (v === 'usuarios') renderUsuarios();
+                if (v === 'finanzas-aging') renderFinanzasAging();
+                if (v === 'finanzas-margenes') renderFinanzasMargenes();
+            }).catch(() => {});
         });
 
         function setSidebarOpen(open) {
@@ -4207,6 +4214,7 @@ const $ = id => document.getElementById(id);
             CrmBus.on('safeRenderAll', () => safeRenderAll());
             CrmBus.on('loadAll', (opts) => loadAll(opts));
             CrmBus.on('loadSession', () => loadSession());
+            CrmBus.on('hydrateSessionLocal', () => hydrateSessionLocal());
             CrmBus.on('switchView', (name) => switchView(name));
             CrmBus.on('applyPwaDeepLink', () => applyPwaDeepLink());
             CrmBus.on('aplicarCambioOptimista', (url, method, body) => aplicarCambioOptimista(url, method, body));

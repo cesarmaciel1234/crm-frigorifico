@@ -37,6 +37,24 @@
         return run();
     }
 
+    async function fetchDashboardBundle(bust, timeoutMs) {
+        const requests = Promise.allSettled([
+            api('/api/dashboard?' + bust),
+            api('/api/historial-pagos?' + bust),
+            api('/api/bulk?' + bust),
+            api('/api/clientes?' + bust),
+            api('/api/auditoria?' + bust),
+        ]);
+        if (!timeoutMs) return requests;
+        return Promise.race([
+            requests,
+            new Promise((_, rej) => setTimeout(
+                () => rej(new Error('Tiempo de espera agotado al contactar el servidor')),
+                timeoutMs,
+            )),
+        ]);
+    }
+
     async function loadAllCore(opts = {}) {
         const forzarServidor = !!opts.forzarServidor;
         const sincronizarOutbox = !!opts.sincronizarOutbox;
@@ -83,6 +101,9 @@
                 bus().emit('safeRenderAll');
                 void global.CrmApi.actualizarUIOffline();
                 if (navigator.onLine) void dispararSyncInmediato();
+                if (opts.manualRefresh) {
+                    bus().emit('toast', 'Sincronizando cambios locales antes de actualizar…');
+                }
                 return;
             }
 
@@ -100,13 +121,10 @@
                 return;
             }
 
-            const settled = await Promise.allSettled([
-                api('/api/dashboard?' + bust),
-                api('/api/historial-pagos?' + bust),
-                api('/api/bulk?' + bust),
-                api('/api/clientes?' + bust),
-                api('/api/auditoria?' + bust),
-            ]);
+            const settled = await fetchDashboardBundle(
+                bust,
+                forzarServidor ? 25000 : 0,
+            );
             const labels = ['dashboard', 'historial-pagos', 'bulk', 'clientes', 'auditoria'];
             const pick = (i, fallback) => settled[i].status === 'fulfilled' ? settled[i].value : fallback;
             const dash = pick(0, null);
@@ -160,24 +178,60 @@
             }
         } catch (e) {
             console.warn('Error al cargar del servidor.', e);
-            if (forzarServidor || !bus().emit('getData')) {
+            if (forzarServidor || opts.manualRefresh || !bus().emit('getData')) {
                 bus().emit('toast', 'No se pudieron descargar los datos: ' + (e.message || 'revisá tu conexión'), true);
             }
+            throw e;
         } finally {
             if (loaderActivo) bus().emit('setLoading', false);
         }
     }
 
+    async function refrescarManual() {
+        bus().emit('toast', 'Actualizando datos…');
+        let loaderActivo = false;
+        const loaderTimer = setTimeout(() => {
+            bus().emit('setLoading', true, 'Actualizando datos…');
+            loaderActivo = true;
+        }, 350);
+        try {
+            await loadAll({
+                forzarServidor: true,
+                sincronizarOutbox: true,
+                bloquearUI: false,
+                avisarSiVacio: false,
+                manualRefresh: true,
+            });
+            bus().emit('toast', 'Panel actualizado');
+            return true;
+        } catch (_) {
+            return false;
+        } finally {
+            clearTimeout(loaderTimer);
+            if (loaderActivo) bus().emit('setLoading', false);
+        }
+    }
+
     async function descargarDatosDeLaNube() {
-        bus().emit('toast', 'Descargando datos del servidor...');
-        await loadAll({
-            forzarServidor: true,
-            sincronizarOutbox: true,
-            bloquearUI: true,
-            textoCarga: 'Descargando datos de la nube…',
-            avisarSiVacio: true,
-            mostrarExito: true,
-        });
+        bus().emit('toast', 'Descargando datos del servidor…');
+        let loaderActivo = false;
+        const loaderTimer = setTimeout(() => {
+            bus().emit('setLoading', true, 'Descargando datos de la nube…');
+            loaderActivo = true;
+        }, 350);
+        try {
+            await loadAll({
+                forzarServidor: true,
+                sincronizarOutbox: true,
+                bloquearUI: false,
+                avisarSiVacio: true,
+                mostrarExito: true,
+                manualRefresh: true,
+            });
+        } finally {
+            clearTimeout(loaderTimer);
+            if (loaderActivo) bus().emit('setLoading', false);
+        }
     }
 
     function teardownSignalListener() {
@@ -218,11 +272,12 @@
         };
     }
 
-    async function runBoot() {
+    async function finishBootInBackground(hadCacheOnStart) {
         const { clearTenantCaches, tenantCacheGet } = global.CrmDb;
-        const sessionFromServer = await bus().emit('loadSession');
         const prevUser = localStorage.getItem('sync_user') || '';
         const prevEmpresa = localStorage.getItem('sync_empresa') || '';
+
+        const sessionFromServer = await bus().emit('loadSession');
         const sessionUser = bus().emit('getSessionUser') || {};
         const curUser = sessionUser.username || '';
         const curEmpresa = String(sessionUser.empresa_id || '1');
@@ -238,10 +293,42 @@
         const cached = await tenantCacheGet('appData');
         const cuentaNueva = !cached || usuarioCambio || empresaCambio;
 
-        if (cached && !cuentaNueva) {
+        if (cuentaNueva && !hadCacheOnStart) {
+            bus().emit('setLoading', true, 'Cargando datos…');
+        }
+
+        try {
+            await loadAll({
+                forzarServidor: cuentaNueva,
+                bloquearUI: cuentaNueva && !hadCacheOnStart,
+                avisarSiVacio: cuentaNueva,
+                enSegundoPlano: !cuentaNueva,
+            });
+        } finally {
+            bus().emit('setLoading', false);
+            document.documentElement.dataset.boot = 'ready';
+        }
+
+        if (navigator.onLine) {
+            void dispararSyncInmediato();
+            initSignalListener();
+        }
+    }
+
+    async function runBoot() {
+        const { tenantCacheGet } = global.CrmDb;
+
+        // Lazy boot: pintar caché local al instante (sin esperar /auth/session)
+        bus().emit('hydrateSessionLocal');
+
+        const cached = await tenantCacheGet('appData');
+        const hadCacheOnStart = !!cached;
+
+        if (hadCacheOnStart) {
             bus().emit('setData', ensureDataShape(cached));
             bus().emit('safeRenderAll');
             global.CrmApi.actualizarUIOffline();
+            document.documentElement.dataset.boot = 'cached';
         }
 
         if (new URLSearchParams(window.location.search).get('view')) {
@@ -250,23 +337,14 @@
             bus().emit('switchView', 'home');
         }
 
-        void loadAll({
-            forzarServidor: cuentaNueva,
-            bloquearUI: cuentaNueva,
-            avisarSiVacio: cuentaNueva,
-            enSegundoPlano: !cuentaNueva,
-        });
-
-        if (navigator.onLine) {
-            void dispararSyncInmediato();
-            initSignalListener();
-        }
+        void finishBootInBackground(hadCacheOnStart);
     }
 
     global.CrmLoader = {
         loadAll,
         loadAllCore,
         descargarDatosDeLaNube,
+        refrescarManual,
         servidorTieneDatos,
         runBoot,
         initSignalListener,
