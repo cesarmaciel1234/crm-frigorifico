@@ -830,7 +830,7 @@ const $ = id => document.getElementById(id);
             ['fldCierre', 'fldCuotas', 'hintTarjeta'].forEach(id => {
                 $(id).classList.toggle('field-hidden', !esTarjeta);
             });
-            ['fldMonto', 'hintCheque'].forEach(id => {
+            ['fldMonto', 'hintCheque', 'fldImpuestoChequeTipo', 'fldImpuestoChequeValor', 'fldChequeTotal'].forEach(id => {
                 $(id).classList.toggle('field-hidden', !esCheque);
             });
             ['fldKg', 'fldPrecioKg', 'fldProvTotal', 'hintProveedor'].forEach(id => {
@@ -862,9 +862,31 @@ const $ = id => document.getElementById(id);
             if (form.plazo_dias) form.plazo_dias.required = esProveedor || esPrestamo;
 
             if (esTarjeta) form.meses.value = '';
-            if (esCheque) { form.recibido.value = ''; form.pagar.value = ''; form.meses.value = ''; }
+            if (esCheque) { form.recibido.value = ''; form.pagar.value = ''; form.meses.value = ''; updateChequeTotal(); }
             if (esProveedor) { form.recibido.value = ''; form.meses.value = ''; updateProvTotal(); }
             if (esPrestamo) { form.meses.value = ''; }
+        }
+
+        function updateChequeTotal() {
+            const monto = parseFloat(document.querySelector('[name=monto]')?.value) || 0;
+            const modo = $('selImpuestoCheque')?.value || '';
+            const val = parseFloat(document.querySelector('[name=impuesto_cheque_valor]')?.value) || 0;
+            const box = $('inpTotalCheque');
+            if (!box) return;
+            let imp = 0;
+            if (modo === 'porcentaje' && val > 0) imp = monto * val / 100;
+            else if (modo === 'monto' && val > 0) imp = val;
+            if (monto > 0) box.textContent = '$' + fmt(monto + imp) + (imp > 0 ? ' (imp. $' + fmt(imp) + ')' : '');
+            else box.textContent = '—';
+        }
+
+        function updateImpuestoChequeLabel() {
+            const modo = $('selImpuestoCheque')?.value || '';
+            const lbl = $('lblImpuestoChequeValor');
+            if (!lbl) return;
+            if (modo === 'porcentaje') lbl.textContent = 'Porcentaje (%)';
+            else if (modo === 'monto') lbl.textContent = 'Monto del impuesto ($)';
+            else lbl.textContent = 'Valor del impuesto';
         }
 
         function updateProvTotal() {
@@ -2016,7 +2038,9 @@ const $ = id => document.getElementById(id);
             $('drawerBody').innerHTML = `
                 ${vencBannerHtml(e)}
                 ${e.es_cheque ? `
-                <div class="drawer-row"><span class="lbl">Monto del cheque</span><span class="val" style="color:var(--accent)">$${fmt(e.total_pagar)}</span></div>
+                <div class="drawer-row"><span class="lbl">Monto del cheque</span><span class="val">$${fmt(e.recibido)}</span></div>
+                ${e.impuesto_cheque ? `<div class="drawer-row"><span class="lbl">Impuesto al cheque</span><span class="val" style="color:var(--warning)">$${fmt(e.impuesto_cheque)}</span></div>` : ''}
+                <div class="drawer-row"><span class="lbl">Total a pagar</span><span class="val" style="color:var(--accent)">$${fmt(e.total_pagar)}</span></div>
                 <div class="drawer-row"><span class="lbl">Interés financiero</span><span class="val">Sin interés</span></div>
                 <div class="drawer-row"><span class="lbl">Reserva diaria (caja)</span><span class="val" style="color:var(--warning)">$${fmt(e.reserva_diaria || 0)}</span></div>
                 <div class="drawer-row"><span class="lbl">Saldo pendiente</span><span class="val">$${fmt(e.saldo_pendiente || e.total_pagar)}</span></div>
@@ -3111,7 +3135,7 @@ const $ = id => document.getElementById(id);
             if (name === 'registro') volverMenuRegistro();
             if (name === 'finanzas-aging') renderFinanzasAging();
             if (name === 'finanzas-margenes') renderFinanzasMargenes();
-            if (name === 'dashboard') void actualizarInformeEmailEstado();
+            if (name === 'dashboard') void actualizarInformeEstado();
             setSidebarOpen(false);
         }
 
@@ -3292,8 +3316,9 @@ const $ = id => document.getElementById(id);
                     return;
                 }
             }
-            toast('Datos de la empresa guardados con éxito');
+            toast('Datos guardados. Informe automático los lunes al email indicado.');
             cerrarModalEmpresa();
+            void actualizarInformeEstado();
         });
         $('inpMontoPago').addEventListener('input', () => {
             const esp = planPagoActual ? planPagoActual.monto_cuota : 0;
@@ -3326,6 +3351,10 @@ const $ = id => document.getElementById(id);
                 delete payload.kg;
                 delete payload.precio_kg;
                 delete payload.plazo_dias;
+                if (!payload.impuesto_cheque_tipo) {
+                    delete payload.impuesto_cheque_tipo;
+                    delete payload.impuesto_cheque_valor;
+                }
             } else if (payload.tipo === 'proveedor') {
                 delete payload.monto;
                 delete payload.meses;
@@ -3365,6 +3394,9 @@ const $ = id => document.getElementById(id);
         $('selTipo').addEventListener('change', toggleFormTipo);
         document.querySelector('[name=kg]')?.addEventListener('input', updateProvTotal);
         document.querySelector('[name=precio_kg]')?.addEventListener('input', updateProvTotal);
+        document.querySelector('[name=monto]')?.addEventListener('input', updateChequeTotal);
+        document.querySelector('[name=impuesto_cheque_valor]')?.addEventListener('input', updateChequeTotal);
+        $('selImpuestoCheque')?.addEventListener('change', () => { updateImpuestoChequeLabel(); updateChequeTotal(); });
         toggleFormTipo();
 
         $('selHistPagosTipo').addEventListener('change', ev => {
@@ -4257,22 +4289,26 @@ const $ = id => document.getElementById(id);
 </html>`;
         }
 
-        async function actualizarInformeEmailEstado() {
+        async function actualizarInformeEstado() {
             const el = $('informeEmailEstado');
-            if (!el || sessionUser.role !== 'admin') return;
+            if (!el) return;
             try {
-                const cfg = await api('/api/reportes/email/config?_=' + Date.now());
-                let smtp = 'Email no configurado — abrí Config email y cargá Gmail o Resend';
-                if (cfg.smtp_configurado) {
-                    smtp = cfg.transport === 'resend'
-                        ? '✓ Resend (HTTPS) listo'
-                        : '✓ Gmail SMTP listo';
-                } else if (cfg.on_render) {
-                    smtp = '⚠ Render free bloquea SMTP — cargá Resend API key en el modal';
+                let email = '';
+                try {
+                    const emp = await api('/api/empresa');
+                    email = (emp.email || '').trim();
+                } catch (_) {
+                    const local = JSON.parse(localStorage.getItem('empresa_datos') || '{}');
+                    email = (local.email || '').trim();
                 }
-                const auto = cfg.activo ? 'Envío automático activado' : 'Envío automático desactivado';
-                const dest = cfg.destinatarios || '(sin destinatarios)';
-                el.innerHTML = smtp + ' · ' + auto + '<br>Destinatarios: <strong>' + esc(dest) + '</strong>';
+                let html = '📅 Cada <strong>lunes 05:00</strong> se envía el informe al email de la empresa.';
+                if (email) {
+                    html += '<br>Destino: <strong>' + esc(email) + '</strong>';
+                } else {
+                    html += '<br><span style="color:#b45309;">Completá el email en <strong>Datos de la Empresa</strong> para recibirlo automáticamente.</span>';
+                }
+                html += '<br><span style="color:#64748b;">¿Lo necesitás antes? Usá <strong>Descargar PDF</strong>.</span>';
+                el.innerHTML = html;
             } catch (_) {
                 el.textContent = '';
             }
@@ -4356,102 +4392,9 @@ const $ = id => document.getElementById(id);
             }
         }
 
-        async function abrirModalInformeEmail() {
-            try {
-                const cfg = await api('/api/reportes/email/config?_=' + Date.now());
-                $('inpInformeDestinatarios').value = cfg.destinatarios || '';
-                $('inpInformeHora').value = cfg.hora || '07:00';
-                $('chkInformeEmailActivo').checked = !!cfg.activo;
-                $('inpInformeSmtpUser').value = cfg.smtp_user || '';
-                $('inpInformeSmtpPassword').value = '';
-                $('inpInformeSmtpPassword').placeholder = cfg.smtp_password_set
-                    ? '•••••••• (dejá vacío para no cambiar)'
-                    : '16 caracteres sin espacios';
-                $('inpInformeResendKey').value = '';
-                $('inpInformeResendKey').placeholder = cfg.resend_configured
-                    ? '•••••••• (dejá vacío para no cambiar)'
-                    : 're_... (solo si usás Render free)';
-                const smtpEl = $('informeSmtpEstado');
-                if (smtpEl) {
-                    if (cfg.smtp_configurado) {
-                        const via = cfg.transport === 'resend' ? 'Resend HTTPS' : 'Gmail SMTP';
-                        smtpEl.innerHTML = '<span style="color:#166534;">✓ Email configurado (' + esc(via) + ')</span>';
-                    } else if (cfg.on_render) {
-                        smtpEl.innerHTML = '<span style="color:#b45309;">⚠ En Render free Gmail SMTP no funciona. Usá Resend API key abajo.</span>';
-                    } else {
-                        smtpEl.innerHTML = '<span style="color:#b45309;">⚠ Completá Gmail abajo y guardá antes de enviar.</span>';
-                    }
-                }
-                $('modalInformeEmail').classList.add('open');
-            } catch (e) {
-                toast(e.message, true);
-            }
-        }
-
-        async function guardarConfigInformeEmail() {
-            const payload = {
-                destinatarios: $('inpInformeDestinatarios').value.trim(),
-                hora: $('inpInformeHora').value || '07:00',
-                activo: $('chkInformeEmailActivo').checked,
-                smtp_host: 'smtp.gmail.com',
-                smtp_port: 465,
-                smtp_user: $('inpInformeSmtpUser').value.trim(),
-                smtp_from: $('inpInformeSmtpUser').value.trim(),
-                smtp_use_ssl: true,
-            };
-            const pwd = $('inpInformeSmtpPassword').value.trim();
-            if (pwd) payload.smtp_password = pwd;
-            const resend = $('inpInformeResendKey').value.trim();
-            if (resend) payload.resend_api_key = resend;
-            await api('/api/reportes/email/config', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-        }
-
-        async function enviarInformeEmailAhora() {
-            if (!confirm('¿Enviar el informe diario por email ahora?')) return;
-            try {
-                setLoading(true, 'Enviando email…');
-                const dest = $('inpInformeDestinatarios')?.value.trim();
-                const user = $('inpInformeSmtpUser')?.value.trim();
-                const pwd = $('inpInformeSmtpPassword')?.value.trim();
-                const resend = $('inpInformeResendKey')?.value.trim();
-                if (dest || user || pwd || resend) {
-                    await guardarConfigInformeEmail();
-                }
-                const body = {};
-                if (dest) body.destinatarios = dest;
-                const res = await api('/api/reportes/email/enviar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body),
-                });
-                toast('Informe enviado a: ' + (res.sent_to || []).join(', '));
-                await actualizarInformeEmailEstado();
-            } catch (e) {
-                toast(e.message || 'No se pudo enviar', true);
-            } finally {
-                setLoading(false);
-            }
-        }
-
         $('btnInformeVer')?.addEventListener('click', abrirInformeJefe);
         $('btnInformePdf')?.addEventListener('click', descargarInformeJefePdf);
         $('btnInformeWhatsApp')?.addEventListener('click', compartirInformeWhatsApp);
-        $('btnInformeEmailConfig')?.addEventListener('click', abrirModalInformeEmail);
-        $('btnInformeEmailEnviar')?.addEventListener('click', enviarInformeEmailAhora);
-        $('btnGuardarInformeEmail')?.addEventListener('click', async () => {
-            try {
-                await guardarConfigInformeEmail();
-                toast('Configuración de email guardada');
-                $('modalInformeEmail').classList.remove('open');
-                await actualizarInformeEmailEstado();
-            } catch (e) {
-                toast(e.message, true);
-            }
-        });
 
         $('btnClientPrint').addEventListener('click', async () => {
             if (!currentClientData) return;

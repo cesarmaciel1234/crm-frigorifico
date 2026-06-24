@@ -34,22 +34,34 @@ services:
         value: "1"
       - key: RENDER
         value: "true"
-      # Informe diario por email — configurar en el panel de Render (no commitear secretos)
-      - key: SMTP_HOST
-        sync: false
-      - key: SMTP_PORT
-        sync: false
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      - key: SMTP_FROM
-        sync: false
-      - key: SMTP_USE_SSL
-        sync: false
+      # Informe empresarial por email (Resend HTTPS)
       - key: REPORT_EMAIL_TO
         sync: false
       - key: REPORT_CRON_SECRET
-        sync: false
+        generateValue: true
       - key: RESEND_API_KEY
         sync: false
+      - key: REPORT_TIMEZONE
+        value: America/Argentina/Buenos_Aires
+
+  # Lunes 05:00 Argentina (08:00 UTC) — informe empresarial por email
+  - type: cron
+    name: crm-informe-semanal
+    runtime: python
+    plan: free
+    schedule: "0 8 * * 1"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/trigger_informe_cron.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: crm-frigorifico
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: REPORT_CRON_SECRET
+        fromService:
+          type: web
+          name: crm-frigorifico
+          envVarKey: REPORT_CRON_SECRET

@@ -8,7 +8,8 @@ _OPERACIONES_SQL = """
     SELECT id, alias, tipo, recibido, pagar, meses,
            fecha_cierre, fecha_vencimiento, cuotas,
            COALESCE(cuotas_pagadas, 0) AS cuotas_pagadas,
-           kg, precio_kg, plazo_dias, created_at
+           kg, precio_kg, plazo_dias, created_at,
+           COALESCE(impuesto_cheque, 0) AS impuesto_cheque
     FROM operaciones_financieras
 """
 
@@ -370,6 +371,7 @@ def _enemigo_from_row(row: dict, index: int) -> dict[str, Any]:
         "precio_kg": row["precio_kg"],
         "plazo_dias": row["plazo_dias"],
         "plazo_texto": plazo_txt,
+        "impuesto_cheque": round(float(row.get("impuesto_cheque") or 0), 2) or None,
         **venc,
         **plan,
     }

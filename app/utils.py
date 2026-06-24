@@ -21,6 +21,27 @@ def _f(val, field: str) -> float:
     return n
 
 
+def _f_optional(val, field: str, default: float = 0.0) -> float:
+    if val in (None, ""):
+        return default
+    return _f(val, field)
+
+
+def _impuesto_cheque_from_payload(monto: float, d: dict) -> float:
+    """Calcula impuesto al cheque desde porcentaje o monto fijo."""
+    modo = str(d.get("impuesto_cheque_tipo") or "").strip().lower()
+    if modo == "porcentaje":
+        pct = _f_optional(d.get("impuesto_cheque_valor"), "impuesto al cheque (%)")
+        if pct <= 0:
+            return 0.0
+        return round(monto * pct / 100.0, 2)
+    if modo == "monto":
+        return round(_f_optional(d.get("impuesto_cheque_valor"), "impuesto al cheque ($)"), 2)
+    if d.get("impuesto_cheque") not in (None, ""):
+        return round(_f_optional(d.get("impuesto_cheque"), "impuesto al cheque"), 2)
+    return 0.0
+
+
 def parse_kg_detalle(val) -> tuple[float, list[float]]:
     """Parsea kg total y lista de pesos por pieza (ej. '97+97+101+104')."""
     if isinstance(val, (int, float)):
@@ -122,13 +143,16 @@ def parse_operacion_payload(d: dict) -> dict[str, Any]:
     kg = None
     precio_kg = None
     plazo_dias = None
+    impuesto_cheque = None
 
     if tipo_l == "cheque":
         monto = _f(d.get("monto") or d.get("recibido"), "monto del cheque")
         if monto <= 0:
             raise ValueError("monto del cheque debe ser mayor a 0")
+        impuesto = _impuesto_cheque_from_payload(monto, d)
         recibido = monto
-        pagar = monto
+        pagar = round(monto + impuesto, 2)
+        impuesto_cheque = impuesto if impuesto > 0 else None
         fecha_vencimiento = _parse_fecha(d.get("fecha_vencimiento"), "fecha de vencimiento")
         meses = 1
     elif tipo_l == "tarjeta":
@@ -191,5 +215,6 @@ def parse_operacion_payload(d: dict) -> dict[str, Any]:
         "kg": kg,
         "precio_kg": precio_kg,
         "plazo_dias": plazo_dias,
-        "fecha_inicio": d.get("fecha_inicio") or None
+        "fecha_inicio": d.get("fecha_inicio") or None,
+        "impuesto_cheque": impuesto_cheque,
     }

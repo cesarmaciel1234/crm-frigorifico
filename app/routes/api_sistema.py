@@ -206,7 +206,12 @@ def api_empresa():
     if not role_at_least("admin"):
         return jsonify({"error": "Permiso denegado"}), 403
     d = request.get_json(silent=True) or {}
-    saved = save_empresa_config(d)
+    emp = get_empresa_config()
+    emp.update(d)
+    if str(emp.get("email") or "").strip():
+        emp["reporte_email_activo"] = True
+        emp["reporte_email_hora"] = "05:00"
+    saved = save_empresa_config(emp)
     log_audit("CONFIG", entidad="empresa", detalle="actualizacion_datos")
     return jsonify(saved)
 

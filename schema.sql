@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS operaciones_financieras (
     kg REAL,
     precio_kg REAL,
     plazo_dias INTEGER,
+    impuesto_cheque REAL,
     created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
 

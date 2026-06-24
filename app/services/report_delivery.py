@@ -10,14 +10,20 @@ import socket
 import ssl
 import urllib.error
 import urllib.request
+from datetime import datetime
 from email.header import Header
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from io import BytesIO
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.config import Config
+
+REPORT_WEEKDAY_MONDAY = 0
+DEFAULT_REPORT_HOUR = "05:00"
+DEFAULT_REPORT_TIMEZONE = "America/Argentina/Buenos_Aires"
 
 
 def _esc(text: Any) -> str:
@@ -722,34 +728,21 @@ def render_daily_report_pdf(report: dict[str, Any]) -> bytes:
 
 
 def smtp_configured(empresa: dict[str, Any] | None = None) -> bool:
-    return bool(_resolve_email_settings(empresa).get("transport"))
+    """True si hay Resend API key (env o empresa)."""
+    emp = empresa or {}
+    return bool(str(Config.RESEND_API_KEY or emp.get("resend_api_key") or "").strip())
 
 
 def _resolve_email_settings(empresa: dict[str, Any] | None = None) -> dict[str, Any]:
     emp = empresa or {}
-    host = str(Config.SMTP_HOST or emp.get("smtp_host") or "").strip()
-    user = str(Config.SMTP_USER or emp.get("smtp_user") or "").strip()
-    password = str(Config.SMTP_PASSWORD or emp.get("smtp_password") or "").replace(" ", "")
-    from_addr = str(Config.SMTP_FROM or emp.get("smtp_from") or user or "").strip()
-    port = int(emp.get("smtp_port") or Config.SMTP_PORT or 587)
-    use_ssl = emp.get("smtp_use_ssl") if "smtp_use_ssl" in emp else Config.SMTP_USE_SSL
+    from_addr = str(Config.SMTP_FROM or emp.get("smtp_from") or "").strip()
     resend_key = str(Config.RESEND_API_KEY or emp.get("resend_api_key") or "").strip()
 
-    transport = ""
-    if resend_key:
-        transport = "resend"
-    elif host and user and password and from_addr:
-        transport = "smtp"
+    transport = "resend" if resend_key else ""
 
     return {
         "transport": transport,
-        "host": host,
-        "port": port,
-        "user": user,
-        "password": password,
         "from": from_addr,
-        "use_ssl": bool(use_ssl),
-        "use_tls": Config.SMTP_USE_TLS,
         "resend_key": resend_key,
         "on_render": Config.ON_RENDER,
     }
@@ -871,12 +864,39 @@ def parse_recipients(raw: str) -> list[str]:
 
 
 def get_report_recipients(empresa: dict[str, Any] | None = None) -> list[str]:
+    """Destinatarios del informe: email del perfil de empresa, con fallback legacy/env."""
     empresa = empresa or {}
     raw = (
-        str(empresa.get("reporte_email_destinatarios") or "").strip()
+        str(empresa.get("email") or "").strip()
+        or str(empresa.get("reporte_email_destinatarios") or "").strip()
         or str(Config.REPORT_EMAIL_TO or "").strip()
     )
     return parse_recipients(raw)
+
+
+def report_schedule_timezone() -> ZoneInfo:
+    tz_name = str(Config.REPORT_TIMEZONE or DEFAULT_REPORT_TIMEZONE).strip()
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return ZoneInfo(DEFAULT_REPORT_TIMEZONE)
+
+
+def weekly_report_skip_reason(empresa: dict[str, Any] | None = None) -> str | None:
+    """None si corresponde enviar hoy; texto si debe omitirse (cron semanal)."""
+    empresa = empresa or {}
+    tz = report_schedule_timezone()
+    now = datetime.now(tz)
+    if now.weekday() != REPORT_WEEKDAY_MONDAY:
+        return f"hoy no es lunes en {tz.key} ({now.strftime('%A %d/%m/%Y')})"
+    hora_cfg = str(empresa.get("reporte_email_hora") or DEFAULT_REPORT_HOUR).strip() or DEFAULT_REPORT_HOUR
+    try:
+        hour = int(hora_cfg.split(":", 1)[0])
+    except (TypeError, ValueError):
+        hour = 5
+    if now.hour != hour:
+        return f"fuera de hora programada ({hora_cfg} {tz.key}, ahora {now.strftime('%H:%M')})"
+    return None
 
 
 def _email_summary_html(report: dict[str, Any]) -> str:
@@ -911,9 +931,8 @@ def send_daily_report_email(report: dict[str, Any], recipients: list[str] | None
         return {
             "ok": False,
             "error": (
-                "Email no configurado. Completá Gmail en el modal (usuario + contraseña de aplicación) "
-                "o definí SMTP_HOST/SMTP_USER/SMTP_PASSWORD/SMTP_FROM en el servidor. "
-                "En Render free usá RESEND_API_KEY."
+                "Email no configurado. Agregá tu Resend API key en el modal de email "
+                "o definí RESEND_API_KEY en el servidor."
             ),
         }
 
@@ -921,7 +940,7 @@ def send_daily_report_email(report: dict[str, Any], recipients: list[str] | None
     if not dest:
         return {
             "ok": False,
-            "error": "No hay destinatarios. Agregá al menos un email en Destinatarios y guardá.",
+            "error": "No hay destinatario. Completá el email en Datos de la Empresa.",
         }
 
     nombre = empresa.get("razon_social") or "Empresa"
@@ -933,34 +952,21 @@ def send_daily_report_email(report: dict[str, Any], recipients: list[str] | None
     try:
         pdf_bytes = render_daily_report_pdf(report)
         email_html = _email_summary_html(report)
-        full_html = render_daily_report_html(report) if settings["transport"] == "smtp" else email_html
     except Exception as e:
         return {"ok": False, "error": f"Error al generar informe: {e}"}
 
     try:
-        if settings["transport"] == "resend":
-            from_addr = settings["from"] or "onboarding@resend.dev"
-            _send_via_resend(
-                api_key=settings["resend_key"],
-                from_addr=from_addr,
-                dest=dest,
-                subject=subject,
-                html_body=email_html,
-                plain=plain,
-                pdf_bytes=pdf_bytes,
-                pdf_name=pdf_name,
-            )
-        else:
-            msg = _build_email_message(
-                from_addr=settings["from"],
-                dest=dest,
-                subject=subject,
-                plain=plain,
-                html_body=full_html,
-                pdf_bytes=pdf_bytes,
-                pdf_name=pdf_name,
-            )
-            _send_via_smtp(settings, msg, dest)
+        from_addr = settings["from"] or "onboarding@resend.dev"
+        _send_via_resend(
+            api_key=settings["resend_key"],
+            from_addr=from_addr,
+            dest=dest,
+            subject=subject,
+            html_body=email_html,
+            plain=plain,
+            pdf_bytes=pdf_bytes,
+            pdf_name=pdf_name,
+        )
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

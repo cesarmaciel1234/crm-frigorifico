@@ -437,6 +437,7 @@ def _run_migrations(conn):
         "kg": "REAL",
         "precio_kg": "REAL",
         "plazo_dias": "INTEGER",
+        "impuesto_cheque": "REAL",
     }
     is_pg = type(conn).__name__ == "PostgresConnWrapper"
     

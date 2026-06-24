@@ -80,25 +80,27 @@ def api_create_op():
                 fecha_inicio_val = f"{fecha_inicio_val} 12:00:00"
                 query = """
                 INSERT INTO operaciones_financieras
-                    (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias, created_at)
+                    (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias, impuesto_cheque, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                params = (
+                    uuid_val, payload["alias"], payload["tipo"], payload["recibido"], payload["pagar"],
+                    payload["meses"], payload["fecha_cierre"], payload["fecha_vencimiento"],
+                    payload["cuotas"], payload.get("kg"), payload.get("precio_kg"), payload.get("plazo_dias"),
+                    payload.get("impuesto_cheque"),
+                    fecha_inicio_val
+                )
+            else:
+                query = """
+                INSERT INTO operaciones_financieras
+                    (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias, impuesto_cheque)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 params = (
                     uuid_val, payload["alias"], payload["tipo"], payload["recibido"], payload["pagar"],
                     payload["meses"], payload["fecha_cierre"], payload["fecha_vencimiento"],
                     payload["cuotas"], payload.get("kg"), payload.get("precio_kg"), payload.get("plazo_dias"),
-                    fecha_inicio_val
-                )
-            else:
-                query = """
-                INSERT INTO operaciones_financieras
-                    (uuid, alias, tipo, recibido, pagar, meses, fecha_cierre, fecha_vencimiento, cuotas, kg, precio_kg, plazo_dias)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """
-                params = (
-                    uuid_val, payload["alias"], payload["tipo"], payload["recibido"], payload["pagar"],
-                    payload["meses"], payload["fecha_cierre"], payload["fecha_vencimiento"],
-                    payload["cuotas"], payload.get("kg"), payload.get("precio_kg"), payload.get("plazo_dias")
+                    payload.get("impuesto_cheque"),
                 )
 
             cur = conn.execute(query, params)

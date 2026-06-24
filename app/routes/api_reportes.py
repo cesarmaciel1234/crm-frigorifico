@@ -11,6 +11,7 @@ from app.services.report_delivery import (
     render_daily_report_pdf,
     send_daily_report_email,
     smtp_configured,
+    weekly_report_skip_reason,
     whatsapp_summary_text,
     _resolve_email_settings,
 )
@@ -74,18 +75,19 @@ def api_reporte_email_config_get():
         return guard
     emp = get_empresa_config()
     settings = _resolve_email_settings(emp)
+    recipients = get_report_recipients(emp)
     return jsonify({
         "smtp_configurado": smtp_configured(emp),
+        "email_configurado": smtp_configured(emp),
         "transport": settings.get("transport") or "",
         "on_render": Config.ON_RENDER,
-        "destinatarios": emp.get("reporte_email_destinatarios") or "",
-        "activo": bool(emp.get("reporte_email_activo")),
-        "hora": emp.get("reporte_email_hora") or "07:00",
-        "smtp_host": emp.get("smtp_host") or Config.SMTP_HOST or "smtp.gmail.com",
-        "smtp_port": emp.get("smtp_port") or Config.SMTP_PORT or 465,
-        "smtp_user": emp.get("smtp_user") or Config.SMTP_USER or "",
-        "smtp_from": emp.get("smtp_from") or Config.SMTP_FROM or "",
-        "smtp_password_set": bool(emp.get("smtp_password") or Config.SMTP_PASSWORD),
+        "email_perfil": emp.get("email") or "",
+        "destinatarios": ", ".join(recipients),
+        "destinatarios_efectivos": recipients,
+        "activo": bool(emp.get("reporte_email_activo", True)),
+        "hora": emp.get("reporte_email_hora") or "05:00",
+        "programacion": "lunes 05:00 (Argentina)",
+        "resend_from": emp.get("smtp_from") or Config.SMTP_FROM or "",
         "resend_configured": bool(Config.RESEND_API_KEY or emp.get("resend_api_key")),
     })
 
@@ -97,36 +99,20 @@ def api_reporte_email_config_put():
         return guard
     data = request.get_json(silent=True) or {}
     emp = get_empresa_config()
-    emp["reporte_email_destinatarios"] = str(data.get("destinatarios") or "").strip()
-    emp["reporte_email_activo"] = bool(data.get("activo"))
-    hora = str(data.get("hora") or "07:00").strip()
-    emp["reporte_email_hora"] = hora if hora else "07:00"
-    if "smtp_host" in data:
-        emp["smtp_host"] = str(data.get("smtp_host") or "smtp.gmail.com").strip()
-    if "smtp_port" in data:
-        try:
-            emp["smtp_port"] = int(data.get("smtp_port") or 465)
-        except (TypeError, ValueError):
-            emp["smtp_port"] = 465
-    smtp_user = str(data.get("smtp_user") or "").strip()
-    if smtp_user:
-        emp["smtp_user"] = smtp_user
-        emp["smtp_from"] = str(data.get("smtp_from") or smtp_user).strip()
-    elif str(data.get("smtp_from") or "").strip():
-        emp["smtp_from"] = str(data.get("smtp_from")).strip()
-    if "smtp_use_ssl" in data:
-        emp["smtp_use_ssl"] = bool(data.get("smtp_use_ssl", True))
-    pwd = str(data.get("smtp_password") or "").strip()
-    if pwd:
-        emp["smtp_password"] = pwd.replace(" ", "")
+    emp["reporte_email_activo"] = bool(data.get("activo", True))
+    emp["reporte_email_hora"] = "05:00"
     resend = str(data.get("resend_api_key") or "").strip()
     if resend:
         emp["resend_api_key"] = resend
+    resend_from = str(data.get("resend_from") or data.get("smtp_from") or "").strip()
+    if resend_from:
+        emp["smtp_from"] = resend_from
     save_empresa_config(emp)
+    recipients = get_report_recipients(emp)
     return jsonify({
         "ok": True,
         "config": {
-            "destinatarios": emp["reporte_email_destinatarios"],
+            "destinatarios": ", ".join(recipients),
             "activo": emp["reporte_email_activo"],
             "hora": emp["reporte_email_hora"],
             "smtp_configurado": smtp_configured(emp),
@@ -157,23 +143,31 @@ def api_reporte_email_enviar():
 
 
 @api_bp.route("/reportes/cron/diario", methods=["POST"])
-def api_reporte_cron_diario():
-    """Endpoint para cron externo (Render cron, etc.). Requiere X-Report-Cron-Secret."""
+@api_bp.route("/reportes/cron/semanal", methods=["POST"])
+def api_reporte_cron_semanal():
+    """Cron externo (Render): informe empresarial los lunes a las 05:00 Argentina."""
     secret = request.headers.get("X-Report-Cron-Secret", "")
     expected = Config.REPORT_CRON_SECRET or ""
     if not expected or secret != expected:
         return jsonify({"error": "No autorizado"}), 403
 
     emp = get_empresa_config()
-    if not emp.get("reporte_email_activo"):
+    if not emp.get("reporte_email_activo", True):
         return jsonify({"ok": True, "skipped": True, "reason": "reporte_email_activo desactivado"})
 
+    skip = weekly_report_skip_reason(emp)
+    if skip:
+        return jsonify({"ok": True, "skipped": True, "reason": skip})
+
     if not smtp_configured(emp):
-        return jsonify({"ok": False, "error": "Email no configurado"}), 503
+        return jsonify({"ok": False, "error": "Email no configurado (Resend API key)"}), 503
 
     recipients = get_report_recipients(emp)
     if not recipients:
-        return jsonify({"ok": False, "error": "Sin destinatarios"}), 400
+        return jsonify({
+            "ok": False,
+            "error": "Sin email en el perfil de la empresa. Completá Email en Datos de la Empresa.",
+        }), 400
 
     try:
         report = build_daily_report(include_details=False)

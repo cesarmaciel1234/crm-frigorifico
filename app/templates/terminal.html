@@ -457,14 +457,12 @@
                 <div class="card" style="margin-top:18px" id="cardInformeJefe">
                     <div class="card-head">
                         <h2>Informe Empresarial</h2>
-                        <span>Balance, cobranza, operaciones y riesgos — PDF y email</span>
+                        <span>PDF cuando quieras · email automático los lunes</span>
                     </div>
                     <div class="card-body" style="padding:20px; display:flex; flex-wrap:wrap; gap:10px;">
-                        <button type="button" class="btn btn-primary" id="btnInformeVer">Ver informe</button>
-                        <button type="button" class="btn btn-ghost" id="btnInformePdf">Descargar PDF</button>
+                        <button type="button" class="btn btn-primary" id="btnInformePdf">Descargar PDF</button>
+                        <button type="button" class="btn btn-ghost" id="btnInformeVer">Ver informe</button>
                         <button type="button" class="btn btn-ghost" id="btnInformeWhatsApp" style="color:#16a34a; border-color:#86efac;">WhatsApp</button>
-                        <button type="button" class="btn btn-ghost" id="btnInformeEmailConfig" data-admin-only>Email diario</button>
-                        <button type="button" class="btn btn-ghost" id="btnInformeEmailEnviar" data-admin-only>Enviar email ahora</button>
                     </div>
                     <div id="informeEmailEstado" style="padding:0 20px 16px; font-size:0.85rem; color:#64748b; line-height:1.5;"></div>
                 </div>
@@ -908,7 +906,7 @@
                                     <div class="field" style="display:none;"><label>Tipo</label><select name="tipo" id="selTipo"><option value="tarjeta">tarjeta</option><option value="cheque">cheque</option><option value="proveedor">proveedor</option><option value="prestamo">préstamo (usurero)</option><option value="banco">banco</option><option value="otro">otro</option></select></div>
 
                                     <div class="tipo-hint field-hidden" id="hintTarjeta">Modo tarjeta: resumen, cierre, vencimiento y cuotas.</div>
-                                    <div class="tipo-hint field-hidden" id="hintCheque">Modo cheque: monto fijo sin interés, solo fecha de vencimiento.</div>
+                                    <div class="tipo-hint field-hidden" id="hintCheque">Modo cheque: monto del cheque + impuesto al cheque (opcional). Sin interés financiero.</div>
                                     <div class="tipo-hint field-hidden" id="hintProveedor">Proveedor: te da carne → <strong>deuda comercial</strong> (pasivo) y al mismo tiempo <strong>activo mercadería</strong>. No es deuda real como un préstamo.</div>
                                     <div class="tipo-hint field-hidden" id="hintPrestamo">Préstamo usurero: ingreso rápido de efectivo, con interés y devolución a corto plazo (días). Puedes poner una fecha pasada si lo cargaste tarde.</div>
 
@@ -923,6 +921,21 @@
                                     <div class="field field-hidden" id="fldProvTotal" style="grid-column:1/-1"><div class="prov-total" id="provTotalBox">Total: <strong id="inpTotalProveedor">—</strong></div></div>
 
                                     <div class="field field-hidden" id="fldMonto"><label>Monto del cheque ($)</label><input name="monto" type="number" step="0.01" min="0.01"></div>
+                                    <div class="field field-hidden" id="fldImpuestoChequeTipo">
+                                        <label>Impuesto al cheque</label>
+                                        <select name="impuesto_cheque_tipo" id="selImpuestoCheque">
+                                            <option value="">Sin impuesto</option>
+                                            <option value="porcentaje">Porcentaje (%)</option>
+                                            <option value="monto">Monto fijo ($)</option>
+                                        </select>
+                                    </div>
+                                    <div class="field field-hidden" id="fldImpuestoChequeValor">
+                                        <label id="lblImpuestoChequeValor">Valor del impuesto</label>
+                                        <input name="impuesto_cheque_valor" type="number" step="0.01" min="0" placeholder="Ej: 1.2 o 1500">
+                                    </div>
+                                    <div class="field field-hidden" id="fldChequeTotal" style="grid-column:1/-1">
+                                        <div class="prov-total" id="chequeTotalBox">Total a pagar (cheque + impuesto): <strong id="inpTotalCheque">—</strong></div>
+                                    </div>
                                     <div class="field field-hidden" id="fldCierre"><label>Fecha de cierre</label><input name="fecha_cierre" type="date"></div>
                                     <div class="field field-hidden" id="fldVencimiento"><label>Fecha de vencimiento</label><input name="fecha_vencimiento" type="date"></div>
                                     <div class="field field-hidden" id="fldCuotas"><label>Cantidad de cuotas</label><input name="cuotas" type="number" min="1" placeholder="Ej: 3, 6, 12"></div>
@@ -1194,8 +1207,8 @@
                         <input type="text" id="inpEmpresaTelefono" placeholder="Ej: +54 11 4567-8901">
                     </div>
                     <div class="field">
-                        <label>Email / Web</label>
-                        <input type="text" id="inpEmpresaEmail" placeholder="Ej: contacto@mastertotal.com">
+                        <label>Email (informe semanal automático)</label>
+                        <input type="email" id="inpEmpresaEmail" placeholder="Ej: jefe@empresa.com">
                     </div>
                     <div class="field">
                         <label>Cotización de Referencia USD ($)</label>
@@ -1582,34 +1595,6 @@
             <div class="modal-footer" style="padding: 16px 20px;">
                 <button class="btn btn-ghost" onclick="document.getElementById('modalMasterPassword').classList.remove('open')">Cancelar</button>
                 <button class="btn btn-primary" id="btnConfirmMasterPassword" style="background-color: var(--danger);">Confirmar Eliminación</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal Informe Email Diario -->
-    <div class="modal-overlay" id="modalInformeEmail">
-        <div class="modal-content" style="max-width:520px;">
-            <div class="modal-header">
-                <h2>📧 Informe diario por email</h2>
-                <button type="button" class="modal-close" onclick="$('modalInformeEmail').classList.remove('open')" aria-label="Cerrar">&times;</button>
-            </div>
-            <div class="modal-body" style="padding:0 20px 20px;">
-                <div id="informeSmtpEstado" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:14px; font-size:0.85rem;"></div>
-                <p style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">Gmail: usá una <strong>contraseña de aplicación</strong> (Google → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones). En Render plan free el SMTP está bloqueado: usá <strong>Resend API</strong> (HTTPS).</p>
-                <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Cuenta Gmail (remitente)</label>
-                <input type="email" id="inpInformeSmtpUser" placeholder="tu@gmail.com" style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:10px;">
-                <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Contraseña de aplicación Gmail</label>
-                <input type="password" id="inpInformeSmtpPassword" placeholder="16 caracteres sin espacios" autocomplete="new-password" style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:10px;">
-                <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Resend API key (opcional, para Render free)</label>
-                <input type="password" id="inpInformeResendKey" placeholder="re_..." autocomplete="new-password" style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:14px;">
-                <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Destinatarios (emails separados por coma)</label>
-                <input type="text" id="inpInformeDestinatarios" placeholder="jefe@empresa.com, contador@..." style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:12px;">
-                <label style="display:block; font-size:0.8rem; font-weight:600; color:#64748b; margin-bottom:6px;">Hora preferida (referencia)</label>
-                <input type="time" id="inpInformeHora" value="07:00" style="width:100%; padding:12px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:12px;">
-                <label style="display:flex; align-items:center; gap:8px; font-size:0.9rem; margin-bottom:16px;">
-                    <input type="checkbox" id="chkInformeEmailActivo"> Activar envío automático diario (cron)
-                </label>
-                <button type="button" class="btn btn-primary" id="btnGuardarInformeEmail" style="width:100%;">Guardar configuración</button>
             </div>
         </div>
     </div>
