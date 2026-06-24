@@ -13,6 +13,8 @@
     const bus = () => global.CrmBus;
 
     let _bgLoadAllPromise = null;
+    let _signalSource = null;
+    let _signalDebounceTimer = null;
 
     function servidorTieneDatos(freshData) {
         if (!freshData) return false;
@@ -178,6 +180,44 @@
         });
     }
 
+    function teardownSignalListener() {
+        if (_signalDebounceTimer) {
+            clearTimeout(_signalDebounceTimer);
+            _signalDebounceTimer = null;
+        }
+        if (_signalSource) {
+            try { _signalSource.close(); } catch (_) {}
+            _signalSource = null;
+        }
+    }
+
+    function initSignalListener() {
+        if (!global.EventSource || !navigator.onLine) return;
+        teardownSignalListener();
+
+        const deviceId = global.CrmSync?.deviceId || '';
+        _signalSource = new EventSource('/api/stream');
+
+        _signalSource.addEventListener('refrescar', (ev) => {
+            try {
+                const payload = JSON.parse(ev.data || '{}');
+                if (payload.source_device_id && payload.source_device_id === deviceId) return;
+            } catch (_) {}
+            if (_signalDebounceTimer) clearTimeout(_signalDebounceTimer);
+            _signalDebounceTimer = setTimeout(() => {
+                void loadAll({
+                    enSegundoPlano: true,
+                    bloquearUI: false,
+                    avisarSiVacio: false,
+                });
+            }, 300);
+        });
+
+        _signalSource.onerror = () => {
+            // EventSource reconecta automáticamente; no bloquear la UI.
+        };
+    }
+
     async function runBoot() {
         const { clearTenantCaches, tenantCacheGet } = global.CrmDb;
         const sessionFromServer = await bus().emit('loadSession');
@@ -219,6 +259,7 @@
 
         if (navigator.onLine) {
             void dispararSyncInmediato();
+            initSignalListener();
         }
     }
 
@@ -228,5 +269,7 @@
         descargarDatosDeLaNube,
         servidorTieneDatos,
         runBoot,
+        initSignalListener,
+        teardownSignalListener,
     };
 })(window);

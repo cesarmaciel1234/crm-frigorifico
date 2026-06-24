@@ -1,7 +1,11 @@
 """API del motor de sincronización (caché ↔ base de datos ↔ nodos)."""
-from flask import jsonify, request, session
+import json
+import queue
+
+from flask import Response, jsonify, request, session
 
 from app.routes.api import api_bp
+from app.services.signal_bus import broadcast_refresh, subscribe, unsubscribe
 from app.services.sync_hub import (
     MAX_NODOS,
     apply_sync_operations,
@@ -10,6 +14,35 @@ from app.services.sync_hub import (
     list_sync_nodos,
     save_sync_nodo,
 )
+
+
+@api_bp.route("/stream")
+def api_stream():
+    """SSE: broadcast aislado por empresa_id de la sesión."""
+    empresa_id = int(session.get("empresa_id") or 1)
+
+    def generate():
+        inbox = subscribe(empresa_id)
+        try:
+            yield ": connected\n\n"
+            while True:
+                try:
+                    msg = inbox.get(timeout=25)
+                    yield f"event: refrescar\ndata: {json.dumps(msg, ensure_ascii=False)}\n\n"
+                except queue.Empty:
+                    yield ": heartbeat\n\n"
+        finally:
+            unsubscribe(empresa_id, inbox)
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @api_bp.route("/sync/estado")
@@ -47,6 +80,12 @@ def api_sync_push():
         return jsonify({"error": "operations debe ser una lista"}), 400
     try:
         result = apply_sync_operations(device_id, operations)
+        if result.get("acked"):
+            broadcast_refresh(
+                int(session.get("empresa_id") or 1),
+                source_device_id=device_id,
+                reason="sync_push",
+            )
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": f"Error al aplicar operaciones: {str(e)}"}), 500
