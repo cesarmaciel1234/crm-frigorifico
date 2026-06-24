@@ -492,7 +492,6 @@ def _run_migrations(conn):
         """
     )
     remito_cols = {
-        "cliente": "TEXT NOT NULL DEFAULT ''",
         "costo_carne": "REAL NOT NULL DEFAULT 0",
         "cliente_id": "INTEGER",
         "pagado": "INTEGER NOT NULL DEFAULT 0",
@@ -753,6 +752,20 @@ def _run_migrations(conn):
         _migrate_sync_entity_uuid(conn, table, is_pg)
 
     _ensure_performance_indexes(conn)
+    _migrate_drop_remitos_cliente_column(conn, is_pg)
+
+
+def _migrate_drop_remitos_cliente_column(conn, is_pg: bool) -> None:
+    """Elimina columna redundante remitos_carga.cliente (nombre vive en clientes)."""
+    if not _table_exists(conn, "remitos_carga"):
+        return
+    if is_pg:
+        existing = _pg_column_names(conn, "remitos_carga")
+    else:
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(remitos_carga)")}
+    if "cliente" not in existing:
+        return
+    conn.execute("ALTER TABLE remitos_carga DROP COLUMN cliente")
 
 
 def _ensure_performance_indexes(conn) -> None:

@@ -98,30 +98,30 @@ class TestFinanzasCore:
         db.execute(
             """
             INSERT INTO remitos_carga
-                (cliente, cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
-            VALUES (?, ?, ?, 10, 1000, 1000, 10000.0, 30, 6000.0, 0, 8000.0) -- Outstanding: 2000.0
+                (cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
+            VALUES (?, ?, 10, 1000, 1000, 10000.0, 30, 6000.0, 0, 8000.0) -- Outstanding: 2000.0
             """,
-            ("Cliente Test Aging", cid, today_str)
+            (cid, today_str)
         )
         
         # Remito 31-60 days:
         db.execute(
             """
             INSERT INTO remitos_carga
-                (cliente, cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
-            VALUES (?, ?, ?, 10, 1000, 1000, 10000.0, 30, 6000.0, 0, 7000.0) -- Outstanding: 3000.0
+                (cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
+            VALUES (?, ?, 10, 1000, 1000, 10000.0, 30, 6000.0, 0, 7000.0) -- Outstanding: 3000.0
             """,
-            ("Cliente Test Aging", cid, days_45_ago)
+            (cid, days_45_ago)
         )
         
         # Remito 90+ days:
         db.execute(
             """
             INSERT INTO remitos_carga
-                (cliente, cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
-            VALUES (?, ?, ?, 10, 1000, 1000, 10000.0, 30, 6000.0, 0, 6000.0) -- Outstanding: 4000.0
+                (cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
+            VALUES (?, ?, 10, 1000, 1000, 10000.0, 30, 6000.0, 0, 6000.0) -- Outstanding: 4000.0
             """,
-            ("Cliente Test Aging", cid, days_120_ago)
+            (cid, days_120_ago)
         )
         
         db.commit()
@@ -156,10 +156,10 @@ class TestFinanzasCore:
         db.execute(
             """
             INSERT INTO remitos_carga
-                (cliente, cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
-            VALUES (?, ?, ?, 10, 1000, 1500.0, 10000.0, 30, 6000.0, 0, 0.0)
+                (cliente_id, fecha, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado, monto_pagado)
+            VALUES (?, ?, 10, 1000, 1500.0, 10000.0, 30, 6000.0, 0, 0.0)
             """,
-            ("Cliente Test Margenes", cid, "2026-06-22")
+            (cid, "2026-06-22")
         )
         db.commit()
         

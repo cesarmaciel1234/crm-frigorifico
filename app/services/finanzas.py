@@ -540,8 +540,9 @@ def calcular_margenes_ventas(limit: int = 200) -> list[dict[str, Any]]:
     with get_db() as conn:
         rows = conn.execute(
             """
-            SELECT r.id, r.fecha, r.cliente, r.precio_venta_total, r.costo_carne, r.costo_total_logistica, r.kg
+            SELECT r.id, r.fecha, COALESCE(c.nombre, '') AS cliente, r.precio_venta_total, r.costo_carne, r.costo_total_logistica, r.kg
             FROM remitos_carga r
+            LEFT JOIN clientes c ON r.cliente_id = c.id
             ORDER BY r.id DESC
             LIMIT ?
             """,

@@ -14,11 +14,11 @@ def _remito_via_conn(conn, cliente, kg, costo_log, venta, plazo=30):
     cur = conn.execute(
         """
         INSERT INTO remitos_carga
-            (cliente, cliente_id, kg, costo_total_logistica, precio_venta_total,
+            (cliente_id, kg, costo_total_logistica, precio_venta_total,
              plazo_cobro_dias, costo_carne, pagado)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
         """,
-        (cliente, cid, kg, costo_log, venta, plazo, costo_carne),
+        (cid, kg, costo_log, venta, plazo, costo_carne),
     )
     rid = cur.lastrowid
     for f in fracs:

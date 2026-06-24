@@ -38,7 +38,7 @@ class Config:
         and os.environ.get("RENDER") == "true"
     )
     PERMANENT_SESSION_LIFETIME = 86400 * 7  # 7 días
-    APP_VERSION = os.environ.get("APP_VERSION", "3.6")
+    APP_VERSION = os.environ.get("APP_VERSION", "3.7")
 
     # Email informe empresarial (Resend HTTPS)
     SMTP_HOST = os.environ.get("SMTP_HOST", "")

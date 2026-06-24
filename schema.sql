@@ -68,7 +68,6 @@ CREATE TABLE IF NOT EXISTS clientes (
 CREATE TABLE IF NOT EXISTS remitos_carga (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha TEXT NOT NULL DEFAULT (date('now', 'localtime')),
-    cliente TEXT NOT NULL DEFAULT '',
     cliente_id INTEGER,
     tipo_corte TEXT NOT NULL DEFAULT '',
     cantidad INTEGER NOT NULL DEFAULT 0,

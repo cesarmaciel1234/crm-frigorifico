@@ -75,12 +75,12 @@ def _insert_remito(
             pagado_flag = 0
 
     cols = (
-        "cliente", "cliente_id", "tipo_corte", "cantidad", "pesos_piezas", "kg", "precio_por_kg",
+        "cliente_id", "tipo_corte", "cantidad", "pesos_piezas", "kg", "precio_por_kg",
         "costo_total_logistica", "precio_venta_total", "plazo_cobro_dias",
         "costo_carne", "pagado", "monto_pagado",
     )
     vals = (
-        cliente, cid, tipo_corte, int(cantidad or 0), pesos_json, kg, precio_por_kg,
+        cid, tipo_corte, int(cantidad or 0), pesos_json, kg, precio_por_kg,
         costo, venta, plazo, costo_carne, pagado_flag, monto,
     )
 

@@ -182,7 +182,6 @@ def _normalize_payload(json_data: dict) -> dict[str, list[dict]]:
             {
                 "id": r.get("id"),
                 "fecha": r.get("fecha"),
-                "cliente": r.get("cliente", ""),
                 "cliente_id": r.get("cliente_id"),
                 "tipo_corte": r.get("tipo_corte", ""),
                 "cantidad": r.get("cantidad", 0),
@@ -212,6 +211,11 @@ def _normalize_payload(json_data: dict) -> dict[str, list[dict]]:
             or []
         ),
     }
+
+
+def _normalize_remito_import_rows(rows: list[dict]) -> list[dict]:
+    """Quita el campo legacy cliente (texto); el nombre vive en clientes."""
+    return [{k: v for k, v in (r or {}).items() if k != "cliente"} for r in (rows or [])]
 
 
 def _normalize_auditoria_rows(rows: list[dict]) -> list[dict]:
@@ -350,7 +354,7 @@ def import_all_data(json_data: dict) -> dict[str, Any]:
             ("clientes", clientes, CLIENTE_COLS),
             ("compras_bulk", tables["compras_bulk"], None),
             ("operaciones_financieras", tables["operaciones_financieras"], OPERACION_COLS),
-            ("remitos_carga", tables["remitos_carga"], None),
+            ("remitos_carga", _normalize_remito_import_rows(tables["remitos_carga"]), None),
             ("pagos_cuotas", tables["pagos_cuotas"], None),
             ("pagos_clientes", tables["pagos_clientes"], None),
             ("aplicacion_pagos", tables["aplicacion_pagos"], None),

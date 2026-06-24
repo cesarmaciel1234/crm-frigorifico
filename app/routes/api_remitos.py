@@ -63,19 +63,19 @@ def api_remitos_endpoint():
                 cur = conn.execute(
                     """
                     INSERT INTO remitos_carga
-                        (fecha, cliente, cliente_id, tipo_corte, cantidad, pesos_piezas, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        (fecha, cliente_id, tipo_corte, cantidad, pesos_piezas, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                     """,
-                    (fecha, cliente, cid, tipo_corte, cantidad, pesos_json, kg, precio_por_kg, costo, venta, plazo, costo_carne),
+                    (fecha, cid, tipo_corte, cantidad, pesos_json, kg, precio_por_kg, costo, venta, plazo, costo_carne),
                 )
             else:
                 cur = conn.execute(
                     """
                     INSERT INTO remitos_carga
-                        (cliente, cliente_id, tipo_corte, cantidad, pesos_piezas, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        (cliente_id, tipo_corte, cantidad, pesos_piezas, kg, precio_por_kg, costo_total_logistica, precio_venta_total, plazo_cobro_dias, costo_carne, pagado)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                     """,
-                    (cliente, cid, tipo_corte, cantidad, pesos_json, kg, precio_por_kg, costo, venta, plazo, costo_carne),
+                    (cid, tipo_corte, cantidad, pesos_json, kg, precio_por_kg, costo, venta, plazo, costo_carne),
                 )
             rid = cur.lastrowid
             

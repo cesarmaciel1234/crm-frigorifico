@@ -30,7 +30,7 @@ def list_remitos(limit: int = 50, offset: int = 0) -> list[dict]:
         # 1. Pide la lista a la Bóveda usando SQL
         rows = conn.execute(
             """
-            SELECT r.id, r.fecha, COALESCE(c.nombre, r.cliente) AS cliente, r.cliente_id,
+            SELECT r.id, r.fecha, COALESCE(c.nombre, '') AS cliente, r.cliente_id,
                    r.kg, r.costo_total_logistica, r.precio_venta_total,
                    r.plazo_cobro_dias, r.costo_carne, r.pagado, COALESCE(r.monto_pagado, 0) AS monto_pagado, r.created_at
             FROM remitos_carga r
